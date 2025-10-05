@@ -39,23 +39,20 @@ cargo run -- create my-agent --image alpine:latest
 # Create jail without workspace mount
 cargo run -- create my-agent --no-workspace
 
-# Create jail without AI agent config mounts
-cargo run -- create my-agent --no-agent-configs
+# Create jail with entire ~/.claude directory (default: only .claude.json)
+cargo run -- create my-agent --claude-dir
+
+# Create jail with entire ~/.config and ~/.cursor directories
+cargo run -- create my-agent --agent-configs
+
+# Create jail with git and GPG configuration mapping
+cargo run -- create my-agent --git-gpg
+
+# Create jail with all config directories and git/GPG support
+cargo run -- create my-agent --claude-dir --agent-configs --git-gpg
 
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
-
-# Git and GPG configuration mapping are enabled by default
-cargo run -- create my-agent
-
-# Disable git configuration mapping
-cargo run -- create my-agent --no-git-config
-
-# Disable GPG configuration mapping
-cargo run -- create my-agent --no-gpg-config
-
-# Disable both git and GPG configuration mapping
-cargo run -- create my-agent --no-git-config --no-gpg-config
 
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
@@ -89,11 +86,11 @@ make dev-jail
 ## Key Features
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
-- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with auto-mounted configs
+- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with minimal auth mounting by default
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
-- **Config Auto-mounting**: AI agent config directories (`~/.claude`, `~/.config`, `~/.cursor`) automatically mounted for seamless authentication
-- **Git Configuration Mapping**: Auto-mounting of git configuration (name, email, signing key) from current directory or global config (enabled by default)
-- **GPG Configuration Mapping**: Auto-mounting of GPG configuration directory (`~/.gnupg`) for signing support (enabled by default)
+- **Minimal Auth Mounting**: By default, only minimal auth files (`.claude.json`) are mounted for authentication
+- **Opt-in Config Mounting**: Use `--claude-dir` for entire `~/.claude` directory, `--agent-configs` for `~/.config` and `~/.cursor` directories
+- **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
 - **Network Isolation**: Configurable network access (disabled, private, or shared)
@@ -119,35 +116,49 @@ The `localhost/jail-ai-env:latest` image includes:
 
 ### AI Agent Authentication
 
-The AI coding agents require authentication. **Config directories and files are automatically mounted** from the host:
-- **Claude Code**: `~/.claude` → `/root/.claude` and `~/.claude.json` → `/root/.claude.json` (stores API keys, settings, commands)
-- **GitHub Copilot**: `~/.config` → `/root/.config` (stores authentication tokens)
-- **GitHub Copilot Agent Session**: `~/.config/github-copilot` → `/home/agent/.config/github-copilot` (stores agent session data)
-- **Cursor Agent**: `~/.cursor` → `/root/.cursor` (stores authentication and settings)
+The AI coding agents require authentication. By default, **minimal auth files** are mounted:
+- **Claude Code**: `~/.claude.json` → `/home/agent/.claude.json` (stores API keys)
 
-This means AI agents authenticated on your host will work automatically in the jail without re-authentication.
+**Opt-in mounting** (use flags to enable):
+- `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
+- `--agent-configs`: Mount entire config directories:
+  - `~/.config` → `/home/agent/.config` (GitHub Copilot authentication tokens)
+  - `~/.cursor` → `/home/agent/.cursor` (Cursor Agent authentication and settings)
 
-To disable auto-mounting of agent configs: `--no-agent-configs`
+This means:
+- **Default**: Minimal authentication, no extra files exposed to the jail
+- **With flags**: Full config access for advanced features
 
-### Git Configuration Mapping
+Example aliases for different security levels:
+```bash
+# Minimal (default): only auth files
+alias jail-claude='jail-ai claude'
 
-When `--git-config` is enabled, jail-ai will:
+# Medium: add full Claude config directory
+alias jail-claude='jail-ai claude --claude-dir'
 
+# Full: all configs + git/GPG signing
+alias jail-claude='jail-ai claude --claude-dir --agent-configs --git-gpg'
+```
+
+### Git and GPG Configuration Mapping
+
+When `--git-gpg` flag is used, jail-ai will:
+
+**Git Configuration:**
 1. **Local Git Config**: If a `.git/config` file exists in the current directory, it will be mounted to `/home/agent/.gitconfig` in the jail
 2. **Global Git Config Fallback**: If no local git config exists, it will read your global git configuration and set environment variables:
    - `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` from `git config --global user.name`
    - `GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL` from `git config --global user.email`
    - `GIT_SIGNING_KEY` from `git config --global user.signingkey`
 
-This ensures that git commits made inside the jail will use your configured identity and signing key.
-
-### GPG Configuration Mapping
-
-When `--gpg-config` is enabled, jail-ai will:
+**GPG Configuration:**
 - Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
 - This allows GPG signing to work inside the jail using your host's GPG keys
 
-**Note**: Both git and GPG configuration mapping are enabled by default. Use `--no-git-config` and `--no-gpg-config` flags to disable them.
+This ensures that git commits made inside the jail will use your configured identity and signing key.
+
+**Note**: Git and GPG configuration mapping are **opt-in** (disabled by default). Use `--git-gpg` flag to enable them.
 
 ## Shell Features
 

@@ -10,6 +10,7 @@ use config::JailConfig;
 use jail::JailBuilder;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
@@ -38,9 +39,10 @@ async fn main() {
 async fn run(command: Option<Commands>) -> error::Result<()> {
     match command {
         None => {
-            // Default behavior: auto-init and exec based on current directory
+            // Default behavior: auto-init and exec based on workspace (git root if available)
             let cwd = std::env::current_dir()?;
-            let jail_name = cli::Commands::generate_jail_name(&cwd);
+            let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+            let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
 
             info!(
                 "No command specified, using default behavior for jail '{}'",
@@ -57,7 +59,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
             if !exists {
                 info!("Jail '{}' does not exist, creating it...", jail_name);
-                let jail = create_default_jail(&jail_name, &cwd).await?;
+                let jail = create_default_jail(&jail_name, &workspace_dir).await?;
                 jail.create().await?;
                 info!("Jail '{}' created successfully", jail_name);
             }
@@ -83,9 +85,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 config,
                 no_workspace,
                 workspace_path,
-                no_agent_configs,
-                no_git_config,
-                no_gpg_config,
+                claude_dir,
+                agent_configs,
+                git_gpg,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -128,73 +130,62 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.env("TZ", tz);
                     }
 
-                    // Auto-mount current working directory to /workspace
+                    // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
-                        let cwd = std::env::current_dir()?;
+                        let workspace_dir = get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
                         info!(
-                            "Auto-mounting current directory {} to {}",
-                            cwd.display(),
+                            "Auto-mounting {} to {}",
+                            workspace_dir.display(),
                             workspace_path
                         );
-                        builder = builder.bind_mount(cwd, workspace_path, false);
+                        builder = builder.bind_mount(workspace_dir, workspace_path, false);
                     }
 
-                    // Auto-mount AI agent config directories
-                    if !no_agent_configs {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                        let home_path = std::path::PathBuf::from(&home);
+                    // Auto-mount minimal auth files (always)
+                    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                    let home_path = std::path::PathBuf::from(&home);
 
-                        // Mount ~/.claude for Claude Code
+                    // Always mount ~/.claude.json for Claude Code auth
+                    let claude_json = home_path.join(".claude.json");
+                    if claude_json.exists() {
+                        info!(
+                            "Auto-mounting {} to /home/agent/.claude.json",
+                            claude_json.display()
+                        );
+                        builder =
+                            builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
+                    }
+
+                    // Opt-in: Mount entire ~/.claude directory
+                    if claude_dir {
                         let claude_config = home_path.join(".claude");
                         if claude_config.exists() {
                             info!(
-                                "Auto-mounting {} to /home/agent/.claude",
+                                "Mounting {} to /home/agent/.claude",
                                 claude_config.display()
                             );
                             builder =
                                 builder.bind_mount(claude_config, "/home/agent/.claude", false);
                         }
+                    }
 
-                        // Mount ~/.claude.json for Claude Code configuration
-                        let claude_json = home_path.join(".claude.json");
-                        if claude_json.exists() {
-                            info!(
-                                "Auto-mounting {} to /home/agent/.claude.json",
-                                claude_json.display()
-                            );
-                            builder =
-                                builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
-                        }
-
+                    // Opt-in: Mount entire agent config directories
+                    if agent_configs {
                         // Mount ~/.config for GitHub Copilot CLI and other tools
                         let config_dir = home_path.join(".config");
                         if config_dir.exists() {
                             info!(
-                                "Auto-mounting {} to /home/agent/.config",
+                                "Mounting {} to /home/agent/.config",
                                 config_dir.display()
                             );
                             builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
-                        }
-
-                        // Mount ~/.config/github-copilot for GitHub Copilot agent session data
-                        let copilot_config = home_path.join(".config").join("github-copilot");
-                        if copilot_config.exists() {
-                            info!(
-                                "Auto-mounting {} to /home/agent/.config/github-copilot",
-                                copilot_config.display()
-                            );
-                            builder = builder.bind_mount(
-                                copilot_config,
-                                "/home/agent/.config/github-copilot",
-                                false,
-                            );
                         }
 
                         // Mount ~/.cursor for Cursor Agent
                         let cursor_config = home_path.join(".cursor");
                         if cursor_config.exists() {
                             info!(
-                                "Auto-mounting {} to /home/agent/.cursor",
+                                "Mounting {} to /home/agent/.cursor",
                                 cursor_config.display()
                             );
                             builder =
@@ -202,18 +193,18 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         }
                     }
 
-                    // Auto-mount git configuration
-                    if !no_git_config {
+                    // Opt-in: Git and GPG configuration
+                    if git_gpg {
                         let cwd = std::env::current_dir()?;
                         let git_config_path = cwd.join(".git").join("config");
                         if git_config_path.exists() {
                             info!(
-                                "Auto-mounting git config {} to /home/agent/.gitconfig",
+                                "Mounting git config {} to /home/agent/.gitconfig",
                                 git_config_path.display()
                             );
                             builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
                         } else {
-                            // If no local git config, try to get global git config and create a temporary one
+                            // If no local git config, try to get global git config and set env vars
                             if let Ok(git_name) = std::process::Command::new("git")
                                 .args(["config", "--global", "user.name"])
                                 .output()
@@ -226,7 +217,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                     }
                                 }
                             }
-                            
+
                             if let Ok(git_email) = std::process::Command::new("git")
                                 .args(["config", "--global", "user.email"])
                                 .output()
@@ -239,7 +230,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                     }
                                 }
                             }
-                            
+
                             if let Ok(git_signing_key) = std::process::Command::new("git")
                                 .args(["config", "--global", "user.signingkey"])
                                 .output()
@@ -252,15 +243,12 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 }
                             }
                         }
-                    }
 
-                    // Auto-mount GPG configuration
-                    if !no_gpg_config {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                        let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
+                        // Mount GPG configuration
+                        let gpg_dir = home_path.join(".gnupg");
                         if gpg_dir.exists() {
                             info!(
-                                "Auto-mounting GPG config {} to /home/agent/.gnupg",
+                                "Mounting GPG config {} to /home/agent/.gnupg",
                                 gpg_dir.display()
                             );
                             builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
@@ -395,9 +383,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 cpu,
                 no_workspace,
                 workspace_path,
-                no_agent_configs,
-                no_git_config,
-                no_gpg_config,
+                claude_dir,
+                agent_configs,
+                git_gpg,
                 args,
             } => {
                 run_ai_agent_command(
@@ -412,9 +400,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         cpu,
                         no_workspace,
                         workspace_path,
-                        no_agent_configs,
-                        no_git_config,
-                        no_gpg_config,
+                        claude_dir,
+                        agent_configs,
+                        git_gpg,
                         args,
                     },
                 )
@@ -431,9 +419,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 cpu,
                 no_workspace,
                 workspace_path,
-                no_agent_configs,
-                no_git_config,
-                no_gpg_config,
+                claude_dir,
+                agent_configs,
+                git_gpg,
                 args,
             } => {
                 run_ai_agent_command(
@@ -448,9 +436,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         cpu,
                         no_workspace,
                         workspace_path,
-                        no_agent_configs,
-                        no_git_config,
-                        no_gpg_config,
+                        claude_dir,
+                        agent_configs,
+                        git_gpg,
                         args,
                     },
                 )
@@ -467,9 +455,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 cpu,
                 no_workspace,
                 workspace_path,
-                no_agent_configs,
-                no_git_config,
-                no_gpg_config,
+                claude_dir,
+                agent_configs,
+                git_gpg,
                 args,
             } => {
                 run_ai_agent_command(
@@ -484,9 +472,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         cpu,
                         no_workspace,
                         workspace_path,
-                        no_agent_configs,
-                        no_git_config,
-                        no_gpg_config,
+                        claude_dir,
+                        agent_configs,
+                        git_gpg,
                         args,
                     },
                 )
@@ -612,62 +600,29 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
     Ok(())
 }
 
-/// Helper function to mount AI agent config directories
-fn mount_agent_configs(mut builder: JailBuilder) -> JailBuilder {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let home_path = std::path::PathBuf::from(&home);
-
-    // Mount ~/.claude for Claude Code
-    let claude_config = home_path.join(".claude");
-    if claude_config.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.claude",
-            claude_config.display()
-        );
-        builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
+/// Get the git root directory if the current directory is within a git repository
+fn get_git_root() -> Option<PathBuf> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output();
+    
+    match output {
+        Ok(output) if output.status.success() => {
+            let git_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !git_root.is_empty() {
+                let path = PathBuf::from(git_root);
+                if path.exists() {
+                    info!("Found git root: {}", path.display());
+                    return Some(path);
+                }
+            }
+        }
+        _ => {
+            // Not a git repository or git command failed
+        }
     }
-
-    // Mount ~/.claude.json for Claude Code configuration
-    let claude_json = home_path.join(".claude.json");
-    if claude_json.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.claude.json",
-            claude_json.display()
-        );
-        builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
-    }
-
-    // Mount ~/.config for GitHub Copilot CLI and other tools
-    let config_dir = home_path.join(".config");
-    if config_dir.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.config",
-            config_dir.display()
-        );
-        builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
-    }
-
-    // Mount ~/.config/github-copilot for GitHub Copilot agent session data
-    let copilot_config = home_path.join(".config").join("github-copilot");
-    if copilot_config.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.config/github-copilot",
-            copilot_config.display()
-        );
-        builder = builder.bind_mount(copilot_config, "/home/agent/.config/github-copilot", false);
-    }
-
-    // Mount ~/.cursor for Cursor Agent
-    let cursor_config = home_path.join(".cursor");
-    if cursor_config.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.cursor",
-            cursor_config.display()
-        );
-        builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
-    }
-
-    builder
+    
+    None
 }
 
 /// Get the host's timezone
@@ -757,12 +712,24 @@ async fn create_default_jail(
         builder = builder.env("TZ", tz);
     }
 
-    // Auto-mount workspace
-    info!("Auto-mounting {} to /workspace", workspace.display());
-    builder = builder.bind_mount(workspace, "/workspace", false);
+    // Auto-mount workspace (git root if available, otherwise provided workspace)
+    let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
+    info!("Auto-mounting {} to /workspace", workspace_dir.display());
+    builder = builder.bind_mount(workspace_dir, "/workspace", false);
 
-    // Auto-mount AI agent configs
-    builder = mount_agent_configs(builder);
+    // Auto-mount minimal auth files (always)
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home_path = std::path::PathBuf::from(&home);
+
+    // Always mount ~/.claude.json for Claude Code auth
+    let claude_json = home_path.join(".claude.json");
+    if claude_json.exists() {
+        info!(
+            "Auto-mounting {} to /home/agent/.claude.json",
+            claude_json.display()
+        );
+        builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
+    }
 
     Ok(builder.build())
 }
@@ -778,9 +745,9 @@ struct AgentCommandParams {
     cpu: Option<u32>,
     no_workspace: bool,
     workspace_path: String,
-    no_agent_configs: bool,
-    no_git_config: bool,
-    no_gpg_config: bool,
+    claude_dir: bool,
+    agent_configs: bool,
+    git_gpg: bool,
     args: Vec<String>,
 }
 
@@ -790,9 +757,10 @@ async fn run_ai_agent_command(
     params: AgentCommandParams,
 ) -> error::Result<()> {
     let cwd = std::env::current_dir()?;
-    let jail_name = cli::Commands::generate_jail_name(&cwd);
+    let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+    let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
 
-    info!("Using jail: {} for directory: {}", jail_name, cwd.display());
+    info!("Using jail: {} for workspace: {}", jail_name, workspace_dir.display());
 
     // Create jail if it doesn't exist
     let temp_config = JailConfig {
@@ -820,27 +788,72 @@ async fn run_ai_agent_command(
             builder = builder.env("TZ", tz);
         }
 
-        // Auto-mount workspace
+        // Auto-mount workspace (git root if available, otherwise current directory)
         if !params.no_workspace {
+            let workspace_dir = get_git_root().unwrap_or(cwd.clone());
             info!(
                 "Auto-mounting {} to {}",
-                cwd.display(),
+                workspace_dir.display(),
                 params.workspace_path
             );
-            builder = builder.bind_mount(&cwd, params.workspace_path, false);
+            builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
         }
 
-        // Auto-mount AI agent configs
-        if !params.no_agent_configs {
-            builder = mount_agent_configs(builder);
+        // Auto-mount minimal auth files (always)
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+        let home_path = std::path::PathBuf::from(&home);
+
+        // Always mount ~/.claude.json for Claude Code auth
+        let claude_json = home_path.join(".claude.json");
+        if claude_json.exists() {
+            info!(
+                "Auto-mounting {} to /home/agent/.claude.json",
+                claude_json.display()
+            );
+            builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
         }
 
-        // Auto-mount git configuration
-        if !params.no_git_config {
+        // Opt-in: Mount entire ~/.claude directory
+        if params.claude_dir {
+            let claude_config = home_path.join(".claude");
+            if claude_config.exists() {
+                info!(
+                    "Mounting {} to /home/agent/.claude",
+                    claude_config.display()
+                );
+                builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
+            }
+        }
+
+        // Opt-in: Mount entire agent config directories
+        if params.agent_configs {
+            // Mount ~/.config for GitHub Copilot CLI and other tools
+            let config_dir = home_path.join(".config");
+            if config_dir.exists() {
+                info!(
+                    "Mounting {} to /home/agent/.config",
+                    config_dir.display()
+                );
+                builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
+            }
+
+            // Mount ~/.cursor for Cursor Agent
+            let cursor_config = home_path.join(".cursor");
+            if cursor_config.exists() {
+                info!(
+                    "Mounting {} to /home/agent/.cursor",
+                    cursor_config.display()
+                );
+                builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+            }
+        }
+
+        // Opt-in: Git and GPG configuration
+        if params.git_gpg {
             let git_config_path = cwd.join(".git").join("config");
             if git_config_path.exists() {
                 info!(
-                    "Auto-mounting git config {} to /home/agent/.gitconfig",
+                    "Mounting git config {} to /home/agent/.gitconfig",
                     git_config_path.display()
                 );
                 builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
@@ -858,7 +871,7 @@ async fn run_ai_agent_command(
                         }
                     }
                 }
-                
+
                 if let Ok(git_email) = std::process::Command::new("git")
                     .args(["config", "--global", "user.email"])
                     .output()
@@ -871,7 +884,7 @@ async fn run_ai_agent_command(
                         }
                     }
                 }
-                
+
                 if let Ok(git_signing_key) = std::process::Command::new("git")
                     .args(["config", "--global", "user.signingkey"])
                     .output()
@@ -884,15 +897,12 @@ async fn run_ai_agent_command(
                     }
                 }
             }
-        }
 
-        // Auto-mount GPG configuration
-        if !params.no_gpg_config {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-            let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
+            // Mount GPG configuration
+            let gpg_dir = home_path.join(".gnupg");
             if gpg_dir.exists() {
                 info!(
-                    "Auto-mounting GPG config {} to /home/agent/.gnupg",
+                    "Mounting GPG config {} to /home/agent/.gnupg",
                     gpg_dir.display()
                 );
                 builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
