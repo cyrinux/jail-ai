@@ -64,6 +64,22 @@ pub enum Commands {
         /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
         #[arg(long)]
         no_agent_configs: bool,
+
+        /// Auto-mount git configuration (name, email, gpg sign key) from current directory [default: true]
+        #[arg(long, default_value_t = true)]
+        git_config: bool,
+
+        /// Auto-mount GPG configuration directory (~/.gnupg) [default: true]
+        #[arg(long, default_value_t = true)]
+        gpg_config: bool,
+
+        /// Disable auto-mounting git configuration
+        #[arg(long)]
+        no_git_config: bool,
+
+        /// Disable auto-mounting GPG configuration
+        #[arg(long)]
+        no_gpg_config: bool,
     },
 
     /// Start a jail
@@ -160,6 +176,22 @@ pub enum Commands {
         #[arg(long)]
         no_agent_configs: bool,
 
+        /// Auto-mount git configuration (name, email, gpg sign key) from current directory [default: true]
+        #[arg(long, default_value_t = true)]
+        git_config: bool,
+
+        /// Auto-mount GPG configuration directory (~/.gnupg) [default: true]
+        #[arg(long, default_value_t = true)]
+        gpg_config: bool,
+
+        /// Disable auto-mounting git configuration
+        #[arg(long)]
+        no_git_config: bool,
+
+        /// Disable auto-mounting GPG configuration
+        #[arg(long)]
+        no_gpg_config: bool,
+
         /// Additional arguments to pass to claude
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -207,6 +239,22 @@ pub enum Commands {
         #[arg(long)]
         no_agent_configs: bool,
 
+        /// Auto-mount git configuration (name, email, gpg sign key) from current directory [default: true]
+        #[arg(long, default_value_t = true)]
+        git_config: bool,
+
+        /// Auto-mount GPG configuration directory (~/.gnupg) [default: true]
+        #[arg(long, default_value_t = true)]
+        gpg_config: bool,
+
+        /// Disable auto-mounting git configuration
+        #[arg(long)]
+        no_git_config: bool,
+
+        /// Disable auto-mounting GPG configuration
+        #[arg(long)]
+        no_gpg_config: bool,
+
         /// Additional arguments to pass to copilot
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -253,6 +301,22 @@ pub enum Commands {
         /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
         #[arg(long)]
         no_agent_configs: bool,
+
+        /// Auto-mount git configuration (name, email, gpg sign key) from current directory [default: true]
+        #[arg(long, default_value_t = true)]
+        git_config: bool,
+
+        /// Auto-mount GPG configuration directory (~/.gnupg) [default: true]
+        #[arg(long, default_value_t = true)]
+        gpg_config: bool,
+
+        /// Disable auto-mounting git configuration
+        #[arg(long)]
+        no_git_config: bool,
+
+        /// Disable auto-mounting GPG configuration
+        #[arg(long)]
+        no_gpg_config: bool,
 
         /// Additional arguments to pass to cursor-agent
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
