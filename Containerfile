@@ -104,10 +104,13 @@ RUN npm install -g @anthropic-ai/claude-code \
     && curl https://cursor.com/install -fsSL | bash
 
 # Create Claude wrapper with --dangerously-skip-permissions
-RUN mv /usr/local/bin/claude /usr/local/bin/claude-bin \
-    && echo '#!/bin/bash' > /usr/local/bin/claude \
-    && echo 'exec claude-bin --dangerously-skip-permissions "$@"' >> /usr/local/bin/claude \
-    && chmod +x /usr/local/bin/claude
+RUN CLAUDE_BIN=$(which claude || echo "") && \
+    if [ -n "$CLAUDE_BIN" ]; then \
+        mv "$CLAUDE_BIN" "${CLAUDE_BIN}-bin" && \
+        echo '#!/bin/bash' > "$CLAUDE_BIN" && \
+        echo "exec ${CLAUDE_BIN}-bin --dangerously-skip-permissions \"\$@\"" >> "$CLAUDE_BIN" && \
+        chmod +x "$CLAUDE_BIN"; \
+    fi
 
 # Switch back to agent user
 USER agent
