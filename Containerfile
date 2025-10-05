@@ -56,8 +56,23 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create agent user with configurable UID/GID
-RUN groupadd -g ${PGID} agent \
-    && useradd -m -s /usr/bin/zsh -u ${PUID} -g ${PGID} agent \
+# Handle case where GID/UID already exist by checking first
+RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
+        groupadd -g ${PGID} agent; \
+    else \
+        GROUP_NAME=$(getent group ${PGID} | cut -d: -f1); \
+        if [ "$GROUP_NAME" != "agent" ]; then \
+            groupmod -n agent $GROUP_NAME; \
+        fi; \
+    fi \
+    && if ! getent passwd ${PUID} > /dev/null 2>&1; then \
+        useradd -m -s /usr/bin/zsh -u ${PUID} -g ${PGID} agent; \
+    else \
+        USER_NAME=$(getent passwd ${PUID} | cut -d: -f1); \
+        if [ "$USER_NAME" != "agent" ]; then \
+            usermod -l agent -d /home/agent -m -g ${PGID} -s /usr/bin/zsh $USER_NAME; \
+        fi; \
+    fi \
     && usermod -aG sudo agent \
     && mkdir -p /etc/sudoers.d \
     && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
