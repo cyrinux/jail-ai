@@ -151,7 +151,10 @@ impl JailBackend for SystemdNspawnBackend {
     }
 
     async fn exec(&self, name: &str, command: &[String], interactive: bool) -> Result<String> {
-        debug!("Executing command in jail {}: {:?} (interactive: {})", name, command, interactive);
+        debug!(
+            "Executing command in jail {}: {:?} (interactive: {})",
+            name, command, interactive
+        );
 
         let mut cmd = Command::new("systemd-run");
         cmd.arg("--machine").arg(name).arg("--wait");
@@ -175,8 +178,9 @@ impl JailBackend for SystemdNspawnBackend {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
 
-            let status = cmd.status().await
-                .map_err(|e| JailError::Backend(format!("Failed to execute interactive command: {}", e)))?;
+            let status = cmd.status().await.map_err(|e| {
+                JailError::Backend(format!("Failed to execute interactive command: {}", e))
+            })?;
 
             if !status.success() {
                 return Err(JailError::ExecutionFailed(format!(
@@ -207,9 +211,10 @@ impl JailBackend for SystemdNspawnBackend {
 
         if let Ok(mut entries) = tokio::fs::read_dir(&self.machines_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Ok(file_name) = entry.file_name().into_string()
-                    && file_name.starts_with("jail-") {
-                    jails.push(file_name);
+                if let Ok(file_name) = entry.file_name().into_string() {
+                    if file_name.starts_with("jail-") {
+                        jails.push(file_name);
+                    }
                 }
             }
         }

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -341,7 +341,11 @@ impl Commands {
             .map(|(i, c)| {
                 if i == 0 {
                     // First character must be alphanumeric
-                    if c.is_alphanumeric() { c } else { 'x' }
+                    if c.is_alphanumeric() {
+                        c
+                    } else {
+                        'x'
+                    }
                 } else {
                     // Remaining characters can be alphanumeric, _, ., or -
                     if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' {
@@ -435,8 +439,14 @@ mod tests {
         assert_eq!(Commands::sanitize_jail_name("test project"), "test-project");
 
         // Test valid characters that should be preserved
-        assert_eq!(Commands::sanitize_jail_name("my_project.v2"), "my_project.v2");
-        assert_eq!(Commands::sanitize_jail_name("my-project-v2"), "my-project-v2");
+        assert_eq!(
+            Commands::sanitize_jail_name("my_project.v2"),
+            "my_project.v2"
+        );
+        assert_eq!(
+            Commands::sanitize_jail_name("my-project-v2"),
+            "my-project-v2"
+        );
 
         // Test leading hyphens/underscores
         assert_eq!(Commands::sanitize_jail_name("-myproject"), "myproject");

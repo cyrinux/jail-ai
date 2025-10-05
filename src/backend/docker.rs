@@ -131,9 +131,9 @@ impl JailBackend for DockerBackend {
             let mut pull_cmd = Command::new("docker");
             pull_cmd.arg("pull").arg(&config.base_image);
 
-            run_command(&mut pull_cmd).await.map_err(|e| {
-                JailError::Backend(format!("Failed to pull image: {}", e))
-            })?;
+            run_command(&mut pull_cmd)
+                .await
+                .map_err(|e| JailError::Backend(format!("Failed to pull image: {}", e)))?;
         } else {
             debug!("Using local image: {}", config.base_image);
         }
@@ -191,7 +191,10 @@ impl JailBackend for DockerBackend {
     }
 
     async fn exec(&self, name: &str, command: &[String], interactive: bool) -> Result<String> {
-        debug!("Executing command in jail {}: {:?} (interactive: {})", name, command, interactive);
+        debug!(
+            "Executing command in jail {}: {:?} (interactive: {})",
+            name, command, interactive
+        );
 
         let mut cmd = Command::new("docker");
         cmd.arg("exec");
@@ -213,8 +216,9 @@ impl JailBackend for DockerBackend {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
 
-            let status = cmd.status().await
-                .map_err(|e| JailError::Backend(format!("Failed to execute interactive command: {}", e)))?;
+            let status = cmd.status().await.map_err(|e| {
+                JailError::Backend(format!("Failed to execute interactive command: {}", e))
+            })?;
 
             if !status.success() {
                 return Err(JailError::ExecutionFailed(format!(
@@ -234,7 +238,12 @@ impl JailBackend for DockerBackend {
 
     async fn exists(&self, name: &str) -> Result<bool> {
         let mut cmd = Command::new("docker");
-        cmd.arg("ps").arg("-a").arg("--filter").arg(format!("name=^{}$", name)).arg("--format").arg("{{.Names}}");
+        cmd.arg("ps")
+            .arg("-a")
+            .arg("--filter")
+            .arg(format!("name=^{}$", name))
+            .arg("--format")
+            .arg("{{.Names}}");
 
         match run_command(&mut cmd).await {
             Ok(output) => Ok(output.trim() == name),
@@ -311,7 +320,7 @@ mod tests {
             "jail-project-def456",
             "other-container",
             "jail-another-xyz789",
-            "my-container"
+            "my-container",
         ];
 
         let filtered: Vec<String> = names
