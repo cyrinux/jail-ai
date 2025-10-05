@@ -41,11 +41,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
         None => {
             // Default behavior: auto-init and exec based on current directory
             let cwd = std::env::current_dir()?;
-            let jail_name = cwd
+            let dir_name = cwd
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("default")
-                .to_string();
+                .unwrap_or("default");
+            let jail_name = cli::Commands::sanitize_jail_name(dir_name);
 
             info!("No command specified, using default behavior for jail '{}'", jail_name);
 
@@ -137,14 +137,15 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
                 // Auto-generate name from current directory if not provided
                 let jail_name = if let Some(name) = name {
-                    name
+                    // Sanitize user-provided name too
+                    cli::Commands::sanitize_jail_name(&name)
                 } else {
                     let cwd = std::env::current_dir()?;
-                    let generated_name = cwd
+                    let dir_name = cwd
                         .file_name()
                         .and_then(|n| n.to_str())
-                        .unwrap_or("default")
-                        .to_string();
+                        .unwrap_or("default");
+                    let generated_name = cli::Commands::sanitize_jail_name(dir_name);
                     info!("Auto-generated jail name from current directory: {}", generated_name);
                     generated_name
                 };
