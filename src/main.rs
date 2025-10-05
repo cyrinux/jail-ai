@@ -48,6 +48,8 @@ async fn run(command: Commands) -> error::Result<()> {
             memory,
             cpu,
             config,
+            no_workspace,
+            workspace_path,
         } => {
             let jail = if let Some(config_path) = config {
                 // Load from config file
@@ -63,6 +65,17 @@ async fn run(command: Commands) -> error::Result<()> {
                     .backend(backend_type)
                     .base_image(image)
                     .network(!no_network, true);
+
+                // Auto-mount current working directory to /workspace
+                if !no_workspace {
+                    let cwd = std::env::current_dir()?;
+                    info!(
+                        "Auto-mounting current directory {} to {}",
+                        cwd.display(),
+                        workspace_path
+                    );
+                    builder = builder.bind_mount(cwd, workspace_path, false);
+                }
 
                 // Parse mounts
                 for mount_str in mount {

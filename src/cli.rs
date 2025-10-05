@@ -51,6 +51,14 @@ pub enum Commands {
         /// Load configuration from file
         #[arg(short, long)]
         config: Option<PathBuf>,
+
+        /// Skip auto-mounting current working directory to /workspace
+        #[arg(long)]
+        no_workspace: bool,
+
+        /// Custom workspace path inside jail (default: /workspace)
+        #[arg(long, default_value = "/workspace")]
+        workspace_path: String,
     },
 
     /// Start a jail
