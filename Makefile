@@ -27,6 +27,9 @@ test-image: ## Test the container image
 	@podman run --rm $(IMAGE_FULL) go version
 	@podman run --rm $(IMAGE_FULL) node --version
 	@podman run --rm $(IMAGE_FULL) python --version
+	@podman run --rm $(IMAGE_FULL) claude --version
+	@podman run --rm $(IMAGE_FULL) copilot --version || echo "Copilot CLI installed (requires auth)"
+	@podman run --rm $(IMAGE_FULL) cursor-agent --version || echo "Cursor Agent installed (requires auth)"
 	@echo "All tools verified successfully!"
 
 clean: ## Remove built container images

@@ -10,7 +10,8 @@
       "Bash(podman ps:*)",
       "Bash(podman rm:*)",
       "Bash(make:*)",
-      "Bash(podman images:*)"
+      "Bash(podman images:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

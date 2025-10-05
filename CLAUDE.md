@@ -90,6 +90,17 @@ The `localhost/jail-ai-env:latest` image includes:
 - **Utilities**: git, vim, nano, jq, tree, tmux, htop
 - **Python tools**: black, pylint, mypy, pytest
 - **Rust tools**: clippy, rustfmt
+- **AI Coding Agents**:
+  - **Claude Code** (`claude`) - Anthropic's CLI coding assistant
+  - **GitHub Copilot CLI** (`copilot`) - GitHub's AI pair programmer
+  - **Cursor Agent** (`cursor-agent`) - Cursor's terminal AI agent
+
+### AI Agent Authentication
+
+The AI coding agents require authentication:
+- **Claude Code**: Requires Anthropic API key (set `ANTHROPIC_API_KEY`)
+- **GitHub Copilot**: Requires GitHub Copilot subscription (use `/login` command)
+- **Cursor Agent**: Requires Cursor subscription (authentication via CLI)
 
 ## Git Workflow
 
