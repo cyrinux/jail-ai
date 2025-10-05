@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     # Additional utilities
     tmux \
     screen \
+    sudo \
     # Shell enhancements
     zsh \
     fonts-powerline \
@@ -53,7 +54,9 @@ RUN apt-get update && apt-get install -y \
 # Create agent user
 RUN useradd -m -s /usr/bin/zsh -u 1000 agent \
     && usermod -aG sudo agent \
-    && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent
+    && mkdir -p /etc/sudoers.d \
+    && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
+    && chmod 0440 /etc/sudoers.d/agent
 
 # Switch to agent user for installations
 USER agent
