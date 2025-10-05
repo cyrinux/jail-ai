@@ -84,6 +84,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
+                git_config,
+                gpg_config,
+                no_git_config,
+                no_gpg_config,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -194,6 +198,71 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             );
                             builder =
                                 builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+                        }
+                    }
+
+                    // Auto-mount git configuration
+                    if git_config && !no_git_config {
+                        let cwd = std::env::current_dir()?;
+                        let git_config_path = cwd.join(".git").join("config");
+                        if git_config_path.exists() {
+                            info!(
+                                "Auto-mounting git config {} to /home/agent/.gitconfig",
+                                git_config_path.display()
+                            );
+                            builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
+                        } else {
+                            // If no local git config, try to get global git config and create a temporary one
+                            if let Ok(git_name) = std::process::Command::new("git")
+                                .args(["config", "--global", "user.name"])
+                                .output()
+                            {
+                                if git_name.status.success() {
+                                    let name = String::from_utf8_lossy(&git_name.stdout).trim().to_string();
+                                    if !name.is_empty() {
+                                        builder = builder.env("GIT_AUTHOR_NAME", &name);
+                                        builder = builder.env("GIT_COMMITTER_NAME", &name);
+                                    }
+                                }
+                            }
+                            
+                            if let Ok(git_email) = std::process::Command::new("git")
+                                .args(["config", "--global", "user.email"])
+                                .output()
+                            {
+                                if git_email.status.success() {
+                                    let email = String::from_utf8_lossy(&git_email.stdout).trim().to_string();
+                                    if !email.is_empty() {
+                                        builder = builder.env("GIT_AUTHOR_EMAIL", &email);
+                                        builder = builder.env("GIT_COMMITTER_EMAIL", &email);
+                                    }
+                                }
+                            }
+                            
+                            if let Ok(git_signing_key) = std::process::Command::new("git")
+                                .args(["config", "--global", "user.signingkey"])
+                                .output()
+                            {
+                                if git_signing_key.status.success() {
+                                    let signing_key = String::from_utf8_lossy(&git_signing_key.stdout).trim().to_string();
+                                    if !signing_key.is_empty() {
+                                        builder = builder.env("GIT_SIGNING_KEY", &signing_key);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Auto-mount GPG configuration
+                    if gpg_config && !no_gpg_config {
+                        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                        let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
+                        if gpg_dir.exists() {
+                            info!(
+                                "Auto-mounting GPG config {} to /home/agent/.gnupg",
+                                gpg_dir.display()
+                            );
+                            builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
                         }
                     }
 
@@ -326,6 +395,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
+                git_config,
+                gpg_config,
+                no_git_config,
+                no_gpg_config,
                 args,
             } => {
                 run_ai_agent_command(
@@ -341,6 +414,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
+                        git_config,
+                        gpg_config,
+                        no_git_config,
+                        no_gpg_config,
                         args,
                     },
                 )
@@ -358,6 +435,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
+                git_config,
+                gpg_config,
+                no_git_config,
+                no_gpg_config,
                 args,
             } => {
                 run_ai_agent_command(
@@ -373,6 +454,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
+                        git_config,
+                        gpg_config,
+                        no_git_config,
+                        no_gpg_config,
                         args,
                     },
                 )
@@ -390,6 +475,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
+                git_config,
+                gpg_config,
+                no_git_config,
+                no_gpg_config,
                 args,
             } => {
                 run_ai_agent_command(
@@ -405,6 +494,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
+                        git_config,
+                        gpg_config,
+                        no_git_config,
+                        no_gpg_config,
                         args,
                     },
                 )
@@ -696,6 +789,10 @@ struct AgentCommandParams {
     no_workspace: bool,
     workspace_path: String,
     no_agent_configs: bool,
+    git_config: bool,
+    gpg_config: bool,
+    no_git_config: bool,
+    no_gpg_config: bool,
     args: Vec<String>,
 }
 
@@ -745,6 +842,70 @@ async fn run_ai_agent_command(
         // Auto-mount AI agent configs
         if !params.no_agent_configs {
             builder = mount_agent_configs(builder);
+        }
+
+        // Auto-mount git configuration
+        if params.git_config && !params.no_git_config {
+            let git_config_path = cwd.join(".git").join("config");
+            if git_config_path.exists() {
+                info!(
+                    "Auto-mounting git config {} to /home/agent/.gitconfig",
+                    git_config_path.display()
+                );
+                builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
+            } else {
+                // If no local git config, try to get global git config and set environment variables
+                if let Ok(git_name) = std::process::Command::new("git")
+                    .args(["config", "--global", "user.name"])
+                    .output()
+                {
+                    if git_name.status.success() {
+                        let name = String::from_utf8_lossy(&git_name.stdout).trim().to_string();
+                        if !name.is_empty() {
+                            builder = builder.env("GIT_AUTHOR_NAME", &name);
+                            builder = builder.env("GIT_COMMITTER_NAME", &name);
+                        }
+                    }
+                }
+                
+                if let Ok(git_email) = std::process::Command::new("git")
+                    .args(["config", "--global", "user.email"])
+                    .output()
+                {
+                    if git_email.status.success() {
+                        let email = String::from_utf8_lossy(&git_email.stdout).trim().to_string();
+                        if !email.is_empty() {
+                            builder = builder.env("GIT_AUTHOR_EMAIL", &email);
+                            builder = builder.env("GIT_COMMITTER_EMAIL", &email);
+                        }
+                    }
+                }
+                
+                if let Ok(git_signing_key) = std::process::Command::new("git")
+                    .args(["config", "--global", "user.signingkey"])
+                    .output()
+                {
+                    if git_signing_key.status.success() {
+                        let signing_key = String::from_utf8_lossy(&git_signing_key.stdout).trim().to_string();
+                        if !signing_key.is_empty() {
+                            builder = builder.env("GIT_SIGNING_KEY", &signing_key);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Auto-mount GPG configuration
+        if params.gpg_config && !params.no_gpg_config {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+            let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
+            if gpg_dir.exists() {
+                info!(
+                    "Auto-mounting GPG config {} to /home/agent/.gnupg",
+                    gpg_dir.display()
+                );
+                builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
+            }
         }
 
         // Parse mounts

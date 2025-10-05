@@ -45,6 +45,18 @@ cargo run -- create my-agent --no-agent-configs
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
 
+# Git and GPG configuration mapping are enabled by default
+cargo run -- create my-agent
+
+# Disable git configuration mapping
+cargo run -- create my-agent --no-git-config
+
+# Disable GPG configuration mapping
+cargo run -- create my-agent --no-gpg-config
+
+# Disable both git and GPG configuration mapping
+cargo run -- create my-agent --no-git-config --no-gpg-config
+
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
 
@@ -80,6 +92,8 @@ make dev-jail
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with auto-mounted configs
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Config Auto-mounting**: AI agent config directories (`~/.claude`, `~/.config`, `~/.cursor`) automatically mounted for seamless authentication
+- **Git Configuration Mapping**: Auto-mounting of git configuration (name, email, signing key) from current directory or global config (enabled by default)
+- **GPG Configuration Mapping**: Auto-mounting of GPG configuration directory (`~/.gnupg`) for signing support (enabled by default)
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
 - **Network Isolation**: Configurable network access (disabled, private, or shared)
@@ -114,6 +128,26 @@ The AI coding agents require authentication. **Config directories and files are 
 This means AI agents authenticated on your host will work automatically in the jail without re-authentication.
 
 To disable auto-mounting of agent configs: `--no-agent-configs`
+
+### Git Configuration Mapping
+
+When `--git-config` is enabled, jail-ai will:
+
+1. **Local Git Config**: If a `.git/config` file exists in the current directory, it will be mounted to `/home/agent/.gitconfig` in the jail
+2. **Global Git Config Fallback**: If no local git config exists, it will read your global git configuration and set environment variables:
+   - `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` from `git config --global user.name`
+   - `GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL` from `git config --global user.email`
+   - `GIT_SIGNING_KEY` from `git config --global user.signingkey`
+
+This ensures that git commits made inside the jail will use your configured identity and signing key.
+
+### GPG Configuration Mapping
+
+When `--gpg-config` is enabled, jail-ai will:
+- Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
+- This allows GPG signing to work inside the jail using your host's GPG keys
+
+**Note**: Both git and GPG configuration mapping are enabled by default. Use `--no-git-config` and `--no-gpg-config` flags to disable them.
 
 ## Shell Features
 
