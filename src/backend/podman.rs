@@ -157,20 +157,46 @@ impl JailBackend for PodmanBackend {
         Ok(())
     }
 
-    async fn exec(&self, name: &str, command: &[String]) -> Result<String> {
-        debug!("Executing command in jail {}: {:?}", name, command);
+    async fn exec(&self, name: &str, command: &[String], interactive: bool) -> Result<String> {
+        debug!("Executing command in jail {}: {:?} (interactive: {})", name, command, interactive);
 
         let mut cmd = Command::new("podman");
-        cmd.arg("exec").arg(name);
+        cmd.arg("exec");
+
+        if interactive {
+            cmd.arg("-it");
+        }
+
+        cmd.arg(name);
 
         for arg in command {
             cmd.arg(arg);
         }
 
-        let output = run_command(&mut cmd).await?;
-        debug!("Command output: {}", output);
+        if interactive {
+            // Interactive mode: inherit stdio for direct user interaction
+            use std::process::Stdio;
+            cmd.stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
 
-        Ok(output)
+            let status = cmd.status().await
+                .map_err(|e| JailError::Backend(format!("Failed to execute interactive command: {}", e)))?;
+
+            if !status.success() {
+                return Err(JailError::ExecutionFailed(format!(
+                    "Interactive command failed with status: {}",
+                    status
+                )));
+            }
+
+            Ok(String::new()) // No output to capture in interactive mode
+        } else {
+            // Non-interactive mode: capture output
+            let output = run_command(&mut cmd).await?;
+            debug!("Command output: {}", output);
+            Ok(output)
+        }
     }
 
     async fn exists(&self, name: &str) -> Result<bool> {

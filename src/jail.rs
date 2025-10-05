@@ -36,8 +36,8 @@ impl JailManager {
     }
 
     /// Execute a command in the jail
-    pub async fn exec(&self, command: &[String]) -> Result<String> {
-        self.backend.exec(&self.config.name, command).await
+    pub async fn exec(&self, command: &[String], interactive: bool) -> Result<String> {
+        self.backend.exec(&self.config.name, command, interactive).await
     }
 
     /// Check if jail exists

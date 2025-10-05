@@ -88,6 +88,10 @@ pub enum Commands {
         /// Name of the jail
         name: String,
 
+        /// Run in interactive mode with TTY
+        #[arg(short, long)]
+        interactive: bool,
+
         /// Command to execute
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,

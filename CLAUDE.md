@@ -42,8 +42,11 @@ cargo run -- create my-agent --no-workspace
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
 
-# Execute command in jail
+# Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
+
+# Execute command in jail (interactive shell)
+cargo run -- exec my-agent --interactive -- bash
 
 # Quick development jail
 make dev-jail

@@ -20,7 +20,7 @@ pub trait JailBackend: Send + Sync {
     async fn remove(&self, name: &str) -> Result<()>;
 
     /// Execute a command inside the jail
-    async fn exec(&self, name: &str, command: &[String]) -> Result<String>;
+    async fn exec(&self, name: &str, command: &[String], interactive: bool) -> Result<String>;
 
     /// Check if jail exists
     async fn exists(&self, name: &str) -> Result<bool>;
