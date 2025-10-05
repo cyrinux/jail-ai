@@ -148,7 +148,7 @@ async fn run(command: Commands) -> error::Result<()> {
             info!("Jail removed: {}", name);
         }
 
-        Commands::Exec { name, command } => {
+        Commands::Exec { name, command, interactive } => {
             if command.is_empty() {
                 return Err(error::JailError::Config(
                     "No command specified".to_string(),
@@ -160,8 +160,12 @@ async fn run(command: Commands) -> error::Result<()> {
                 ..Default::default()
             };
             let jail = jail::JailManager::new(config);
-            let output = jail.exec(&command).await?;
-            print!("{}", output);
+            let output = jail.exec(&command, interactive).await?;
+
+            // Only print output if not interactive (interactive mode outputs directly)
+            if !interactive && !output.is_empty() {
+                print!("{}", output);
+            }
         }
 
         Commands::Status { name } => {
