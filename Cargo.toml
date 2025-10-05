@@ -1,6 +1,6 @@
 [package]
 name = "jail-ai"
-version = "0.8.1"
+version = "0.9.1"
 edition = "2024"
 
 [dependencies]
@@ -14,3 +14,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1.40", features = ["full"] }
 tempfile = "3.12"
 async-trait = "0.1"
+sha2 = "0.10"
+hex = "0.4"
