@@ -31,6 +31,7 @@ pub trait JailBackend: Send + Sync {
 
 pub mod systemd_nspawn;
 pub mod podman;
+pub mod docker;
 
 /// Create a backend based on the configuration
 pub fn create_backend(config: &JailConfig) -> Box<dyn JailBackend> {
@@ -39,6 +40,7 @@ pub fn create_backend(config: &JailConfig) -> Box<dyn JailBackend> {
             Box::new(systemd_nspawn::SystemdNspawnBackend::new())
         }
         crate::config::BackendType::Podman => Box::new(podman::PodmanBackend::new()),
+        crate::config::BackendType::Docker => Box::new(docker::DockerBackend::new()),
     }
 }
 
