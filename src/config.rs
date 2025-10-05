@@ -30,6 +30,7 @@ pub struct JailConfig {
 pub enum BackendType {
     SystemdNspawn,
     Podman,
+    Docker,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -285,8 +285,9 @@ impl Commands {
                 Ok(crate::config::BackendType::SystemdNspawn)
             }
             "podman" | "pod" => Ok(crate::config::BackendType::Podman),
+            "docker" => Ok(crate::config::BackendType::Docker),
             _ => Err(format!(
-                "Invalid backend '{}'. Supported: systemd-nspawn, podman",
+                "Invalid backend '{}'. Supported: systemd-nspawn, podman, docker",
                 backend
             )),
         }
