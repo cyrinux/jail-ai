@@ -12,7 +12,8 @@
       "Bash(make:*)",
       "Bash(podman images:*)",
       "WebSearch",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(podman exec:*)"
     ],
     "deny": [],
     "ask": []
