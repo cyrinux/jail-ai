@@ -12,6 +12,16 @@ impl PodmanBackend {
         Self
     }
 
+    async fn image_exists(&self, image: &str) -> Result<bool> {
+        let mut cmd = Command::new("podman");
+        cmd.arg("image").arg("exists").arg(image);
+
+        match cmd.output().await {
+            Ok(output) => Ok(output.status.success()),
+            Err(_) => Ok(false),
+        }
+    }
+
     fn build_run_args(&self, config: &JailConfig) -> Vec<String> {
         let mut args = vec![
             "run".to_string(),
@@ -80,14 +90,20 @@ impl JailBackend for PodmanBackend {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
-        // Pull the base image first
-        let mut pull_cmd = Command::new("podman");
-        pull_cmd.arg("pull").arg(&config.base_image);
+        // Check if image exists locally, if not pull it
+        let image_exists = self.image_exists(&config.base_image).await?;
 
-        debug!("Pulling image: {}", config.base_image);
-        run_command(&mut pull_cmd).await.map_err(|e| {
-            JailError::Backend(format!("Failed to pull image: {}", e))
-        })?;
+        if !image_exists {
+            debug!("Image {} not found locally, pulling...", config.base_image);
+            let mut pull_cmd = Command::new("podman");
+            pull_cmd.arg("pull").arg(&config.base_image);
+
+            run_command(&mut pull_cmd).await.map_err(|e| {
+                JailError::Backend(format!("Failed to pull image: {}", e))
+            })?;
+        } else {
+            debug!("Using local image: {}", config.base_image);
+        }
 
         // Create and start the container
         let args = self.build_run_args(config);
