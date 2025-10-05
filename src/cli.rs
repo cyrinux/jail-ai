@@ -120,6 +120,46 @@ pub enum Commands {
 
     /// Quick start Claude Code in a jail for current directory
     Claude {
+        /// Backend type (systemd-nspawn or podman)
+        #[arg(short, long, default_value = "podman")]
+        backend: String,
+
+        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        image: String,
+
+        /// Bind mount (format: source:target[:ro])
+        #[arg(short = 'm', long)]
+        mount: Vec<String>,
+
+        /// Environment variable (format: KEY=VALUE)
+        #[arg(short = 'e', long)]
+        env: Vec<String>,
+
+        /// Disable network access
+        #[arg(long)]
+        no_network: bool,
+
+        /// Memory limit in MB
+        #[arg(long)]
+        memory: Option<u64>,
+
+        /// CPU quota percentage (0-100)
+        #[arg(long)]
+        cpu: Option<u32>,
+
+        /// Skip auto-mounting current working directory to /workspace
+        #[arg(long)]
+        no_workspace: bool,
+
+        /// Custom workspace path inside jail (default: /workspace)
+        #[arg(long, default_value = "/workspace")]
+        workspace_path: String,
+
+        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        #[arg(long)]
+        no_agent_configs: bool,
+
         /// Additional arguments to pass to claude
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -127,6 +167,46 @@ pub enum Commands {
 
     /// Quick start GitHub Copilot CLI in a jail for current directory
     Copilot {
+        /// Backend type (systemd-nspawn or podman)
+        #[arg(short, long, default_value = "podman")]
+        backend: String,
+
+        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        image: String,
+
+        /// Bind mount (format: source:target[:ro])
+        #[arg(short = 'm', long)]
+        mount: Vec<String>,
+
+        /// Environment variable (format: KEY=VALUE)
+        #[arg(short = 'e', long)]
+        env: Vec<String>,
+
+        /// Disable network access
+        #[arg(long)]
+        no_network: bool,
+
+        /// Memory limit in MB
+        #[arg(long)]
+        memory: Option<u64>,
+
+        /// CPU quota percentage (0-100)
+        #[arg(long)]
+        cpu: Option<u32>,
+
+        /// Skip auto-mounting current working directory to /workspace
+        #[arg(long)]
+        no_workspace: bool,
+
+        /// Custom workspace path inside jail (default: /workspace)
+        #[arg(long, default_value = "/workspace")]
+        workspace_path: String,
+
+        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        #[arg(long)]
+        no_agent_configs: bool,
+
         /// Additional arguments to pass to copilot
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -134,6 +214,46 @@ pub enum Commands {
 
     /// Quick start Cursor Agent in a jail for current directory
     Cursor {
+        /// Backend type (systemd-nspawn or podman)
+        #[arg(short, long, default_value = "podman")]
+        backend: String,
+
+        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        image: String,
+
+        /// Bind mount (format: source:target[:ro])
+        #[arg(short = 'm', long)]
+        mount: Vec<String>,
+
+        /// Environment variable (format: KEY=VALUE)
+        #[arg(short = 'e', long)]
+        env: Vec<String>,
+
+        /// Disable network access
+        #[arg(long)]
+        no_network: bool,
+
+        /// Memory limit in MB
+        #[arg(long)]
+        memory: Option<u64>,
+
+        /// CPU quota percentage (0-100)
+        #[arg(long)]
+        cpu: Option<u32>,
+
+        /// Skip auto-mounting current working directory to /workspace
+        #[arg(long)]
+        no_workspace: bool,
+
+        /// Custom workspace path inside jail (default: /workspace)
+        #[arg(long, default_value = "/workspace")]
+        workspace_path: String,
+
+        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        #[arg(long)]
+        no_agent_configs: bool,
+
         /// Additional arguments to pass to cursor-agent
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
