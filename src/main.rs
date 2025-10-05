@@ -36,8 +36,81 @@ async fn main() {
     }
 }
 
-async fn run(command: Commands) -> error::Result<()> {
+async fn run(command: Option<Commands>) -> error::Result<()> {
     match command {
+        None => {
+            // Default behavior: auto-init and exec based on current directory
+            let cwd = std::env::current_dir()?;
+            let jail_name = cwd
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("default")
+                .to_string();
+
+            info!("No command specified, using default behavior for jail '{}'", jail_name);
+
+            // Check if jail exists
+            let temp_config = JailConfig {
+                name: jail_name.clone(),
+                ..Default::default()
+            };
+            let temp_jail = jail::JailManager::new(temp_config);
+            let exists = temp_jail.exists().await?;
+
+            if !exists {
+                info!("Jail '{}' does not exist, creating it...", jail_name);
+
+                // Create jail with default settings
+                let mut builder = JailBuilder::new(jail_name.clone())
+                    .backend(config::BackendType::Podman)
+                    .base_image("localhost/jail-ai-env:latest".to_string());
+
+                // Set timezone from host
+                if let Some(tz) = get_host_timezone() {
+                    builder = builder.env("TZ", tz);
+                }
+
+                // Auto-mount workspace
+                builder = builder.bind_mount(cwd.clone(), "/workspace", false);
+
+                // Auto-mount AI agent configs
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                let home_path = std::path::PathBuf::from(&home);
+
+                let claude_config = home_path.join(".claude");
+                if claude_config.exists() {
+                    builder = builder.bind_mount(claude_config, "/root/.claude", false);
+                }
+
+                let claude_json = home_path.join(".claude.json");
+                if claude_json.exists() {
+                    builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+                }
+
+                let config_dir = home_path.join(".config");
+                if config_dir.exists() {
+                    builder = builder.bind_mount(config_dir, "/root/.config", false);
+                }
+
+                let cursor_config = home_path.join(".cursor");
+                if cursor_config.exists() {
+                    builder = builder.bind_mount(cursor_config, "/root/.cursor", false);
+                }
+
+                let jail = builder.build();
+                jail.create().await?;
+                info!("Jail '{}' created successfully", jail_name);
+            }
+
+            // Exec into jail with interactive shell
+            info!("Executing interactive shell in jail '{}'...", jail_name);
+            let jail = JailBuilder::new(jail_name.clone())
+                .backend(config::BackendType::Podman)
+                .build();
+
+            jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+        }
+        Some(command) => match command {
         Commands::Create {
             name,
             backend,
@@ -62,10 +135,29 @@ async fn run(command: Commands) -> error::Result<()> {
                 let backend_type = Commands::parse_backend(&backend)
                     .map_err(error::JailError::Config)?;
 
-                let mut builder = JailBuilder::new(name)
+                // Auto-generate name from current directory if not provided
+                let jail_name = if let Some(name) = name {
+                    name
+                } else {
+                    let cwd = std::env::current_dir()?;
+                    let generated_name = cwd
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("default")
+                        .to_string();
+                    info!("Auto-generated jail name from current directory: {}", generated_name);
+                    generated_name
+                };
+
+                let mut builder = JailBuilder::new(jail_name)
                     .backend(backend_type)
                     .base_image(image)
                     .network(!no_network, true);
+
+                // Set timezone from host
+                if let Some(tz) = get_host_timezone() {
+                    builder = builder.env("TZ", tz);
+                }
 
                 // Auto-mount current working directory to /workspace
                 if !no_workspace {
@@ -227,9 +319,210 @@ async fn run(command: Commands) -> error::Result<()> {
             tokio::fs::write(&output, json).await?;
             info!("Configuration saved to: {}", output.display());
         }
+
+        Commands::Claude { args } => {
+            let cwd = std::env::current_dir()?;
+            let jail_name = cli::Commands::generate_jail_name(&cwd);
+
+            info!("Using jail: {} for directory: {}", jail_name, cwd.display());
+
+            // Create jail if it doesn't exist
+            let config = JailConfig {
+                name: jail_name.clone(),
+                ..Default::default()
+            };
+            let jail = jail::JailManager::new(config.clone());
+
+            if !jail.exists().await? {
+                info!("Creating new jail: {}", jail_name);
+                let jail = create_default_jail(&jail_name, &cwd).await?;
+                jail.create().await?;
+            }
+
+            // Execute Claude Code
+            let mut command = vec!["claude".to_string()];
+            command.extend(args);
+
+            let output = jail.exec(&command, true).await?;
+            if !output.is_empty() {
+                print!("{}", output);
+            }
+        }
+
+        Commands::Copilot { args } => {
+            let cwd = std::env::current_dir()?;
+            let jail_name = cli::Commands::generate_jail_name(&cwd);
+
+            info!("Using jail: {} for directory: {}", jail_name, cwd.display());
+
+            // Create jail if it doesn't exist
+            let config = JailConfig {
+                name: jail_name.clone(),
+                ..Default::default()
+            };
+            let jail = jail::JailManager::new(config.clone());
+
+            if !jail.exists().await? {
+                info!("Creating new jail: {}", jail_name);
+                let jail = create_default_jail(&jail_name, &cwd).await?;
+                jail.create().await?;
+            }
+
+            // Execute GitHub Copilot CLI
+            let mut command = vec!["copilot".to_string()];
+            command.extend(args);
+
+            let output = jail.exec(&command, true).await?;
+            if !output.is_empty() {
+                print!("{}", output);
+            }
+        }
+
+        Commands::Cursor { args } => {
+            let cwd = std::env::current_dir()?;
+            let jail_name = cli::Commands::generate_jail_name(&cwd);
+
+            info!("Using jail: {} for directory: {}", jail_name, cwd.display());
+
+            // Create jail if it doesn't exist
+            let config = JailConfig {
+                name: jail_name.clone(),
+                ..Default::default()
+            };
+            let jail = jail::JailManager::new(config.clone());
+
+            if !jail.exists().await? {
+                info!("Creating new jail: {}", jail_name);
+                let jail = create_default_jail(&jail_name, &cwd).await?;
+                jail.create().await?;
+            }
+
+            // Execute Cursor Agent
+            let mut command = vec!["cursor-agent".to_string()];
+            command.extend(args);
+
+            let output = jail.exec(&command, true).await?;
+            if !output.is_empty() {
+                print!("{}", output);
+            }
+        }
+
+        Commands::Join { shell } => {
+            let cwd = std::env::current_dir()?;
+            let jail_name = cli::Commands::generate_jail_name(&cwd);
+
+            info!("Joining jail: {} for directory: {}", jail_name, cwd.display());
+
+            // Check if jail exists
+            let config = JailConfig {
+                name: jail_name.clone(),
+                ..Default::default()
+            };
+            let jail = jail::JailManager::new(config);
+
+            if !jail.exists().await? {
+                return Err(error::JailError::Config(format!(
+                    "Jail '{}' does not exist. Create it first with: jail-ai claude",
+                    jail_name
+                )));
+            }
+
+            // Execute interactive shell
+            let command = vec![shell];
+            let output = jail.exec(&command, true).await?;
+            if !output.is_empty() {
+                print!("{}", output);
+            }
+        }
+        }
     }
 
     Ok(())
+}
+
+/// Get the host's timezone
+fn get_host_timezone() -> Option<String> {
+    // Try TZ environment variable first
+    if let Ok(tz) = std::env::var("TZ")
+        && !tz.is_empty() {
+            info!("Using timezone from TZ env var: {}", tz);
+            return Some(tz);
+        }
+
+    // Try reading /etc/timezone
+    if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
+        let tz = tz.trim().to_string();
+        if !tz.is_empty() {
+            info!("Using timezone from /etc/timezone: {}", tz);
+            return Some(tz);
+        }
+    }
+
+    // Try reading /etc/localtime symlink
+    if let Ok(link) = std::fs::read_link("/etc/localtime")
+        && let Some(tz) = link.to_str() {
+            // Extract timezone from path like /usr/share/zoneinfo/Europe/Paris
+            if let Some(tz_name) = tz.strip_prefix("/usr/share/zoneinfo/") {
+                info!("Using timezone from /etc/localtime: {}", tz_name);
+                return Some(tz_name.to_string());
+            }
+        }
+
+    info!("Could not determine host timezone, container will use UTC");
+    None
+}
+
+/// Helper function to create a jail with default configuration
+async fn create_default_jail(name: &str, workspace: &std::path::Path) -> error::Result<jail::JailManager> {
+    let backend_type = config::BackendType::Podman;
+
+    let mut builder = JailBuilder::new(name)
+        .backend(backend_type)
+        .base_image("localhost/jail-ai-env:latest")
+        .network(true, true);
+
+    // Set timezone from host
+    if let Some(tz) = get_host_timezone() {
+        builder = builder.env("TZ", tz);
+    }
+
+    // Auto-mount workspace
+    info!("Auto-mounting {} to /workspace", workspace.display());
+    builder = builder.bind_mount(workspace, "/workspace", false);
+
+    // Auto-mount AI agent configs
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home_path = std::path::PathBuf::from(&home);
+
+    // Mount ~/.claude for Claude Code
+    let claude_config = home_path.join(".claude");
+    if claude_config.exists() {
+        info!("Auto-mounting {} to /root/.claude", claude_config.display());
+        builder = builder.bind_mount(claude_config, "/root/.claude", false);
+    }
+
+    // Mount ~/.claude.json for Claude Code configuration
+    let claude_json = home_path.join(".claude.json");
+    if claude_json.exists() {
+        info!("Auto-mounting {} to /root/.claude.json", claude_json.display());
+        builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+    }
+
+    // Mount ~/.config for GitHub Copilot CLI and other tools
+    let config_dir = home_path.join(".config");
+    if config_dir.exists() {
+        info!("Auto-mounting {} to /root/.config", config_dir.display());
+        builder = builder.bind_mount(config_dir, "/root/.config", false);
+    }
+
+    // Mount ~/.cursor for Cursor Agent
+    let cursor_config = home_path.join(".cursor");
+    if cursor_config.exists() {
+        info!("Auto-mounting {} to /root/.cursor", cursor_config.display());
+        builder = builder.bind_mount(cursor_config, "/root/.cursor", false);
+    }
+
+    Ok(builder.build())
 }
 
 #[cfg(test)]
