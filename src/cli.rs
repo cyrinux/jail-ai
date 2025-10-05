@@ -145,6 +145,17 @@ pub enum Commands {
         #[arg(short, long, default_value = "bash")]
         shell: String,
     },
+
+    /// Stop and remove all jail-ai containers
+    CleanAll {
+        /// Backend type to clean (systemd-nspawn or podman, default: both)
+        #[arg(short, long)]
+        backend: Option<String>,
+
+        /// Force removal without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 impl Commands {
