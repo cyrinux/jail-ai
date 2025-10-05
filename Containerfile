@@ -3,6 +3,10 @@ FROM docker.io/library/debian:bookworm-slim
 LABEL maintainer="jail-ai"
 LABEL description="AI Agent development environment with common tools"
 
+# Build arguments for user/group ID mapping
+ARG PUID=1000
+ARG PGID=1000
+
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -51,8 +55,9 @@ RUN apt-get update && apt-get install -y \
     fonts-powerline \
     && rm -rf /var/lib/apt/lists/*
 
-# Create agent user
-RUN useradd -m -s /usr/bin/zsh -u 1000 agent \
+# Create agent user with configurable UID/GID
+RUN groupadd -g ${PGID} agent \
+    && useradd -m -s /usr/bin/zsh -u ${PUID} -g ${PGID} agent \
     && usermod -aG sudo agent \
     && mkdir -p /etc/sudoers.d \
     && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
