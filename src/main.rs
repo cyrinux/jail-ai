@@ -84,8 +84,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
-                git_config,
-                gpg_config,
                 no_git_config,
                 no_gpg_config,
             } => {
@@ -202,7 +200,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     }
 
                     // Auto-mount git configuration
-                    if git_config && !no_git_config {
+                    if !no_git_config {
                         let cwd = std::env::current_dir()?;
                         let git_config_path = cwd.join(".git").join("config");
                         if git_config_path.exists() {
@@ -254,7 +252,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     }
 
                     // Auto-mount GPG configuration
-                    if gpg_config && !no_gpg_config {
+                    if !no_gpg_config {
                         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                         let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
                         if gpg_dir.exists() {
@@ -395,8 +393,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
-                git_config,
-                gpg_config,
                 no_git_config,
                 no_gpg_config,
                 args,
@@ -414,8 +410,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
-                        git_config,
-                        gpg_config,
                         no_git_config,
                         no_gpg_config,
                         args,
@@ -435,8 +429,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
-                git_config,
-                gpg_config,
                 no_git_config,
                 no_gpg_config,
                 args,
@@ -454,8 +446,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
-                        git_config,
-                        gpg_config,
                         no_git_config,
                         no_gpg_config,
                         args,
@@ -475,8 +465,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 no_agent_configs,
-                git_config,
-                gpg_config,
                 no_git_config,
                 no_gpg_config,
                 args,
@@ -494,8 +482,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         no_agent_configs,
-                        git_config,
-                        gpg_config,
                         no_git_config,
                         no_gpg_config,
                         args,
@@ -789,8 +775,6 @@ struct AgentCommandParams {
     no_workspace: bool,
     workspace_path: String,
     no_agent_configs: bool,
-    git_config: bool,
-    gpg_config: bool,
     no_git_config: bool,
     no_gpg_config: bool,
     args: Vec<String>,
@@ -845,7 +829,7 @@ async fn run_ai_agent_command(
         }
 
         // Auto-mount git configuration
-        if params.git_config && !params.no_git_config {
+        if !params.no_git_config {
             let git_config_path = cwd.join(".git").join("config");
             if git_config_path.exists() {
                 info!(
@@ -896,7 +880,7 @@ async fn run_ai_agent_command(
         }
 
         // Auto-mount GPG configuration
-        if params.gpg_config && !params.no_gpg_config {
+        if !params.no_gpg_config {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
             let gpg_dir = std::path::PathBuf::from(&home).join(".gnupg");
             if gpg_dir.exists() {
