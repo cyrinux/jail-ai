@@ -79,22 +79,22 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
                 let claude_config = home_path.join(".claude");
                 if claude_config.exists() {
-                    builder = builder.bind_mount(claude_config, "/root/.claude", false);
+                    builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
                 }
 
                 let claude_json = home_path.join(".claude.json");
                 if claude_json.exists() {
-                    builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+                    builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
                 }
 
                 let config_dir = home_path.join(".config");
                 if config_dir.exists() {
-                    builder = builder.bind_mount(config_dir, "/root/.config", false);
+                    builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
                 }
 
                 let cursor_config = home_path.join(".cursor");
                 if cursor_config.exists() {
-                    builder = builder.bind_mount(cursor_config, "/root/.cursor", false);
+                    builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
                 }
 
                 let jail = builder.build();
@@ -179,29 +179,29 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     // Mount ~/.claude for Claude Code
                     let claude_config = home_path.join(".claude");
                     if claude_config.exists() {
-                        info!("Auto-mounting {} to /root/.claude", claude_config.display());
-                        builder = builder.bind_mount(claude_config, "/root/.claude", false);
+                        info!("Auto-mounting {} to /home/agent/.claude", claude_config.display());
+                        builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
                     }
 
                     // Mount ~/.claude.json for Claude Code configuration
                     let claude_json = home_path.join(".claude.json");
                     if claude_json.exists() {
-                        info!("Auto-mounting {} to /root/.claude.json", claude_json.display());
-                        builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+                        info!("Auto-mounting {} to /home/agent/.claude.json", claude_json.display());
+                        builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
                     }
 
                     // Mount ~/.config for GitHub Copilot CLI and other tools
                     let config_dir = home_path.join(".config");
                     if config_dir.exists() {
-                        info!("Auto-mounting {} to /root/.config", config_dir.display());
-                        builder = builder.bind_mount(config_dir, "/root/.config", false);
+                        info!("Auto-mounting {} to /home/agent/.config", config_dir.display());
+                        builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
                     }
 
                     // Mount ~/.cursor for Cursor Agent
                     let cursor_config = home_path.join(".cursor");
                     if cursor_config.exists() {
-                        info!("Auto-mounting {} to /root/.cursor", cursor_config.display());
-                        builder = builder.bind_mount(cursor_config, "/root/.cursor", false);
+                        info!("Auto-mounting {} to /home/agent/.cursor", cursor_config.display());
+                        builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
                     }
                 }
 
@@ -498,29 +498,29 @@ async fn create_default_jail(name: &str, workspace: &std::path::Path) -> error::
     // Mount ~/.claude for Claude Code
     let claude_config = home_path.join(".claude");
     if claude_config.exists() {
-        info!("Auto-mounting {} to /root/.claude", claude_config.display());
-        builder = builder.bind_mount(claude_config, "/root/.claude", false);
+        info!("Auto-mounting {} to /home/agent/.claude", claude_config.display());
+        builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
     }
 
     // Mount ~/.claude.json for Claude Code configuration
     let claude_json = home_path.join(".claude.json");
     if claude_json.exists() {
-        info!("Auto-mounting {} to /root/.claude.json", claude_json.display());
-        builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+        info!("Auto-mounting {} to /home/agent/.claude.json", claude_json.display());
+        builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
     }
 
     // Mount ~/.config for GitHub Copilot CLI and other tools
     let config_dir = home_path.join(".config");
     if config_dir.exists() {
-        info!("Auto-mounting {} to /root/.config", config_dir.display());
-        builder = builder.bind_mount(config_dir, "/root/.config", false);
+        info!("Auto-mounting {} to /home/agent/.config", config_dir.display());
+        builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
     }
 
     // Mount ~/.cursor for Cursor Agent
     let cursor_config = home_path.join(".cursor");
     if cursor_config.exists() {
-        info!("Auto-mounting {} to /root/.cursor", cursor_config.display());
-        builder = builder.bind_mount(cursor_config, "/root/.cursor", false);
+        info!("Auto-mounting {} to /home/agent/.cursor", cursor_config.display());
+        builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
     }
 
     Ok(builder.build())
