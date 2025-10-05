@@ -191,6 +191,43 @@ impl Commands {
         Ok((parts[0].to_string(), parts[1].to_string()))
     }
 
+    /// Sanitize a jail name to match podman/systemd-nspawn requirements
+    /// Names must match [a-zA-Z0-9][a-zA-Z0-9_.-]*
+    pub fn sanitize_jail_name(name: &str) -> String {
+        // Strip leading non-alphanumeric characters (dots, hyphens, etc.)
+        let name = name.trim_start_matches(|c: char| !c.is_alphanumeric());
+
+        if name.is_empty() {
+            return "default".to_string();
+        }
+
+        // Replace invalid characters with hyphens
+        // Valid characters after first: alphanumeric, underscore, dot, hyphen
+        let sanitized: String = name
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i == 0 {
+                    // First character must be alphanumeric
+                    if c.is_alphanumeric() { c } else { 'x' }
+                } else {
+                    // Remaining characters can be alphanumeric, _, ., or -
+                    if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' {
+                        c
+                    } else {
+                        '-'
+                    }
+                }
+            })
+            .collect();
+
+        if sanitized.is_empty() {
+            "default".to_string()
+        } else {
+            sanitized
+        }
+    }
+
     /// Generate a reproducible container name from a directory path
     pub fn generate_jail_name(path: &std::path::Path) -> String {
         // Get the absolute path and canonicalize it
@@ -208,11 +245,8 @@ impl Commands {
             .and_then(|n| n.to_str())
             .unwrap_or("workspace");
 
-        // Sanitize directory name (replace non-alphanumeric with hyphen)
-        let sanitized_name: String = dir_name
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '-' })
-            .collect();
+        // Sanitize directory name
+        let sanitized_name = Self::sanitize_jail_name(dir_name);
 
         // Use first 8 characters of hash for uniqueness
         format!("jail-{}-{}", sanitized_name, &hash_hex[..8])
@@ -256,6 +290,37 @@ mod tests {
         assert_eq!(value, "VALUE");
 
         assert!(Commands::parse_env("INVALID").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_jail_name() {
+        // Test dotfile names
+        assert_eq!(Commands::sanitize_jail_name(".dotfiles"), "dotfiles");
+        assert_eq!(Commands::sanitize_jail_name("...dotfiles"), "dotfiles");
+
+        // Test names with special characters
+        assert_eq!(Commands::sanitize_jail_name("my@project"), "my-project");
+        assert_eq!(Commands::sanitize_jail_name("test project"), "test-project");
+
+        // Test valid characters that should be preserved
+        assert_eq!(Commands::sanitize_jail_name("my_project.v2"), "my_project.v2");
+        assert_eq!(Commands::sanitize_jail_name("my-project-v2"), "my-project-v2");
+
+        // Test leading hyphens/underscores
+        assert_eq!(Commands::sanitize_jail_name("-myproject"), "myproject");
+        assert_eq!(Commands::sanitize_jail_name("_myproject"), "myproject");
+
+        // Test empty or all-invalid names
+        assert_eq!(Commands::sanitize_jail_name("..."), "default");
+        assert_eq!(Commands::sanitize_jail_name(""), "default");
+        assert_eq!(Commands::sanitize_jail_name("---"), "default");
+
+        // Test that first character must be alphanumeric
+        assert_eq!(Commands::sanitize_jail_name(".project"), "project");
+
+        // Test normal names remain unchanged
+        assert_eq!(Commands::sanitize_jail_name("myproject"), "myproject");
+        assert_eq!(Commands::sanitize_jail_name("MyProject123"), "MyProject123");
     }
 
     #[test]
