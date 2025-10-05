@@ -90,6 +90,13 @@ async fn run(command: Commands) -> error::Result<()> {
                         builder = builder.bind_mount(claude_config, "/root/.claude", false);
                     }
 
+                    // Mount ~/.claude.json for Claude Code configuration
+                    let claude_json = home_path.join(".claude.json");
+                    if claude_json.exists() {
+                        info!("Auto-mounting {} to /root/.claude.json", claude_json.display());
+                        builder = builder.bind_mount(claude_json, "/root/.claude.json", false);
+                    }
+
                     // Mount ~/.config for GitHub Copilot CLI and other tools
                     let config_dir = home_path.join(".config");
                     if config_dir.exists() {

@@ -105,8 +105,8 @@ The `localhost/jail-ai-env:latest` image includes:
 
 ### AI Agent Authentication
 
-The AI coding agents require authentication. **Config directories are automatically mounted** from the host:
-- **Claude Code**: `~/.claude` → `/root/.claude` (stores API keys, settings, commands)
+The AI coding agents require authentication. **Config directories and files are automatically mounted** from the host:
+- **Claude Code**: `~/.claude` → `/root/.claude` and `~/.claude.json` → `/root/.claude.json` (stores API keys, settings, commands)
 - **GitHub Copilot**: `~/.config` → `/root/.config` (stores authentication tokens)
 - **Cursor Agent**: `~/.cursor` → `/root/.cursor` (stores authentication and settings)
 
