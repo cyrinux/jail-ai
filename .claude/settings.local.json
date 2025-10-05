@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo clippy:*)",
+      "Bash(cargo test)",
+      "Bash(cargo build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cargo run:*)",
+      "Bash(podman ps:*)",
+      "Bash(podman rm:*)",
+      "Bash(make:*)",
+      "Bash(podman images:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
