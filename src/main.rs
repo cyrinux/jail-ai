@@ -63,7 +63,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             // Exec into jail with interactive shell
             info!("Executing interactive shell in jail '{}'...", jail_name);
             let jail = JailBuilder::new(jail_name.clone())
-                .backend(config::BackendType::Podman)
+                .backend(config::BackendType::detect())
                 .build();
 
             jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
@@ -346,7 +346,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             // Execute Claude Code
-            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::Podman).build();
+            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::detect()).build();
             let mut command = vec!["claude".to_string()];
             command.extend(args);
 
@@ -423,7 +423,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             // Execute GitHub Copilot CLI
-            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::Podman).build();
+            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::detect()).build();
             let mut command = vec!["copilot".to_string()];
             command.extend(args);
 
@@ -500,7 +500,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             // Execute Cursor Agent
-            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::Podman).build();
+            let jail = JailBuilder::new(&jail_name).backend(config::BackendType::detect()).build();
             let mut command = vec!["cursor-agent".to_string()];
             command.extend(args);
 
@@ -544,8 +544,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 vec![Commands::parse_backend(&backend_str)
                     .map_err(error::JailError::Config)?]
             } else {
-                // Clean both backends by default
-                vec![config::BackendType::Podman, config::BackendType::SystemdNspawn]
+                // Clean all backends by default
+                vec![config::BackendType::Podman, config::BackendType::Docker, config::BackendType::SystemdNspawn]
             };
 
             for backend_type in backends {
@@ -711,7 +711,7 @@ fn get_host_timezone() -> Option<String> {
 
 /// Helper function to create a jail with default configuration
 async fn create_default_jail(name: &str, workspace: &std::path::Path) -> error::Result<jail::JailManager> {
-    let backend_type = config::BackendType::Podman;
+    let backend_type = config::BackendType::detect();
 
     let mut builder = JailBuilder::new(name)
         .backend(backend_type)
