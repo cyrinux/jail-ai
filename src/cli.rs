@@ -24,8 +24,8 @@ pub enum Commands {
         #[arg(short, long, default_value = "podman")]
         backend: String,
 
-        /// Base image (e.g., debian, alpine:latest)
-        #[arg(short, long, default_value = "alpine:latest")]
+        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
         image: String,
 
         /// Bind mount (format: source:target[:ro])

@@ -55,8 +55,8 @@ impl Default for JailConfig {
     fn default() -> Self {
         Self {
             name: String::from("ai-agent"),
-            backend: BackendType::SystemdNspawn,
-            base_image: String::from("debian"),
+            backend: BackendType::Podman,
+            base_image: String::from("localhost/jail-ai-env:latest"),
             bind_mounts: Vec::new(),
             environment: Vec::new(),
             network: NetworkConfig {
