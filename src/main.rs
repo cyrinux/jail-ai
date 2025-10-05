@@ -86,6 +86,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 claude_dir,
+                copilot_dir,
+                cursor_dir,
                 agent_configs,
                 git_gpg,
             } => {
@@ -157,7 +159,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     }
 
                     // Opt-in: Mount entire ~/.claude directory
-                    if claude_dir {
+                    if claude_dir || agent_configs {
                         let claude_config = home_path.join(".claude");
                         if claude_config.exists() {
                             info!(
@@ -169,9 +171,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         }
                     }
 
-                    // Opt-in: Mount entire agent config directories
-                    if agent_configs {
-                        // Mount ~/.config for GitHub Copilot CLI and other tools
+                    // Opt-in: Mount ~/.config for GitHub Copilot
+                    if copilot_dir || agent_configs {
                         let config_dir = home_path.join(".config");
                         if config_dir.exists() {
                             info!(
@@ -180,8 +181,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             );
                             builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
                         }
+                    }
 
-                        // Mount ~/.cursor for Cursor Agent
+                    // Opt-in: Mount ~/.cursor for Cursor Agent
+                    if cursor_dir || agent_configs {
                         let cursor_config = home_path.join(".cursor");
                         if cursor_config.exists() {
                             info!(
@@ -384,6 +387,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 claude_dir,
+                copilot_dir,
+                cursor_dir,
                 agent_configs,
                 git_gpg,
                 args,
@@ -401,6 +406,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         claude_dir,
+                        copilot_dir,
+                        cursor_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -420,6 +427,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 claude_dir,
+                copilot_dir,
+                cursor_dir,
                 agent_configs,
                 git_gpg,
                 args,
@@ -437,6 +446,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         claude_dir,
+                        copilot_dir,
+                        cursor_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -456,6 +467,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 claude_dir,
+                copilot_dir,
+                cursor_dir,
                 agent_configs,
                 git_gpg,
                 args,
@@ -473,6 +486,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         no_workspace,
                         workspace_path,
                         claude_dir,
+                        copilot_dir,
+                        cursor_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -746,6 +761,8 @@ struct AgentCommandParams {
     no_workspace: bool,
     workspace_path: String,
     claude_dir: bool,
+    copilot_dir: bool,
+    cursor_dir: bool,
     agent_configs: bool,
     git_gpg: bool,
     args: Vec<String>,
@@ -814,7 +831,7 @@ async fn run_ai_agent_command(
         }
 
         // Opt-in: Mount entire ~/.claude directory
-        if params.claude_dir {
+        if params.claude_dir || params.agent_configs {
             let claude_config = home_path.join(".claude");
             if claude_config.exists() {
                 info!(
@@ -825,9 +842,8 @@ async fn run_ai_agent_command(
             }
         }
 
-        // Opt-in: Mount entire agent config directories
-        if params.agent_configs {
-            // Mount ~/.config for GitHub Copilot CLI and other tools
+        // Opt-in: Mount ~/.config for GitHub Copilot
+        if params.copilot_dir || params.agent_configs {
             let config_dir = home_path.join(".config");
             if config_dir.exists() {
                 info!(
@@ -836,8 +852,10 @@ async fn run_ai_agent_command(
                 );
                 builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
             }
+        }
 
-            // Mount ~/.cursor for Cursor Agent
+        // Opt-in: Mount ~/.cursor for Cursor Agent
+        if params.cursor_dir || params.agent_configs {
             let cursor_config = home_path.join(".cursor");
             if cursor_config.exists() {
                 info!(
