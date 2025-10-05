@@ -99,7 +99,7 @@ make dev-jail
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude.json` by default; other agents require explicit config flags
-- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
+- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/github-copilot`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
@@ -130,12 +130,12 @@ The AI coding agents require authentication.
 
 **Default behavior (minimal auth):**
 - `jail-ai claude` → Auto-mounts `~/.claude.json` → `/home/agent/.claude.json` (API keys only)
-- `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config`)
+- `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/github-copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 
 **Opt-in mounting** (use flags to enable):
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
-- `--copilot-dir`: Mount `~/.config` → `/home/agent/.config` directory (GitHub Copilot authentication tokens)
+- `--copilot-dir`: Mount `~/.config/github-copilot` → `/home/agent/.config/github-copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` directory (Cursor Agent authentication and settings)
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`)
 

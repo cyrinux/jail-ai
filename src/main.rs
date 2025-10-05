@@ -165,15 +165,15 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         }
                     }
 
-                    // Opt-in: Mount ~/.config for GitHub Copilot
+                    // Opt-in: Mount ~/.config/github-copilot for GitHub Copilot
                     if copilot_dir || agent_configs {
-                        let config_dir = home_path.join(".config");
-                        if config_dir.exists() {
+                        let copilot_config = home_path.join(".config").join("github-copilot");
+                        if copilot_config.exists() {
                             info!(
-                                "Mounting {} to /home/agent/.config",
-                                config_dir.display()
+                                "Mounting {} to /home/agent/.config/github-copilot",
+                                copilot_config.display()
                             );
-                            builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
+                            builder = builder.bind_mount(copilot_config, "/home/agent/.config/github-copilot", false);
                         }
                     }
 
@@ -836,15 +836,15 @@ async fn run_ai_agent_command(
             }
         }
 
-        // Opt-in: Mount ~/.config for GitHub Copilot
+        // Opt-in: Mount ~/.config/github-copilot for GitHub Copilot
         if params.copilot_dir || params.agent_configs {
-            let config_dir = home_path.join(".config");
-            if config_dir.exists() {
+            let copilot_config = home_path.join(".config").join("github-copilot");
+            if copilot_config.exists() {
                 info!(
-                    "Mounting {} to /home/agent/.config",
-                    config_dir.display()
+                    "Mounting {} to /home/agent/.config/github-copilot",
+                    copilot_config.display()
                 );
-                builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
+                builder = builder.bind_mount(copilot_config, "/home/agent/.config/github-copilot", false);
             }
         }
 
