@@ -42,14 +42,23 @@ cargo run -- create my-agent --no-workspace
 # Create jail with entire ~/.claude directory (default: only .claude.json)
 cargo run -- create my-agent --claude-dir
 
-# Create jail with entire ~/.config and ~/.cursor directories
+# Create jail with ~/.config directory for GitHub Copilot
+cargo run -- create my-agent --copilot-dir
+
+# Create jail with ~/.cursor directory for Cursor Agent
+cargo run -- create my-agent --cursor-dir
+
+# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
 cargo run -- create my-agent --agent-configs
 
 # Create jail with git and GPG configuration mapping
 cargo run -- create my-agent --git-gpg
 
+# Create jail with specific agent config and git/GPG support
+cargo run -- create my-agent --claude-dir --git-gpg
+
 # Create jail with all config directories and git/GPG support
-cargo run -- create my-agent --claude-dir --agent-configs --git-gpg
+cargo run -- create my-agent --agent-configs --git-gpg
 
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
@@ -89,7 +98,7 @@ make dev-jail
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with minimal auth mounting by default
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Minimal Auth Mounting**: By default, only minimal auth files (`.claude.json`) are mounted for authentication
-- **Opt-in Config Mounting**: Use `--claude-dir` for entire `~/.claude` directory, `--agent-configs` for `~/.config` and `~/.cursor` directories
+- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
@@ -121,13 +130,13 @@ The AI coding agents require authentication. By default, **minimal auth files** 
 
 **Opt-in mounting** (use flags to enable):
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
-- `--agent-configs`: Mount entire config directories:
-  - `~/.config` → `/home/agent/.config` (GitHub Copilot authentication tokens)
-  - `~/.cursor` → `/home/agent/.cursor` (Cursor Agent authentication and settings)
+- `--copilot-dir`: Mount `~/.config` → `/home/agent/.config` directory (GitHub Copilot authentication tokens)
+- `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` directory (Cursor Agent authentication and settings)
+- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`)
 
 This means:
 - **Default**: Minimal authentication, no extra files exposed to the jail
-- **With flags**: Full config access for advanced features
+- **With flags**: Granular control over which configs to mount
 
 Example aliases for different security levels:
 ```bash
@@ -137,8 +146,11 @@ alias jail-claude='jail-ai claude'
 # Medium: add full Claude config directory
 alias jail-claude='jail-ai claude --claude-dir'
 
+# Medium: add only Copilot config (for copilot command)
+alias jail-copilot='jail-ai copilot --copilot-dir'
+
 # Full: all configs + git/GPG signing
-alias jail-claude='jail-ai claude --claude-dir --agent-configs --git-gpg'
+alias jail-claude='jail-ai claude --agent-configs --git-gpg'
 ```
 
 ### Git and GPG Configuration Mapping

@@ -65,7 +65,15 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
-        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
+        /// Mount entire ~/.config directory for GitHub Copilot
+        #[arg(long)]
+        copilot_dir: bool,
+
+        /// Mount entire ~/.cursor directory for Cursor Agent
+        #[arg(long)]
+        cursor_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -168,7 +176,15 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
-        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
+        /// Mount entire ~/.config directory for GitHub Copilot
+        #[arg(long)]
+        copilot_dir: bool,
+
+        /// Mount entire ~/.cursor directory for Cursor Agent
+        #[arg(long)]
+        cursor_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -223,7 +239,15 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
-        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
+        /// Mount entire ~/.config directory for GitHub Copilot
+        #[arg(long)]
+        copilot_dir: bool,
+
+        /// Mount entire ~/.cursor directory for Cursor Agent
+        #[arg(long)]
+        cursor_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -278,7 +302,15 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
-        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
+        /// Mount entire ~/.config directory for GitHub Copilot
+        #[arg(long)]
+        copilot_dir: bool,
+
+        /// Mount entire ~/.cursor directory for Cursor Agent
+        #[arg(long)]
+        cursor_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
         #[arg(long)]
         agent_configs: bool,
 
