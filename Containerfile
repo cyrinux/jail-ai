@@ -58,17 +58,7 @@ RUN useradd -m -s /usr/bin/zsh -u 1000 agent \
     && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
 
-# Switch to agent user for installations
-USER agent
-WORKDIR /home/agent
-
-# Install Rust and Cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && . "$HOME/.cargo/env" \
-    && rustup default stable \
-    && rustup component add clippy rustfmt
-
-# Install Go
+# Install Go (requires root for /usr/local)
 ARG GO_VERSION=1.23.4
 RUN ARCH=$(dpkg --print-architecture) && \
     curl -sSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -C /usr/local -xz \
@@ -79,6 +69,16 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Switch to agent user for Rust installation
+USER agent
+WORKDIR /home/agent
+
+# Install Rust and Cargo
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . "$HOME/.cargo/env" \
+    && rustup default stable \
+    && rustup component add clippy rustfmt
 
 # Switch back to root for system-wide installations
 USER root
