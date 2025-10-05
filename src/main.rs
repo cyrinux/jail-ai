@@ -8,7 +8,7 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use config::JailConfig;
 use jail::JailBuilder;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -659,6 +659,20 @@ fn get_host_timezone() -> Option<String> {
             return Some(tz);
         }
 
+    // Try timedatectl (systemd-based systems)
+    if let Ok(output) = std::process::Command::new("timedatectl")
+        .arg("show")
+        .arg("--property=Timezone")
+        .arg("--value")
+        .output()
+            && output.status.success() {
+                let tz = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !tz.is_empty() && tz != "n/a" {
+                    info!("Using timezone from timedatectl: {}", tz);
+                    return Some(tz);
+                }
+            }
+
     // Try reading /etc/timezone
     if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
         let tz = tz.trim().to_string();
@@ -671,14 +685,27 @@ fn get_host_timezone() -> Option<String> {
     // Try reading /etc/localtime symlink
     if let Ok(link) = std::fs::read_link("/etc/localtime")
         && let Some(tz) = link.to_str() {
-            // Extract timezone from path like /usr/share/zoneinfo/Europe/Paris
-            if let Some(tz_name) = tz.strip_prefix("/usr/share/zoneinfo/") {
-                info!("Using timezone from /etc/localtime: {}", tz_name);
-                return Some(tz_name.to_string());
+            // Extract timezone from paths like:
+            // - /usr/share/zoneinfo/Europe/Paris
+            // - /run/current-system/sw/share/zoneinfo/Europe/Paris (NixOS)
+            // - ../usr/share/zoneinfo/Europe/Paris (relative symlinks)
+            for prefix in ["/usr/share/zoneinfo/", "/run/current-system/sw/share/zoneinfo/", "../usr/share/zoneinfo/"] {
+                if let Some(tz_name) = tz.strip_prefix(prefix) {
+                    info!("Using timezone from /etc/localtime: {}", tz_name);
+                    return Some(tz_name.to_string());
+                }
+            }
+            // Try extracting from any path containing "zoneinfo/"
+            if let Some(pos) = tz.find("zoneinfo/") {
+                let tz_name = &tz[pos + "zoneinfo/".len()..];
+                if !tz_name.is_empty() {
+                    info!("Using timezone from /etc/localtime (extracted): {}", tz_name);
+                    return Some(tz_name.to_string());
+                }
             }
         }
 
-    info!("Could not determine host timezone, container will use UTC");
+    warn!("Could not determine host timezone, container will use UTC. Try setting TZ environment variable or ensure timedatectl is available.");
     None
 }
 
