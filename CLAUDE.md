@@ -88,7 +88,10 @@ make dev-jail
 ## Custom Image Tools
 
 The `localhost/jail-ai-env:latest` image includes:
-- **Shell**: bash
+- **Shell**: zsh (default with Powerlevel10k theme), bash
+- **Shell Enhancements**:
+  - **fzf** - Fuzzy finder for command history and file search
+  - **Powerlevel10k** - Beautiful and fast zsh theme with git integration
 - **Search**: ripgrep, fd-find
 - **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3
 - **Build tools**: gcc, make, pkg-config
@@ -110,6 +113,19 @@ The AI coding agents require authentication. **Config directories are automatica
 This means AI agents authenticated on your host will work automatically in the jail without re-authentication.
 
 To disable auto-mounting of agent configs: `--no-agent-configs`
+
+## Shell Features
+
+The container uses **zsh** as the default shell with:
+- **Powerlevel10k (p10k)** - Fast, minimal theme with git integration
+- **fzf** integration for command history search (Ctrl+R) and fuzzy completion
+- **Smart history** - 10000 entries with deduplication and sharing
+- **Useful aliases** - `ll` for detailed listing, colored ripgrep
+
+FZF keybindings:
+- `Ctrl+R` - Search command history
+- `Ctrl+T` - Search files in current directory
+- `Alt+C` - Change to subdirectory
 
 ## Git Workflow
 

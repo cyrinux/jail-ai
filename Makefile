@@ -22,6 +22,8 @@ push-image: ## Push the container image to a registry
 test-image: ## Test the container image
 	@echo "Testing image: $(IMAGE_FULL)"
 	@podman run --rm $(IMAGE_FULL) bash --version
+	@podman run --rm $(IMAGE_FULL) zsh --version
+	@podman run --rm $(IMAGE_FULL) fzf --version
 	@podman run --rm $(IMAGE_FULL) rg --version
 	@podman run --rm $(IMAGE_FULL) cargo --version
 	@podman run --rm $(IMAGE_FULL) go version

@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y \
     ripgrep \
     fd-find \
     jq \
+    fzf \
     # Archive tools
     tar \
     gzip \
@@ -44,6 +45,9 @@ RUN apt-get update && apt-get install -y \
     # Additional utilities
     tmux \
     screen \
+    # Shell enhancements
+    zsh \
+    fonts-powerline \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust and Cargo
@@ -84,13 +88,51 @@ RUN npm install -g @anthropic-ai/claude-code \
     && npm install -g @github/copilot \
     && curl https://cursor.com/install -fsSL | bash
 
+# Install and configure Powerlevel10k for zsh
+RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.powerlevel10k
+
+# Configure zsh with Powerlevel10k
+RUN echo 'source /root/.powerlevel10k/powerlevel10k.zsh-theme' > /root/.zshrc \
+    && echo '# Enable Powerlevel10k instant prompt' >> /root/.zshrc \
+    && echo 'if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then' >> /root/.zshrc \
+    && echo '  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"' >> /root/.zshrc \
+    && echo 'fi' >> /root/.zshrc \
+    && echo '' >> /root/.zshrc \
+    && echo '# Aliases' >> /root/.zshrc \
+    && echo 'alias ll="ls -lah"' >> /root/.zshrc \
+    && echo 'alias rg="rg --color=auto"' >> /root/.zshrc \
+    && echo '' >> /root/.zshrc \
+    && echo '# FZF integration' >> /root/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true' >> /root/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true' >> /root/.zshrc \
+    && echo '' >> /root/.zshrc \
+    && echo '# History settings' >> /root/.zshrc \
+    && echo 'HISTFILE=~/.zsh_history' >> /root/.zshrc \
+    && echo 'HISTSIZE=10000' >> /root/.zshrc \
+    && echo 'SAVEHIST=10000' >> /root/.zshrc \
+    && echo 'setopt SHARE_HISTORY' >> /root/.zshrc \
+    && echo 'setopt HIST_IGNORE_ALL_DUPS' >> /root/.zshrc \
+    && echo '' >> /root/.zshrc \
+    && echo '# Load Powerlevel10k config if exists' >> /root/.zshrc \
+    && echo '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' >> /root/.zshrc
+
+# Create a minimal p10k config
+RUN echo '# Powerlevel10k configuration' > /root/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir vcs)' >> /root/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)' >> /root/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /root/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /root/.p10k.zsh
+
 # Create workspace directory
 RUN mkdir -p /workspace
 WORKDIR /workspace
 
-# Set up shell environment
+# Set up bash environment (for compatibility)
 RUN echo 'export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /root/.bashrc \
     && echo 'alias ll="ls -lah"' >> /root/.bashrc \
     && echo 'alias rg="rg --color=auto"' >> /root/.bashrc
 
-CMD ["/bin/bash"]
+# Set zsh as default shell
+ENV SHELL=/usr/bin/zsh
+
+CMD ["/usr/bin/zsh"]
