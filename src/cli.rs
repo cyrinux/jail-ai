@@ -21,9 +21,9 @@ pub enum Commands {
         /// Name of the jail (auto-generated from current directory if not provided)
         name: Option<String>,
 
-        /// Backend type (systemd-nspawn or podman)
-        #[arg(short, long, default_value = "podman")]
-        backend: String,
+        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        #[arg(short, long)]
+        backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
         #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
@@ -128,9 +128,9 @@ pub enum Commands {
 
     /// Quick start Claude Code in a jail for current directory
     Claude {
-        /// Backend type (systemd-nspawn or podman)
-        #[arg(short, long, default_value = "podman")]
-        backend: String,
+        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        #[arg(short, long)]
+        backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
         #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
@@ -183,9 +183,9 @@ pub enum Commands {
 
     /// Quick start GitHub Copilot CLI in a jail for current directory
     Copilot {
-        /// Backend type (systemd-nspawn or podman)
-        #[arg(short, long, default_value = "podman")]
-        backend: String,
+        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        #[arg(short, long)]
+        backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
         #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
@@ -238,9 +238,9 @@ pub enum Commands {
 
     /// Quick start Cursor Agent in a jail for current directory
     Cursor {
-        /// Backend type (systemd-nspawn or podman)
-        #[arg(short, long, default_value = "podman")]
-        backend: String,
+        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        #[arg(short, long)]
+        backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
         #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
