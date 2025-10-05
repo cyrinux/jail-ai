@@ -6,10 +6,10 @@ LABEL description="AI Agent development environment with common tools"
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    CARGO_HOME="/root/.cargo" \
-    RUSTUP_HOME="/root/.rustup" \
-    GOPATH="/root/go" \
-    PATH="/root/.local/bin:/root/.cargo/bin:/root/go/bin:/usr/local/go/bin:${PATH}"
+    CARGO_HOME="/home/agent/.cargo" \
+    RUSTUP_HOME="/home/agent/.rustup" \
+    GOPATH="/home/agent/go" \
+    PATH="/home/agent/.local/bin:/home/agent/.cargo/bin:/home/agent/go/bin:/usr/local/go/bin:${PATH}"
 
 # Install base tools and dependencies
 RUN apt-get update && apt-get install -y \
@@ -50,6 +50,15 @@ RUN apt-get update && apt-get install -y \
     fonts-powerline \
     && rm -rf /var/lib/apt/lists/*
 
+# Create agent user
+RUN useradd -m -s /usr/bin/zsh -u 1000 agent \
+    && usermod -aG sudo agent \
+    && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent
+
+# Switch to agent user for installations
+USER agent
+WORKDIR /home/agent
+
 # Install Rust and Cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . "$HOME/.cargo/env" \
@@ -67,6 +76,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Switch back to root for system-wide installations
+USER root
 
 # Install Python and pip
 RUN apt-get update && apt-get install -y \
@@ -88,49 +100,63 @@ RUN npm install -g @anthropic-ai/claude-code \
     && npm install -g @github/copilot \
     && curl https://cursor.com/install -fsSL | bash
 
+# Create Claude wrapper with --dangerously-skip-permissions
+RUN mv /usr/local/bin/claude /usr/local/bin/claude-bin \
+    && echo '#!/bin/bash' > /usr/local/bin/claude \
+    && echo 'exec claude-bin --dangerously-skip-permissions "$@"' >> /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
+
+# Switch back to agent user
+USER agent
+WORKDIR /home/agent
+
 # Install and configure Powerlevel10k for zsh
-RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.powerlevel10k
+RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /home/agent/.powerlevel10k
 
 # Configure zsh with Powerlevel10k
-RUN echo 'source /root/.powerlevel10k/powerlevel10k.zsh-theme' > /root/.zshrc \
-    && echo '# Enable Powerlevel10k instant prompt' >> /root/.zshrc \
-    && echo 'if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then' >> /root/.zshrc \
-    && echo '  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"' >> /root/.zshrc \
-    && echo 'fi' >> /root/.zshrc \
-    && echo '' >> /root/.zshrc \
-    && echo '# Aliases' >> /root/.zshrc \
-    && echo 'alias ll="ls -lah"' >> /root/.zshrc \
-    && echo 'alias rg="rg --color=auto"' >> /root/.zshrc \
-    && echo '' >> /root/.zshrc \
-    && echo '# FZF integration' >> /root/.zshrc \
-    && echo 'source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true' >> /root/.zshrc \
-    && echo 'source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true' >> /root/.zshrc \
-    && echo '' >> /root/.zshrc \
-    && echo '# History settings' >> /root/.zshrc \
-    && echo 'HISTFILE=~/.zsh_history' >> /root/.zshrc \
-    && echo 'HISTSIZE=10000' >> /root/.zshrc \
-    && echo 'SAVEHIST=10000' >> /root/.zshrc \
-    && echo 'setopt SHARE_HISTORY' >> /root/.zshrc \
-    && echo 'setopt HIST_IGNORE_ALL_DUPS' >> /root/.zshrc \
-    && echo '' >> /root/.zshrc \
-    && echo '# Load Powerlevel10k config if exists' >> /root/.zshrc \
-    && echo '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' >> /root/.zshrc
+RUN echo 'source /home/agent/.powerlevel10k/powerlevel10k.zsh-theme' > /home/agent/.zshrc \
+    && echo '# Enable Powerlevel10k instant prompt' >> /home/agent/.zshrc \
+    && echo 'if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then' >> /home/agent/.zshrc \
+    && echo '  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"' >> /home/agent/.zshrc \
+    && echo 'fi' >> /home/agent/.zshrc \
+    && echo '' >> /home/agent/.zshrc \
+    && echo '# Aliases' >> /home/agent/.zshrc \
+    && echo 'alias ll="ls -lah"' >> /home/agent/.zshrc \
+    && echo 'alias rg="rg --color=auto"' >> /home/agent/.zshrc \
+    && echo '' >> /home/agent/.zshrc \
+    && echo '# FZF integration' >> /home/agent/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true' >> /home/agent/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true' >> /home/agent/.zshrc \
+    && echo '' >> /home/agent/.zshrc \
+    && echo '# History settings' >> /home/agent/.zshrc \
+    && echo 'HISTFILE=~/.zsh_history' >> /home/agent/.zshrc \
+    && echo 'HISTSIZE=10000' >> /home/agent/.zshrc \
+    && echo 'SAVEHIST=10000' >> /home/agent/.zshrc \
+    && echo 'setopt SHARE_HISTORY' >> /home/agent/.zshrc \
+    && echo 'setopt HIST_IGNORE_ALL_DUPS' >> /home/agent/.zshrc \
+    && echo '' >> /home/agent/.zshrc \
+    && echo '# Load Powerlevel10k config if exists' >> /home/agent/.zshrc \
+    && echo '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' >> /home/agent/.zshrc
 
 # Create a minimal p10k config
-RUN echo '# Powerlevel10k configuration' > /root/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir vcs)' >> /root/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)' >> /root/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /root/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /root/.p10k.zsh
-
-# Create workspace directory
-RUN mkdir -p /workspace
-WORKDIR /workspace
+RUN echo '# Powerlevel10k configuration' > /home/agent/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir vcs)' >> /home/agent/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)' >> /home/agent/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /home/agent/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /home/agent/.p10k.zsh
 
 # Set up bash environment (for compatibility)
-RUN echo 'export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /root/.bashrc \
-    && echo 'alias ll="ls -lah"' >> /root/.bashrc \
-    && echo 'alias rg="rg --color=auto"' >> /root/.bashrc
+RUN echo 'export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /home/agent/.bashrc \
+    && echo 'alias ll="ls -lah"' >> /home/agent/.bashrc \
+    && echo 'alias rg="rg --color=auto"' >> /home/agent/.bashrc
+
+# Create workspace directory as root and set ownership
+USER root
+RUN mkdir -p /workspace && chown agent:agent /workspace
+
+# Switch back to agent user
+USER agent
+WORKDIR /workspace
 
 # Set zsh as default shell
 ENV SHELL=/usr/bin/zsh
