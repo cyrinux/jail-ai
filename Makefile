@@ -12,7 +12,10 @@ help: ## Show this help message
 
 build-image: ## Build the AI agent environment container image
 	@echo "Building container image: $(IMAGE_FULL)"
-	podman build -t $(IMAGE_FULL) -f Containerfile .
+	podman build -t $(IMAGE_FULL) -f Containerfile \
+		--build-arg PUID=$$(id -u) \
+		--build-arg PGID=$$(id -g) \
+		.
 	@echo "Image built successfully: $(IMAGE_FULL)"
 
 push-image: ## Push the container image to a registry
@@ -21,17 +24,17 @@ push-image: ## Push the container image to a registry
 
 test-image: ## Test the container image
 	@echo "Testing image: $(IMAGE_FULL)"
-	@podman run --rm $(IMAGE_FULL) bash --version
-	@podman run --rm $(IMAGE_FULL) zsh --version
-	@podman run --rm $(IMAGE_FULL) fzf --version
-	@podman run --rm $(IMAGE_FULL) rg --version
-	@podman run --rm $(IMAGE_FULL) cargo --version
-	@podman run --rm $(IMAGE_FULL) go version
-	@podman run --rm $(IMAGE_FULL) node --version
-	@podman run --rm $(IMAGE_FULL) python --version
-	@podman run --rm $(IMAGE_FULL) claude --version
-	@podman run --rm $(IMAGE_FULL) copilot --version || echo "Copilot CLI installed (requires auth)"
-	@podman run --rm $(IMAGE_FULL) cursor-agent --version || echo "Cursor Agent installed (requires auth)"
+	@podman run --rm --user agent $(IMAGE_FULL) bash --version
+	@podman run --rm --user agent $(IMAGE_FULL) zsh --version
+	@podman run --rm --user agent $(IMAGE_FULL) fzf --version
+	@podman run --rm --user agent $(IMAGE_FULL) rg --version
+	@podman run --rm --user agent $(IMAGE_FULL) cargo --version
+	@podman run --rm --user agent $(IMAGE_FULL) go version
+	@podman run --rm --user agent $(IMAGE_FULL) node --version
+	@podman run --rm --user agent $(IMAGE_FULL) python --version
+	@podman run --rm --user agent $(IMAGE_FULL) claude --version
+	@podman run --rm --user agent $(IMAGE_FULL) copilot --version || echo "Copilot CLI installed (requires auth)"
+	@podman run --rm --user agent $(IMAGE_FULL) cursor-agent --version || echo "Cursor Agent installed (requires auth)"
 	@echo "All tools verified successfully!"
 
 clean: ## Remove built container images

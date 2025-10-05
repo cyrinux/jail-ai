@@ -1,3 +1,0 @@
-- interactive mode must be by default
-- i wanna just type "jail-ai" in the directory, if the container is not init, init and exec in it, if already present, just exec inside
-- set TZ=Europe/Paris timezone
