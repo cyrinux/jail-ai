@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_HOME="/root/.cargo" \
     RUSTUP_HOME="/root/.rustup" \
     GOPATH="/root/go" \
-    PATH="/root/.cargo/bin:/root/go/bin:/usr/local/go/bin:${PATH}"
+    PATH="/root/.local/bin:/root/.cargo/bin:/root/go/bin:/usr/local/go/bin:${PATH}"
 
 # Install base tools and dependencies
 RUN apt-get update && apt-get install -y \
@@ -78,6 +78,11 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pylint \
     mypy \
     pytest
+
+# Install AI coding assistants
+RUN npm install -g @anthropic-ai/claude-code \
+    && npm install -g @github/copilot \
+    && curl https://cursor.com/install -fsSL | bash
 
 # Create workspace directory
 RUN mkdir -p /workspace
