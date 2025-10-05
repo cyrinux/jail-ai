@@ -41,11 +41,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
         None => {
             // Default behavior: auto-init and exec based on current directory
             let cwd = std::env::current_dir()?;
-            let dir_name = cwd
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("default");
-            let jail_name = cli::Commands::sanitize_jail_name(dir_name);
+            let jail_name = cli::Commands::generate_jail_name(&cwd);
 
             info!("No command specified, using default behavior for jail '{}'", jail_name);
 
@@ -398,8 +394,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 jail.create().await?;
             }
 
-            // Execute Cursor Agent
-            let mut command = vec!["cursor-agent".to_string()];
+            // Execute Cursor
+            let mut command = vec!["cursor".to_string()];
             command.extend(args);
 
             let output = jail.exec(&command, true).await?;
