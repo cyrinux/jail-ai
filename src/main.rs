@@ -785,9 +785,11 @@ async fn run_ai_agent_command(
 ) -> error::Result<()> {
     let cwd = std::env::current_dir()?;
     let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-    let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
+    let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+    let agent_suffix = cli::Commands::sanitize_jail_name(agent_command);
+    let jail_name = format!("{}-{}", base_name, agent_suffix);
 
-    info!("Using jail: {} for workspace: {}", jail_name, workspace_dir.display());
+    info!("Using jail: {} for agent: {} in workspace: {}", jail_name, agent_command, workspace_dir.display());
 
     // Create jail if it doesn't exist
     let temp_config = JailConfig {
