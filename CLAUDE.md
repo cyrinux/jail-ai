@@ -95,10 +95,10 @@ make dev-jail
 ## Key Features
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
-- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with minimal auth mounting by default
+- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
-- **Minimal Auth Mounting**: By default, only minimal auth files (`.claude.json`) are mounted for authentication
+- **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude.json` by default; other agents require explicit config flags
 - **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
@@ -126,8 +126,12 @@ The `localhost/jail-ai-env:latest` image includes:
 
 ### AI Agent Authentication
 
-The AI coding agents require authentication. By default, **minimal auth files** are mounted:
-- **Claude Code**: `~/.claude.json` → `/home/agent/.claude.json` (stores API keys)
+The AI coding agents require authentication.
+
+**Default behavior (minimal auth):**
+- `jail-ai claude` → Auto-mounts `~/.claude.json` → `/home/agent/.claude.json` (API keys only)
+- `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config`)
+- `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 
 **Opt-in mounting** (use flags to enable):
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
@@ -135,23 +139,19 @@ The AI coding agents require authentication. By default, **minimal auth files** 
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` directory (Cursor Agent authentication and settings)
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`)
 
-This means:
-- **Default**: Minimal authentication, no extra files exposed to the jail
-- **With flags**: Granular control over which configs to mount
-
 Example aliases for different security levels:
 ```bash
-# Minimal (default): only auth files
+# Claude: minimal auth by default
 alias jail-claude='jail-ai claude'
 
-# Medium: add full Claude config directory
-alias jail-claude='jail-ai claude --claude-dir'
-
-# Medium: add only Copilot config (for copilot command)
+# Copilot: needs explicit config for auth
 alias jail-copilot='jail-ai copilot --copilot-dir'
 
-# Full: all configs + git/GPG signing
-alias jail-claude='jail-ai claude --agent-configs --git-gpg'
+# Cursor: needs explicit config for auth
+alias jail-cursor='jail-ai cursor --cursor-dir'
+
+# Claude with full config + git/GPG
+alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'
 ```
 
 ### Git and GPG Configuration Mapping

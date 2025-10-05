@@ -148,20 +148,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.bind_mount(workspace_dir, workspace_path, false);
                     }
 
-                    // Auto-mount minimal auth files (always)
+                    // Opt-in: Mount agent config directories
                     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                     let home_path = std::path::PathBuf::from(&home);
-
-                    // Always mount ~/.claude.json for Claude Code auth
-                    let claude_json = home_path.join(".claude.json");
-                    if claude_json.exists() {
-                        info!(
-                            "Auto-mounting {} to /home/agent/.claude.json",
-                            claude_json.display()
-                        );
-                        builder =
-                            builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
-                    }
 
                     // Opt-in: Mount entire ~/.claude directory
                     if claude_dir || agent_configs {
@@ -742,20 +731,6 @@ async fn create_default_jail(
     info!("Auto-mounting {} to /workspace", workspace_dir.display());
     builder = builder.bind_mount(workspace_dir, "/workspace", false);
 
-    // Auto-mount minimal auth files (always)
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let home_path = std::path::PathBuf::from(&home);
-
-    // Always mount ~/.claude.json for Claude Code auth
-    let claude_json = home_path.join(".claude.json");
-    if claude_json.exists() {
-        info!(
-            "Auto-mounting {} to /home/agent/.claude.json",
-            claude_json.display()
-        );
-        builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
-    }
-
     Ok(builder.build())
 }
 
@@ -833,18 +808,20 @@ async fn run_ai_agent_command(
             builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
         }
 
-        // Auto-mount minimal auth files (always)
+        // Auto-mount minimal auth files (agent-specific)
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let home_path = std::path::PathBuf::from(&home);
 
-        // Always mount ~/.claude.json for Claude Code auth
-        let claude_json = home_path.join(".claude.json");
-        if claude_json.exists() {
-            info!(
-                "Auto-mounting {} to /home/agent/.claude.json",
-                claude_json.display()
-            );
-            builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
+        // Mount ~/.claude.json only for Claude agent
+        if agent_command == "claude" {
+            let claude_json = home_path.join(".claude.json");
+            if claude_json.exists() {
+                info!(
+                    "Auto-mounting {} to /home/agent/.claude.json",
+                    claude_json.display()
+                );
+                builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
+            }
         }
 
         // Opt-in: Mount entire ~/.claude directory
