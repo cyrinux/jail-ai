@@ -118,10 +118,9 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     mypy \
     pytest
 
-# Install AI coding assistants
+# Install AI coding assistants (Claude Code and GitHub Copilot as root)
 RUN npm install -g @anthropic-ai/claude-code \
-    && npm install -g @github/copilot \
-    && curl https://cursor.com/install -fsSL | bash
+    && npm install -g @github/copilot
 
 # Create Claude wrapper with --dangerously-skip-permissions
 RUN CLAUDE_BIN=$(which claude || echo "") && \
@@ -135,6 +134,11 @@ RUN CLAUDE_BIN=$(which claude || echo "") && \
 # Switch back to agent user
 USER agent
 WORKDIR /home/agent
+
+# Install Cursor Agent CLI (as agent user so it installs to ~/.local/bin)
+RUN mkdir -p /home/agent/.local/bin \
+    && curl https://cursor.com/install -fsSL | bash \
+    && echo 'Cursor Agent CLI installed to ~/.local/bin/cursor-agent'
 
 # Install and configure Powerlevel10k for zsh
 RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /home/agent/.powerlevel10k
