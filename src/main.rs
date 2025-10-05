@@ -530,12 +530,13 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 let backends = if let Some(backend_str) = backend {
                     vec![Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?]
                 } else {
-                    // Clean all backends by default
-                    vec![
-                        config::BackendType::Podman,
-                        config::BackendType::Docker,
-                        config::BackendType::SystemdNspawn,
-                    ]
+                    // Clean all available backends by default
+                    let available = config::BackendType::all_available();
+                    if available.is_empty() {
+                        warn!("No backends are available on this system");
+                        return Ok(());
+                    }
+                    available
                 };
 
                 for backend_type in backends {

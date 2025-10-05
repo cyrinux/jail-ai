@@ -53,43 +53,49 @@ pub struct ResourceLimits {
 }
 
 impl BackendType {
+    /// Check if this backend is available on the system
+    pub fn is_available(&self) -> bool {
+        let command = match self {
+            BackendType::Podman => "podman",
+            BackendType::Docker => "docker",
+            BackendType::SystemdNspawn => "systemd-nspawn",
+        };
+
+        std::process::Command::new(command)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// Get all available backends on the system
+    pub fn all_available() -> Vec<Self> {
+        vec![
+            BackendType::Podman,
+            BackendType::Docker,
+            BackendType::SystemdNspawn,
+        ]
+        .into_iter()
+        .filter(|b| b.is_available())
+        .collect()
+    }
+
     /// Detect which backend is available on the system.
     /// Checks in order: podman -> docker -> systemd-nspawn
     /// Returns the first available backend, or Podman as fallback.
     pub fn detect() -> Self {
         use tracing::debug;
 
-        // Try podman first
-        if std::process::Command::new("podman")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            debug!("Detected backend: podman");
-            return BackendType::Podman;
-        }
-
-        // Try docker second
-        if std::process::Command::new("docker")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            debug!("Detected backend: docker");
-            return BackendType::Docker;
-        }
-
-        // Try systemd-nspawn third
-        if std::process::Command::new("systemd-nspawn")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            debug!("Detected backend: systemd-nspawn");
-            return BackendType::SystemdNspawn;
+        // Check backends in order of preference
+        for backend in [
+            BackendType::Podman,
+            BackendType::Docker,
+            BackendType::SystemdNspawn,
+        ] {
+            if backend.is_available() {
+                debug!("Detected backend: {:?}", backend);
+                return backend;
+            }
         }
 
         // Default to Podman if nothing is detected
