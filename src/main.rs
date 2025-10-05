@@ -435,6 +435,77 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 print!("{}", output);
             }
         }
+
+        Commands::CleanAll { backend, force } => {
+            // Determine which backends to clean
+            let backends = if let Some(backend_str) = backend {
+                vec![Commands::parse_backend(&backend_str)
+                    .map_err(error::JailError::Config)?]
+            } else {
+                // Clean both backends by default
+                vec![config::BackendType::Podman, config::BackendType::SystemdNspawn]
+            };
+
+            for backend_type in backends {
+                info!("Cleaning all jail-ai containers for backend: {:?}", backend_type);
+
+                // Create a temporary config with the backend type
+                let temp_config = JailConfig {
+                    name: "temp".to_string(),
+                    backend: backend_type,
+                    ..Default::default()
+                };
+                let temp_jail = jail::JailManager::new(temp_config);
+
+                // Get list of all jails
+                let backend = backend::create_backend(temp_jail.config());
+                let jails = backend.list_all().await?;
+
+                if jails.is_empty() {
+                    info!("No jail-ai containers found for backend {:?}", backend_type);
+                    continue;
+                }
+
+                info!("Found {} jail-ai container(s) for backend {:?}", jails.len(), backend_type);
+
+                // Ask for confirmation unless force is specified
+                if !force {
+                    use std::io::{self, BufRead, Write};
+                    println!("Containers to be removed:");
+                    for jail_name in &jails {
+                        println!("  - {}", jail_name);
+                    }
+                    print!("Remove all {} container(s)? [y/N] ", jails.len());
+                    io::stdout().flush()?;
+                    let stdin = io::stdin();
+                    let mut line = String::new();
+                    stdin.lock().read_line(&mut line)?;
+                    if !line.trim().eq_ignore_ascii_case("y") {
+                        info!("Aborted");
+                        continue;
+                    }
+                }
+
+                // Remove each jail
+                for jail_name in jails {
+                    info!("Removing jail: {}", jail_name);
+                    let config = JailConfig {
+                        name: jail_name.clone(),
+                        backend: backend_type,
+                        ..Default::default()
+                    };
+                    let jail = jail::JailManager::new(config);
+
+                    if let Err(e) = jail.remove().await {
+                        error!("Failed to remove jail {}: {}", jail_name, e);
+                    } else {
+                        info!("Successfully removed jail: {}", jail_name);
+                    }
+                }
+            }
+
+            info!("Clean-all operation completed");
+        }
         }
     }
 

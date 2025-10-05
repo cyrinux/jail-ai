@@ -208,6 +208,25 @@ impl JailBackend for PodmanBackend {
             Err(_) => Ok(false),
         }
     }
+
+    async fn list_all(&self) -> Result<Vec<String>> {
+        debug!("Listing all jail-ai containers");
+
+        let mut cmd = Command::new("podman");
+        cmd.arg("ps").arg("-a").arg("--format").arg("{{.Names}}");
+
+        let output = run_command(&mut cmd).await?;
+
+        // Filter containers that start with "jail-"
+        let jails: Vec<String> = output
+            .lines()
+            .filter(|line| line.starts_with("jail-"))
+            .map(|line| line.to_string())
+            .collect();
+
+        debug!("Found {} jail-ai containers", jails.len());
+        Ok(jails)
+    }
 }
 
 #[cfg(test)]
@@ -242,5 +261,28 @@ mod tests {
         assert!(args.contains(&"512m".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"TEST=value".to_string()));
+    }
+
+    #[test]
+    fn test_list_all_filters_jail_prefix() {
+        // This is a unit test that verifies the filtering logic would work
+        let names = vec![
+            "jail-test-abc123",
+            "jail-project-def456",
+            "other-container",
+            "jail-another-xyz789",
+            "my-container"
+        ];
+
+        let filtered: Vec<String> = names
+            .into_iter()
+            .filter(|name| name.starts_with("jail-"))
+            .map(|s| s.to_string())
+            .collect();
+
+        assert_eq!(filtered.len(), 3);
+        assert!(filtered.contains(&"jail-test-abc123".to_string()));
+        assert!(filtered.contains(&"jail-project-def456".to_string()));
+        assert!(filtered.contains(&"jail-another-xyz789".to_string()));
     }
 }

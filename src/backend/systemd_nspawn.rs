@@ -198,6 +198,25 @@ impl JailBackend for SystemdNspawnBackend {
         let machine_path = self.get_machine_path(name);
         Ok(machine_path.exists())
     }
+
+    async fn list_all(&self) -> Result<Vec<String>> {
+        debug!("Listing all jail-ai machines");
+
+        // List all directories in /var/lib/machines that start with "jail-"
+        let mut jails = Vec::new();
+
+        if let Ok(mut entries) = tokio::fs::read_dir(&self.machines_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(file_name) = entry.file_name().into_string()
+                    && file_name.starts_with("jail-") {
+                    jails.push(file_name);
+                }
+            }
+        }
+
+        debug!("Found {} jail-ai machines", jails.len());
+        Ok(jails)
+    }
 }
 
 #[cfg(test)]

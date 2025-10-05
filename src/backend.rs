@@ -24,6 +24,9 @@ pub trait JailBackend: Send + Sync {
 
     /// Check if jail exists
     async fn exists(&self, name: &str) -> Result<bool>;
+
+    /// List all jail-ai containers (names starting with "jail-")
+    async fn list_all(&self) -> Result<Vec<String>>;
 }
 
 pub mod systemd_nspawn;
