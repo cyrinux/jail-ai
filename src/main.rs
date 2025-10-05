@@ -94,8 +94,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     jail::JailManager::new(config)
                 } else {
                     // Build from CLI args
-                    let backend_type =
-                        Commands::parse_backend(&backend).map_err(error::JailError::Config)?;
+                    let backend_type = if let Some(backend_str) = backend {
+                        Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+                    } else {
+                        config::BackendType::detect()
+                    };
 
                     // Auto-generate name from current directory if not provided
                     let jail_name = if let Some(name) = name {
@@ -765,7 +768,7 @@ async fn create_default_jail(
 
 /// Parameters for AI agent commands
 struct AgentCommandParams {
-    backend: String,
+    backend: Option<String>,
     image: String,
     mount: Vec<String>,
     env: Vec<String>,
@@ -800,8 +803,11 @@ async fn run_ai_agent_command(
     if !temp_jail.exists().await? {
         info!("Creating new jail: {}", jail_name);
 
-        let backend_type =
-            Commands::parse_backend(&params.backend).map_err(error::JailError::Config)?;
+        let backend_type = if let Some(backend_str) = params.backend {
+            Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+        } else {
+            config::BackendType::detect()
+        };
 
         let mut builder = JailBuilder::new(&jail_name)
             .backend(backend_type)
