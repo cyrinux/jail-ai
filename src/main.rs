@@ -155,6 +155,13 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
                     }
 
+                    // Mount ~/.config/github-copilot for GitHub Copilot agent session data
+                    let copilot_config = home_path.join(".config").join("github-copilot");
+                    if copilot_config.exists() {
+                        info!("Auto-mounting {} to /home/agent/.config/github-copilot", copilot_config.display());
+                        builder = builder.bind_mount(copilot_config, "/home/agent/.config/github-copilot", false);
+                    }
+
                     // Mount ~/.cursor for Cursor Agent
                     let cursor_config = home_path.join(".cursor");
                     if cursor_config.exists() {
@@ -638,6 +645,13 @@ fn mount_agent_configs(mut builder: JailBuilder) -> JailBuilder {
     if config_dir.exists() {
         info!("Auto-mounting {} to /home/agent/.config", config_dir.display());
         builder = builder.bind_mount(config_dir, "/home/agent/.config", false);
+    }
+
+    // Mount ~/.config/github-copilot for GitHub Copilot agent session data
+    let copilot_config = home_path.join(".config").join("github-copilot");
+    if copilot_config.exists() {
+        info!("Auto-mounting {} to /home/agent/.config/github-copilot", copilot_config.display());
+        builder = builder.bind_mount(copilot_config, "/home/agent/.config/github-copilot", false);
     }
 
     // Mount ~/.cursor for Cursor Agent
