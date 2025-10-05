@@ -61,17 +61,17 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        /// Mount entire ~/.claude directory (default: only .claude.json)
         #[arg(long)]
-        no_agent_configs: bool,
+        claude_dir: bool,
 
-        /// Disable auto-mounting git configuration
+        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
         #[arg(long)]
-        no_git_config: bool,
+        agent_configs: bool,
 
-        /// Disable auto-mounting GPG configuration
+        /// Enable git and GPG configuration mapping
         #[arg(long)]
-        no_gpg_config: bool,
+        git_gpg: bool,
     },
 
     /// Start a jail
@@ -164,17 +164,17 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        /// Mount entire ~/.claude directory (default: only .claude.json)
         #[arg(long)]
-        no_agent_configs: bool,
+        claude_dir: bool,
 
-        /// Disable auto-mounting git configuration
+        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
         #[arg(long)]
-        no_git_config: bool,
+        agent_configs: bool,
 
-        /// Disable auto-mounting GPG configuration
+        /// Enable git and GPG configuration mapping
         #[arg(long)]
-        no_gpg_config: bool,
+        git_gpg: bool,
 
         /// Additional arguments to pass to claude
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -219,17 +219,17 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        /// Mount entire ~/.claude directory (default: only .claude.json)
         #[arg(long)]
-        no_agent_configs: bool,
+        claude_dir: bool,
 
-        /// Disable auto-mounting git configuration
+        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
         #[arg(long)]
-        no_git_config: bool,
+        agent_configs: bool,
 
-        /// Disable auto-mounting GPG configuration
+        /// Enable git and GPG configuration mapping
         #[arg(long)]
-        no_gpg_config: bool,
+        git_gpg: bool,
 
         /// Additional arguments to pass to copilot
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -274,17 +274,17 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        /// Mount entire ~/.claude directory (default: only .claude.json)
         #[arg(long)]
-        no_agent_configs: bool,
+        claude_dir: bool,
 
-        /// Disable auto-mounting git configuration
+        /// Mount entire ~/.config and ~/.cursor directories (default: minimal auth files only)
         #[arg(long)]
-        no_git_config: bool,
+        agent_configs: bool,
 
-        /// Disable auto-mounting GPG configuration
+        /// Enable git and GPG configuration mapping
         #[arg(long)]
-        no_gpg_config: bool,
+        git_gpg: bool,
 
         /// Additional arguments to pass to cursor-agent
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
