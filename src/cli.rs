@@ -59,6 +59,10 @@ pub enum Commands {
         /// Custom workspace path inside jail (default: /workspace)
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
+
+        /// Skip auto-mounting AI agent config directories (~/.claude, ~/.config, ~/.cursor)
+        #[arg(long)]
+        no_agent_configs: bool,
     },
 
     /// Start a jail

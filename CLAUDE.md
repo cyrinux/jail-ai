@@ -39,6 +39,9 @@ cargo run -- create my-agent --image alpine:latest
 # Create jail without workspace mount
 cargo run -- create my-agent --no-workspace
 
+# Create jail without AI agent config mounts
+cargo run -- create my-agent --no-agent-configs
+
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
 
@@ -74,7 +77,9 @@ make dev-jail
 ## Key Features
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
+- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with auto-mounted configs
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
+- **Config Auto-mounting**: AI agent config directories (`~/.claude`, `~/.config`, `~/.cursor`) automatically mounted for seamless authentication
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
 - **Network Isolation**: Configurable network access (disabled, private, or shared)
@@ -97,10 +102,14 @@ The `localhost/jail-ai-env:latest` image includes:
 
 ### AI Agent Authentication
 
-The AI coding agents require authentication:
-- **Claude Code**: Requires Anthropic API key (set `ANTHROPIC_API_KEY`)
-- **GitHub Copilot**: Requires GitHub Copilot subscription (use `/login` command)
-- **Cursor Agent**: Requires Cursor subscription (authentication via CLI)
+The AI coding agents require authentication. **Config directories are automatically mounted** from the host:
+- **Claude Code**: `~/.claude` → `/root/.claude` (stores API keys, settings, commands)
+- **GitHub Copilot**: `~/.config` → `/root/.config` (stores authentication tokens)
+- **Cursor Agent**: `~/.cursor` → `/root/.cursor` (stores authentication and settings)
+
+This means AI agents authenticated on your host will work automatically in the jail without re-authentication.
+
+To disable auto-mounting of agent configs: `--no-agent-configs`
 
 ## Git Workflow
 
