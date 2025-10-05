@@ -95,7 +95,7 @@ The `localhost/jail-ai-env:latest` image includes:
 - **Search**: ripgrep, fd-find
 - **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3
 - **Build tools**: gcc, make, pkg-config
-- **Utilities**: git, vim, nano, jq, tree, tmux, htop
+- **Utilities**: git, vim, nano, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest
 - **Rust tools**: clippy, rustfmt
 - **AI Coding Agents**:
@@ -108,6 +108,7 @@ The `localhost/jail-ai-env:latest` image includes:
 The AI coding agents require authentication. **Config directories and files are automatically mounted** from the host:
 - **Claude Code**: `~/.claude` → `/root/.claude` and `~/.claude.json` → `/root/.claude.json` (stores API keys, settings, commands)
 - **GitHub Copilot**: `~/.config` → `/root/.config` (stores authentication tokens)
+- **GitHub Copilot Agent Session**: `~/.config/github-copilot` → `/home/agent/.config/github-copilot` (stores agent session data)
 - **Cursor Agent**: `~/.cursor` → `/root/.cursor` (stores authentication and settings)
 
 This means AI agents authenticated on your host will work automatically in the jail without re-authentication.
