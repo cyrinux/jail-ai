@@ -14,7 +14,9 @@
       "WebSearch",
       "Bash(cargo check:*)",
       "Bash(podman exec:*)",
-      "WebFetch(domain:cursor.com)"
+      "WebFetch(domain:cursor.com)",
+      "Bash(git rebase:*)",
+      "Bash(git rerere:*)"
     ],
     "deny": [],
     "ask": []
