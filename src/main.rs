@@ -326,7 +326,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Start { name } => {
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
                     name: jail_name.clone(),
                     ..Default::default()
@@ -337,7 +337,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Stop { name } => {
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
                     name: jail_name.clone(),
                     ..Default::default()
@@ -348,7 +348,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Remove { name, force } => {
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
 
                 if !force {
                     use std::io::{self, BufRead, Write};
@@ -382,7 +382,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     return Err(error::JailError::Config("No command specified".to_string()));
                 }
 
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
                     name: jail_name,
                     ..Default::default()
@@ -397,7 +397,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Status { name } => {
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
                     name: jail_name.clone(),
                     ..Default::default()
@@ -412,7 +412,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Save { name, output } => {
-                let jail_name = resolve_jail_name(name)?;
+                let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
                     name: jail_name,
                     ..Default::default()
@@ -728,11 +728,29 @@ fn auto_detect_jail_name() -> error::Result<String> {
 }
 
 /// Resolve jail name: use provided name or auto-detect from current directory
-fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
+async fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
     if let Some(name) = name {
         Ok(name)
     } else {
-        auto_detect_jail_name()
+        // Auto-detect: find all matching jails for this directory
+        let cwd = std::env::current_dir()?;
+        let workspace_dir = get_git_root().unwrap_or(cwd);
+        let matching_jails = find_jails_for_directory(&workspace_dir).await?;
+
+        let jail_name = if matching_jails.is_empty() {
+            return Err(error::JailError::Config(
+                "No jails found for this directory. Create one first.".to_string(),
+            ));
+        } else if matching_jails.len() == 1 {
+            // Only one jail exists, use it
+            matching_jails[0].clone()
+        } else {
+            // Multiple jails exist, ask user to choose
+            select_jail(&matching_jails)?
+        };
+
+        info!("Auto-detected jail: {}", jail_name);
+        Ok(jail_name)
     }
 }
 
