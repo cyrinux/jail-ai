@@ -115,11 +115,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 # Switch back to root for system-wide installations
 USER root
 
-# Install Python and pip
+# Install Python, Java, and related tools
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    default-jdk \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
