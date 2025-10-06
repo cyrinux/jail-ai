@@ -108,8 +108,8 @@ impl Default for JailConfig {
                 private: true,
             },
             limits: ResourceLimits {
-                memory_mb: Some(512),
-                cpu_quota: Some(50),
+                memory_mb: None,
+                cpu_quota: None,
             },
         }
     }
