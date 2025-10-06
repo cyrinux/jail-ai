@@ -196,9 +196,11 @@ RUN echo 'export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033
     && echo 'alias ll="ls -lah"' >> /home/agent/.bashrc \
     && echo 'alias rg="rg --color=auto"' >> /home/agent/.bashrc
 
-# Create workspace directory as root and set ownership
+# Create workspace and config directories as root and set ownership
 USER root
-RUN mkdir -p /workspace && chown agent:agent /workspace
+RUN mkdir -p /workspace && chown agent:agent /workspace \
+    && mkdir -p /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.gnupg \
+    && chown -R agent:agent /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.gnupg
 
 # Switch back to agent user
 USER agent
