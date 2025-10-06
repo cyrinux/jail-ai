@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
     libpulse-dev \
     libvulkan-dev \
     vulkan-tools \
+    libv4l-dev \
     v4l-utils \
     # Search and text processing
     ripgrep \
