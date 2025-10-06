@@ -10,6 +10,7 @@ ARG PGID=1000
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
+    TERM=xterm-kitty \
     CARGO_HOME="/home/agent/.cargo" \
     RUSTUP_HOME="/home/agent/.rustup" \
     GOPATH="/home/agent/go" \
