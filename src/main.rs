@@ -817,6 +817,26 @@ fn get_jail_ai_config_dir() -> error::Result<PathBuf> {
     Ok(base_dir.join("jail-ai"))
 }
 
+/// Get the user's UID for runtime directory detection
+fn get_user_uid() -> error::Result<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let home = std::env::var("HOME").map_err(|_| {
+            error::JailError::Config("HOME environment variable not set".to_string())
+        })?;
+        let metadata = std::fs::metadata(&home)?;
+        Ok(metadata.uid())
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err(error::JailError::Config(
+            "UID detection not supported on non-Unix systems".to_string(),
+        ))
+    }
+}
+
 /// Prepare GPG configuration by resolving symlinks and copying to a persistent directory
 /// This handles NixOS where config files are symlinks to /nix/store
 /// Returns (persistent_dir_path, sockets_to_mount) where sockets need to be mounted separately
@@ -851,7 +871,37 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
 
     let mut sockets = Vec::new();
 
-    // Iterate through all entries in ~/.gnupg
+    // Look for GPG agent sockets in the runtime directory (/run/user/UID/gnupg/)
+    // This is where gpg-agent actually creates the sockets
+    let uid = get_user_uid()?;
+    let runtime_gpg_dir = std::path::PathBuf::from(format!("/run/user/{}/gnupg", uid));
+
+    if runtime_gpg_dir.exists() {
+        debug!("Checking runtime GPG directory: {}", runtime_gpg_dir.display());
+
+        // Common GPG agent socket names
+        let socket_names = vec![
+            "S.gpg-agent",
+            "S.gpg-agent.extra",
+            "S.gpg-agent.ssh",
+            "S.gpg-agent.browser",
+        ];
+
+        for socket_name in socket_names {
+            let socket_path = runtime_gpg_dir.join(socket_name);
+            if socket_path.exists() {
+                let metadata = std::fs::symlink_metadata(&socket_path)?;
+                if metadata.file_type().is_socket() {
+                    debug!("Found runtime socket: {}", socket_path.display());
+                    sockets.push(socket_path);
+                }
+            }
+        }
+    } else {
+        debug!("Runtime GPG directory does not exist: {}", runtime_gpg_dir.display());
+    }
+
+    // Also check ~/.gnupg for any sockets (fallback)
     for entry in std::fs::read_dir(gpg_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -869,8 +919,11 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
 
         // Socket files need to be mounted directly, not copied
         if file_type.is_socket() {
-            debug!("Found socket: {}", file_name_str);
-            sockets.push(path.clone());
+            debug!("Found socket in ~/.gnupg: {}", file_name_str);
+            // Only add if not already in the list from runtime dir
+            if !sockets.iter().any(|s| s.file_name() == Some(file_name.as_os_str())) {
+                sockets.push(path.clone());
+            }
             continue;
         }
 
@@ -946,6 +999,7 @@ default-cache-ttl 3600
     }
 
     info!("Prepared GPG config in persistent cache directory: {}", persistent_dir.display());
+    debug!("Found {} GPG agent sockets to mount", sockets.len());
     Ok((persistent_dir, sockets))
 }
 
@@ -1672,5 +1726,15 @@ mod tests {
         // This will succeed but do nothing if no jails exist
         let result = upgrade_all_jails(None, true).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_get_user_uid() {
+        // Test that we can get the user's UID
+        let uid = get_user_uid();
+        assert!(uid.is_ok());
+        let uid_val = uid.unwrap();
+        assert!(uid_val > 0, "UID should be greater than 0");
     }
 }
