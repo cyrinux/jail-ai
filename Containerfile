@@ -147,6 +147,9 @@ RUN CLAUDE_BIN=$(which claude || echo "") && \
 USER agent
 WORKDIR /home/agent
 
+# Install Poetry using official installer (latest version) as agent user
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
 # Install Cursor Agent CLI (as agent user so it installs to ~/.local/bin)
 RUN mkdir -p /home/agent/.local/bin \
     && curl https://cursor.com/install -fsSL | bash \
