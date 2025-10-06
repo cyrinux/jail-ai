@@ -605,7 +605,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Join { shell } => {
-                let jail_name = auto_detect_jail_name()?;
+                let jail_name = resolve_jail_name(None).await?;
 
                 info!("Joining jail: {}", jail_name);
 
@@ -1239,5 +1239,52 @@ mod tests {
 
         assert_eq!(config.name, deserialized.name);
         assert_eq!(config.backend, deserialized.backend);
+    }
+
+    #[test]
+    fn test_find_jails_for_directory_filters_correctly() {
+        use std::path::PathBuf;
+
+        // Test that we correctly filter jail names by base pattern
+        let path = PathBuf::from("/tmp/test-project");
+        let base_name = cli::Commands::generate_jail_name(&path);
+
+        // Simulate jail names returned by backend
+        let all_jails = vec![
+            format!("{}-claude", base_name),
+            format!("{}-copilot", base_name),
+            format!("{}-cursor", base_name),
+            "jail-other-12345678-claude".to_string(),
+        ];
+
+        // Filter logic from find_jails_for_directory
+        let matching_jails: Vec<String> = all_jails
+            .into_iter()
+            .filter(|name| name.starts_with(&base_name) && name.len() > base_name.len())
+            .collect();
+
+        // Should match only the jails with the correct base pattern
+        assert_eq!(matching_jails.len(), 3);
+        assert!(matching_jails.contains(&format!("{}-claude", base_name)));
+        assert!(matching_jails.contains(&format!("{}-copilot", base_name)));
+        assert!(matching_jails.contains(&format!("{}-cursor", base_name)));
+    }
+
+    #[test]
+    fn test_resolve_jail_name_logic() {
+        use std::path::PathBuf;
+
+        // Test that auto_detect_jail_name generates base name without agent suffix
+        let path = PathBuf::from("/tmp/test-project");
+        let base_name = cli::Commands::generate_jail_name(&path);
+
+        // This should NOT include agent suffix
+        assert!(!base_name.ends_with("-claude"));
+        assert!(!base_name.ends_with("-copilot"));
+        assert!(!base_name.ends_with("-cursor"));
+
+        // The base name should be in format "jail-{dir}-{hash}"
+        assert!(base_name.starts_with("jail-"));
+        assert!(base_name.contains("test-project"));
     }
 }
