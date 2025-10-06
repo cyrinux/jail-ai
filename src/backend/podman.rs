@@ -126,37 +126,10 @@ impl JailBackend for PodmanBackend {
         Ok(())
     }
 
-    async fn start(&self, name: &str) -> Result<()> {
-        info!("Starting podman jail: {}", name);
-
-        let mut cmd = Command::new("podman");
-        cmd.arg("start").arg(name);
-
-        run_command(&mut cmd).await?;
-
-        info!("Jail {} started", name);
-        Ok(())
-    }
-
-    async fn stop(&self, name: &str) -> Result<()> {
-        info!("Stopping podman jail: {}", name);
-
-        let mut cmd = Command::new("podman");
-        cmd.arg("stop").arg(name);
-
-        run_command(&mut cmd).await?;
-
-        info!("Jail {} stopped", name);
-        Ok(())
-    }
-
     async fn remove(&self, name: &str) -> Result<()> {
         info!("Removing podman jail: {}", name);
 
-        // Stop if running
-        let _ = self.stop(name).await;
-
-        // Remove container
+        // Remove container (with force flag to stop if running)
         let mut cmd = Command::new("podman");
         cmd.arg("rm").arg("-f").arg(name);
 

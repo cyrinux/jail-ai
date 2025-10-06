@@ -85,18 +85,6 @@ pub enum Commands {
         git_gpg: bool,
     },
 
-    /// Start a jail
-    Start {
-        /// Name of the jail (auto-detected from current directory if not provided)
-        name: Option<String>,
-    },
-
-    /// Stop a jail
-    Stop {
-        /// Name of the jail (auto-detected from current directory if not provided)
-        name: Option<String>,
-    },
-
     /// Remove a jail
     Remove {
         /// Name of the jail (auto-detected from current directory if not provided)
@@ -105,20 +93,6 @@ pub enum Commands {
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
-    },
-
-    /// Execute a command in a jail
-    Exec {
-        /// Name of the jail (auto-detected from current directory if not provided)
-        name: Option<String>,
-
-        /// Run in interactive mode with TTY (default: true, use --no-interactive to disable)
-        #[arg(short, long, default_value_t = true, action = clap::ArgAction::Set)]
-        interactive: bool,
-
-        /// Command to execute
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        command: Vec<String>,
     },
 
     /// Show jail status

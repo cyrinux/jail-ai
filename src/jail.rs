@@ -20,16 +20,6 @@ impl JailManager {
         self.backend.create(&self.config).await
     }
 
-    /// Start the jail
-    pub async fn start(&self) -> Result<()> {
-        self.backend.start(&self.config.name).await
-    }
-
-    /// Stop the jail
-    pub async fn stop(&self) -> Result<()> {
-        self.backend.stop(&self.config.name).await
-    }
-
     /// Remove the jail
     pub async fn remove(&self) -> Result<()> {
         self.backend.remove(&self.config.name).await
