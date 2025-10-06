@@ -559,40 +559,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 }
             }
 
-            Commands::Join { shell } => {
-                let jail_name = resolve_jail_name(None).await?;
-
-                info!("Joining jail: {}", jail_name);
-
-                // Check if jail exists
-                let config = JailConfig {
-                    name: jail_name.clone(),
-                    ..Default::default()
-                };
-                let jail = jail::JailManager::new(config);
-
-                if !jail.exists().await? {
-                    return Err(error::JailError::Config(format!(
-                        "Jail '{}' does not exist. Create it first with: jail-ai claude",
-                        jail_name
-                    )));
-                }
-
-                // Determine which shell to use
-                let shell_cmd = if let Some(shell) = shell {
-                    shell
-                } else {
-                    detect_available_shell(&jail).await?
-                };
-
-                // Execute interactive shell
-                let command = vec![shell_cmd];
-                let output = jail.exec(&command, true).await?;
-                if !output.is_empty() {
-                    print!("{}", output);
-                }
-            }
-
             Commands::CleanAll { backend, force } => {
                 // Determine which backends to clean
                 let backends = if let Some(backend_str) = backend {
@@ -714,27 +680,6 @@ async fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
         info!("Auto-detected jail: {}", jail_name);
         Ok(jail_name)
     }
-}
-
-/// Detect available shell in the jail (prefers zsh, then bash)
-async fn detect_available_shell(jail: &jail::JailManager) -> error::Result<String> {
-    // Try zsh first
-    let zsh_check = jail.exec(&["which".to_string(), "zsh".to_string()], false).await;
-    if zsh_check.is_ok() {
-        info!("Using zsh shell");
-        return Ok("zsh".to_string());
-    }
-
-    // Fall back to bash
-    let bash_check = jail.exec(&["which".to_string(), "bash".to_string()], false).await;
-    if bash_check.is_ok() {
-        info!("Using bash shell (zsh not available)");
-        return Ok("bash".to_string());
-    }
-
-    // Fall back to sh as last resort
-    info!("Using sh shell (zsh and bash not available)");
-    Ok("sh".to_string())
 }
 
 /// Get the git root directory if the current directory is within a git repository
