@@ -230,9 +230,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 false,
                             );
                         } else {
-                            // If no local git config, try to get global git config and set env vars
+                            // If no local git config, read from project's git config (or global as fallback)
                             if let Ok(git_name) = std::process::Command::new("git")
-                                .args(["config", "--global", "user.name"])
+                                .current_dir(&cwd)
+                                .args(["config", "user.name"])
                                 .output()
                             {
                                 if git_name.status.success() {
@@ -247,7 +248,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             }
 
                             if let Ok(git_email) = std::process::Command::new("git")
-                                .args(["config", "--global", "user.email"])
+                                .current_dir(&cwd)
+                                .args(["config", "user.email"])
                                 .output()
                             {
                                 if git_email.status.success() {
@@ -262,7 +264,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             }
 
                             if let Ok(git_signing_key) = std::process::Command::new("git")
-                                .args(["config", "--global", "user.signingkey"])
+                                .current_dir(&cwd)
+                                .args(["config", "user.signingkey"])
                                 .output()
                             {
                                 if git_signing_key.status.success() {
@@ -1334,9 +1337,10 @@ async fn run_ai_agent_command(
                 );
                 builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
             } else {
-                // If no local git config, try to get global git config and set environment variables
+                // If no local git config, read from project's git config (or global as fallback)
                 if let Ok(git_name) = std::process::Command::new("git")
-                    .args(["config", "--global", "user.name"])
+                    .current_dir(&cwd)
+                    .args(["config", "user.name"])
                     .output()
                 {
                     if git_name.status.success() {
@@ -1349,7 +1353,8 @@ async fn run_ai_agent_command(
                 }
 
                 if let Ok(git_email) = std::process::Command::new("git")
-                    .args(["config", "--global", "user.email"])
+                    .current_dir(&cwd)
+                    .args(["config", "user.email"])
                     .output()
                 {
                     if git_email.status.success() {
@@ -1364,7 +1369,8 @@ async fn run_ai_agent_command(
                 }
 
                 if let Ok(git_signing_key) = std::process::Command::new("git")
-                    .args(["config", "--global", "user.signingkey"])
+                    .current_dir(&cwd)
+                    .args(["config", "user.signingkey"])
                     .output()
                 {
                     if git_signing_key.status.success() {
