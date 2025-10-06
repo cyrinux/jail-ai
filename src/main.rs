@@ -132,6 +132,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.env("TZ", tz);
                     }
 
+                    // Inherit TERM from host
+                    if let Ok(term) = std::env::var("TERM") {
+                        builder = builder.env("TERM", term);
+                    }
+
                     // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
                         let workspace_dir = get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -727,6 +732,11 @@ async fn create_default_jail(
         builder = builder.env("TZ", tz);
     }
 
+    // Inherit TERM from host
+    if let Ok(term) = std::env::var("TERM") {
+        builder = builder.env("TERM", term);
+    }
+
     // Auto-mount workspace (git root if available, otherwise provided workspace)
     let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
     info!("Auto-mounting {} to /workspace", workspace_dir.display());
@@ -803,6 +813,11 @@ async fn run_ai_agent_command(
         // Set timezone from host
         if let Some(tz) = get_host_timezone() {
             builder = builder.env("TZ", tz);
+        }
+
+        // Inherit TERM from host
+        if let Ok(term) = std::env::var("TERM") {
+            builder = builder.env("TERM", term);
         }
 
         // Auto-mount workspace (git root if available, otherwise current directory)
