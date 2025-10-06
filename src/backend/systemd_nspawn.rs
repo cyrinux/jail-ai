@@ -112,35 +112,13 @@ impl JailBackend for SystemdNspawnBackend {
         Ok(())
     }
 
-    async fn start(&self, name: &str) -> Result<()> {
-        info!("Starting systemd-nspawn jail: {}", name);
-
-        let mut cmd = Command::new("machinectl");
-        cmd.arg("start").arg(name);
-
-        run_command(&mut cmd).await?;
-
-        info!("Jail {} started", name);
-        Ok(())
-    }
-
-    async fn stop(&self, name: &str) -> Result<()> {
-        info!("Stopping systemd-nspawn jail: {}", name);
-
-        let mut cmd = Command::new("machinectl");
-        cmd.arg("terminate").arg(name);
-
-        run_command(&mut cmd).await?;
-
-        info!("Jail {} stopped", name);
-        Ok(())
-    }
-
     async fn remove(&self, name: &str) -> Result<()> {
         info!("Removing systemd-nspawn jail: {}", name);
 
-        // Stop if running
-        let _ = self.stop(name).await;
+        // Try to terminate if running (ignore errors if not running)
+        let mut cmd = Command::new("machinectl");
+        cmd.arg("terminate").arg(name);
+        let _ = run_command(&mut cmd).await;
 
         // Remove machine directory
         let machine_path = self.get_machine_path(name);

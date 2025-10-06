@@ -325,28 +325,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Jail created: {}", jail.config().name);
             }
 
-            Commands::Start { name } => {
-                let jail_name = resolve_jail_name(name).await?;
-                let config = JailConfig {
-                    name: jail_name.clone(),
-                    ..Default::default()
-                };
-                let jail = jail::JailManager::new(config);
-                jail.start().await?;
-                info!("Jail started: {}", jail_name);
-            }
-
-            Commands::Stop { name } => {
-                let jail_name = resolve_jail_name(name).await?;
-                let config = JailConfig {
-                    name: jail_name.clone(),
-                    ..Default::default()
-                };
-                let jail = jail::JailManager::new(config);
-                jail.stop().await?;
-                info!("Jail stopped: {}", jail_name);
-            }
-
             Commands::Remove { name, force } => {
                 let jail_name = resolve_jail_name(name).await?;
 
@@ -371,29 +349,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 jail.remove().await?;
 
                 info!("Jail removed: {}", jail_name);
-            }
-
-            Commands::Exec {
-                name,
-                command,
-                interactive,
-            } => {
-                if command.is_empty() {
-                    return Err(error::JailError::Config("No command specified".to_string()));
-                }
-
-                let jail_name = resolve_jail_name(name).await?;
-                let config = JailConfig {
-                    name: jail_name,
-                    ..Default::default()
-                };
-                let jail = jail::JailManager::new(config);
-                let output = jail.exec(&command, interactive).await?;
-
-                // Only print output if not interactive (interactive mode outputs directly)
-                if !interactive && !output.is_empty() {
-                    print!("{}", output);
-                }
             }
 
             Commands::Status { name } => {

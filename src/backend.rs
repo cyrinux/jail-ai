@@ -10,12 +10,6 @@ pub trait JailBackend: Send + Sync {
     /// Create a new jail instance
     async fn create(&self, config: &JailConfig) -> Result<()>;
 
-    /// Start the jail
-    async fn start(&self, name: &str) -> Result<()>;
-
-    /// Stop the jail
-    async fn stop(&self, name: &str) -> Result<()>;
-
     /// Remove the jail
     async fn remove(&self, name: &str) -> Result<()>;
 
