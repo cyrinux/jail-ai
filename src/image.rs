@@ -342,6 +342,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::const_is_empty)]
     fn test_embedded_containerfile_not_empty() {
         assert!(!EMBEDDED_CONTAINERFILE.is_empty());
         assert!(EMBEDDED_CONTAINERFILE.contains("FROM"));
