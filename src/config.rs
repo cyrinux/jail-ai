@@ -30,7 +30,6 @@ pub struct JailConfig {
 pub enum BackendType {
     SystemdNspawn,
     Podman,
-    Docker,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +56,6 @@ impl BackendType {
     pub fn is_available(&self) -> bool {
         let command = match self {
             BackendType::Podman => "podman",
-            BackendType::Docker => "docker",
             BackendType::SystemdNspawn => "systemd-nspawn",
         };
 
@@ -72,7 +70,6 @@ impl BackendType {
     pub fn all_available() -> Vec<Self> {
         vec![
             BackendType::Podman,
-            BackendType::Docker,
             BackendType::SystemdNspawn,
         ]
         .into_iter()
@@ -81,7 +78,7 @@ impl BackendType {
     }
 
     /// Detect which backend is available on the system.
-    /// Checks in order: podman -> docker -> systemd-nspawn
+    /// Checks in order: podman -> systemd-nspawn
     /// Returns the first available backend, or Podman as fallback.
     pub fn detect() -> Self {
         use tracing::debug;
@@ -89,7 +86,6 @@ impl BackendType {
         // Check backends in order of preference
         for backend in [
             BackendType::Podman,
-            BackendType::Docker,
             BackendType::SystemdNspawn,
         ] {
             if backend.is_available() {
