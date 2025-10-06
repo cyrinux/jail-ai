@@ -29,7 +29,6 @@ pub trait JailBackend: Send + Sync {
     async fn list_all(&self) -> Result<Vec<String>>;
 }
 
-pub mod docker;
 pub mod podman;
 pub mod systemd_nspawn;
 
@@ -40,7 +39,6 @@ pub fn create_backend(config: &JailConfig) -> Box<dyn JailBackend> {
             Box::new(systemd_nspawn::SystemdNspawnBackend::new())
         }
         crate::config::BackendType::Podman => Box::new(podman::PodmanBackend::new()),
-        crate::config::BackendType::Docker => Box::new(docker::DockerBackend::new()),
     }
 }
 
