@@ -44,7 +44,7 @@ cargo run -- create my-agent --image alpine:latest
 # Create jail without workspace mount
 cargo run -- create my-agent --no-workspace
 
-# Create jail with entire ~/.claude directory (default: only .claude.json)
+# Create jail with entire ~/.claude directory (default: only .claude/.credentials.json)
 cargo run -- create my-agent --claude-dir
 
 # Create jail with ~/.config directory for GitHub Copilot
@@ -103,7 +103,7 @@ make dev-jail
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
-- **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude.json` by default; other agents require explicit config flags
+- **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
 - **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
@@ -134,7 +134,7 @@ The `localhost/jail-ai-env:latest` image includes:
 The AI coding agents require authentication.
 
 **Default behavior (minimal auth):**
-- `jail-ai claude` → Auto-mounts `~/.claude.json` → `/home/agent/.claude.json` (API keys only)
+- `jail-ai claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 

@@ -64,7 +64,7 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Mount entire ~/.claude directory (default: only .claude.json)
+        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
         #[arg(long)]
         claude_dir: bool,
 
@@ -175,7 +175,7 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Mount entire ~/.claude directory (default: only .claude.json)
+        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
         #[arg(long)]
         claude_dir: bool,
 
@@ -238,7 +238,7 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Mount entire ~/.claude directory (default: only .claude.json)
+        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
         #[arg(long)]
         claude_dir: bool,
 
@@ -301,7 +301,7 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Mount entire ~/.claude directory (default: only .claude.json)
+        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
         #[arg(long)]
         claude_dir: bool,
 

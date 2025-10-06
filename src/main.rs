@@ -971,15 +971,19 @@ async fn run_ai_agent_command(
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let home_path = std::path::PathBuf::from(&home);
 
-        // Mount ~/.claude.json only for Claude agent
+        // Mount ~/.claude/.credentials.json only for Claude agent
         if agent_command == "claude" {
-            let claude_json = home_path.join(".claude.json");
-            if claude_json.exists() {
+            let claude_creds = home_path.join(".claude").join(".credentials.json");
+            if claude_creds.exists() {
                 info!(
-                    "Auto-mounting {} to /home/agent/.claude.json",
-                    claude_json.display()
+                    "Auto-mounting {} to /home/agent/.claude/.credentials.json",
+                    claude_creds.display()
                 );
-                builder = builder.bind_mount(claude_json, "/home/agent/.claude.json", false);
+                builder = builder.bind_mount(
+                    claude_creds,
+                    "/home/agent/.claude/.credentials.json",
+                    false,
+                );
             }
         }
 
