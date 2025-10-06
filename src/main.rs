@@ -128,7 +128,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         generated_name
                     };
 
-                    let mut builder = JailBuilder::new(jail_name)
+                    let mut builder = JailBuilder::new(&jail_name)
                         .backend(backend_type)
                         .base_image(image)
                         .network(!no_network, true);
@@ -169,6 +169,20 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             );
                             builder =
                                 builder.bind_mount(claude_config, "/home/agent/.claude", false);
+                        }
+                    } else {
+                        // If not mounting full .claude directory, mount minimal auth files
+                        let claude_creds = home_path.join(".claude").join(".credentials.json");
+                        if claude_creds.exists() {
+                            info!(
+                                "Auto-mounting {} to /home/agent/.claude/.credentials.json",
+                                claude_creds.display()
+                            );
+                            builder = builder.bind_mount(
+                                claude_creds,
+                                "/home/agent/.claude/.credentials.json",
+                                false,
+                            );
                         }
                     }
 
@@ -300,6 +314,14 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 };
 
                 jail.create().await?;
+
+                // Create .claude.json file inside the container
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                let home_path = std::path::PathBuf::from(&home);
+                if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
+                    warn!("Failed to create .claude.json in container: {}", e);
+                }
+
                 info!("Jail created: {}", jail.config().name);
             }
 
@@ -347,6 +369,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 };
                 let jail = jail::JailManager::new(config);
                 jail.remove().await?;
+
                 info!("Jail removed: {}", jail_name);
             }
 
@@ -738,6 +761,53 @@ fn get_git_root() -> Option<PathBuf> {
     None
 }
 
+/// Create a .claude.json file inside the container
+/// Reads oauthAccount and userID from host's ~/.claude.json if it exists
+/// Creates the file directly inside the container, not as a mount
+async fn create_claude_json_in_container(home_path: &std::path::Path, jail: &jail::JailManager) -> error::Result<()> {
+    use serde_json::{json, Value};
+
+    let host_claude_json = home_path.join(".claude.json");
+
+    let mut claude_json = json!({
+        "hasCompletedOnboarding": true,
+        "bypassPermissionsModeAccepted": true
+    });
+
+    // Try to read host's .claude.json and extract oauthAccount and userID
+    if host_claude_json.exists() {
+        if let Ok(content) = tokio::fs::read_to_string(&host_claude_json).await {
+            if let Ok(host_data) = serde_json::from_str::<Value>(&content) {
+                // Copy oauthAccount if present
+                if let Some(oauth_account) = host_data.get("oauthAccount") {
+                    claude_json["oauthAccount"] = oauth_account.clone();
+                }
+
+                // Copy userID if present
+                if let Some(user_id) = host_data.get("userID") {
+                    claude_json["userID"] = user_id.clone();
+                }
+            }
+        }
+    }
+
+    let json_content = serde_json::to_string(&claude_json)?;
+
+    // Create the .claude.json file inside the container using a shell command
+    // We use cat with a heredoc to create the file
+    let create_file_cmd = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        format!("mkdir -p /home/agent && cat > /home/agent/.claude.json << 'CLAUDE_JSON_EOF'\n{}\nCLAUDE_JSON_EOF", json_content),
+    ];
+
+    jail.exec(&create_file_cmd, false).await?;
+
+    info!("Created .claude.json inside container");
+
+    Ok(())
+}
+
 /// Get the host's timezone
 fn get_host_timezone() -> Option<String> {
     // Try TZ environment variable first
@@ -971,8 +1041,8 @@ async fn run_ai_agent_command(
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let home_path = std::path::PathBuf::from(&home);
 
-        // Mount ~/.claude/.credentials.json only for Claude agent
-        if agent_command == "claude" {
+        // Mount minimal auth files for Claude agent (unless full .claude directory is mounted)
+        if agent_command == "claude" && !params.claude_dir && !params.agent_configs {
             let claude_creds = home_path.join(".claude").join(".credentials.json");
             if claude_creds.exists() {
                 info!(
@@ -1110,6 +1180,13 @@ async fn run_ai_agent_command(
 
         let jail = builder.build();
         jail.create().await?;
+
+        // Create .claude.json file inside the container for Claude agent
+        if agent_command == "claude" {
+            if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
+                warn!("Failed to create .claude.json in container: {}", e);
+            }
+        }
     }
 
     // Execute AI agent command
