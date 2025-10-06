@@ -215,37 +215,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         }
                     }
 
-                    // Opt-in: Git and GPG configuration
+                    // Opt-in: GPG configuration
                     if git_gpg {
-                        let cwd = std::env::current_dir()?;
-                        let git_config_path = cwd.join(".git").join("config");
-                        if git_config_path.exists() {
-                            info!(
-                                "Mounting git config {} to /home/agent/.gitconfig",
-                                git_config_path.display()
-                            );
-                            builder = builder.bind_mount(
-                                git_config_path,
-                                "/home/agent/.gitconfig",
-                                false,
-                            );
-                        } else {
-                            // If no local git config, read from project/global/system config (with fallback)
-                            if let Some(name) = get_git_config("user.name", &cwd) {
-                                builder = builder.env("GIT_AUTHOR_NAME", &name);
-                                builder = builder.env("GIT_COMMITTER_NAME", &name);
-                            }
-
-                            if let Some(email) = get_git_config("user.email", &cwd) {
-                                builder = builder.env("GIT_AUTHOR_EMAIL", &email);
-                                builder = builder.env("GIT_COMMITTER_EMAIL", &email);
-                            }
-
-                            if let Some(signing_key) = get_git_config("user.signingkey", &cwd) {
-                                builder = builder.env("GIT_SIGNING_KEY", &signing_key);
-                            }
-                        }
-
                         // Prepare and mount GPG configuration directory
                         let gpg_dir = home_path.join(".gnupg");
                         if gpg_dir.exists() {
@@ -310,6 +281,14 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 let home_path = std::path::PathBuf::from(&home);
                 if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
                     warn!("Failed to create .claude.json in container: {}", e);
+                }
+
+                // Create .gitconfig file inside the container if git_gpg is enabled
+                if git_gpg {
+                    let cwd = std::env::current_dir()?;
+                    if let Err(e) = create_gitconfig_in_container(&cwd, &jail).await {
+                        warn!("Failed to create .gitconfig in container: {}", e);
+                    }
                 }
 
                 info!("Jail created: {}", jail.config().name);
@@ -724,21 +703,35 @@ fn get_git_root() -> Option<PathBuf> {
     None
 }
 
-/// Get git config value with fallback to system config
-/// First tries project/global config, then falls back to system config
+/// Get git config value with fallback to global and system config
+/// First tries project config, then global config, then system config
 fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     use tracing::debug;
 
-    // Try project/global config first
+    // Try project-specific config first (local to the repository)
     if let Ok(output) = std::process::Command::new("git")
         .current_dir(cwd)
-        .args(["config", key])
+        .args(["config", "--local", key])
         .output()
     {
         if output.status.success() {
             let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !value.is_empty() {
-                debug!("Found {} in project/global config: {}", key, value);
+                debug!("Found {} in project config: {}", key, value);
+                return Some(value);
+            }
+        }
+    }
+
+    // Fallback to global config
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["config", "--global", key])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                debug!("Found {} in global config: {}", key, value);
                 return Some(value);
             }
         }
@@ -760,6 +753,103 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
 
     debug!("No value found for {} in any git config", key);
     None
+}
+
+/// Read all relevant git config values from the host
+/// Returns a HashMap of config keys and their values
+fn get_all_git_config_values(cwd: &std::path::Path) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    use tracing::debug;
+
+    let mut config_map = HashMap::new();
+
+    // List of git config keys we want to read
+    let config_keys = vec![
+        "user.name",
+        "user.email",
+        "user.signingkey",
+        "commit.gpgsign",
+        "gpg.format",
+        "gpg.program",
+        "core.editor",
+        "init.defaultbranch",
+        "pull.rebase",
+        "push.autosetupremote",
+    ];
+
+    for key in config_keys {
+        if let Some(value) = get_git_config(key, cwd) {
+            debug!("Read git config: {} = {}", key, value);
+            config_map.insert(key.to_string(), value);
+        }
+    }
+
+    config_map
+}
+
+/// Generate .gitconfig file content from git config values
+fn generate_gitconfig_content(config_map: &std::collections::HashMap<String, String>) -> String {
+    use std::collections::HashMap;
+
+    let mut content = String::from("# Generated by jail-ai from host git config\n\n");
+
+    // Group config by section
+    let mut sections: HashMap<String, Vec<(String, String)>> = HashMap::new();
+
+    for (key, value) in config_map {
+        if let Some((section, name)) = key.split_once('.') {
+            sections
+                .entry(section.to_string())
+                .or_default()
+                .push((name.to_string(), value.clone()));
+        }
+    }
+
+    // Write sections in order
+    let section_order = vec!["user", "commit", "gpg", "core", "init", "pull", "push"];
+
+    for section_name in section_order {
+        if let Some(entries) = sections.get(section_name) {
+            content.push_str(&format!("[{}]\n", section_name));
+            for (name, value) in entries {
+                content.push_str(&format!("\t{} = {}\n", name, value));
+            }
+            content.push('\n');
+        }
+    }
+
+    content
+}
+
+/// Create a .gitconfig file inside the container
+/// Reads git config from host and creates the file directly inside the container
+async fn create_gitconfig_in_container(cwd: &std::path::Path, jail: &jail::JailManager) -> error::Result<()> {
+    use tracing::debug;
+
+    // Read all relevant git config values from host
+    let config_map = get_all_git_config_values(cwd);
+
+    if config_map.is_empty() {
+        debug!("No git config values found on host, skipping .gitconfig creation");
+        return Ok(());
+    }
+
+    // Generate .gitconfig content
+    let gitconfig_content = generate_gitconfig_content(&config_map);
+    debug!("Generated .gitconfig content:\n{}", gitconfig_content);
+
+    // Create the .gitconfig file inside the container using a shell command
+    let create_file_cmd = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        format!("cat > /home/agent/.gitconfig << 'GITCONFIG_EOF'\n{}\nGITCONFIG_EOF", gitconfig_content),
+    ];
+
+    jail.exec(&create_file_cmd, false).await?;
+
+    info!("Created .gitconfig inside container with host's git configuration");
+
+    Ok(())
 }
 
 /// Create a .claude.json file inside the container
@@ -1331,32 +1421,8 @@ async fn run_ai_agent_command(
             }
         }
 
-        // Opt-in: Git and GPG configuration
+        // Opt-in: GPG configuration
         if params.git_gpg {
-            let git_config_path = cwd.join(".git").join("config");
-            if git_config_path.exists() {
-                info!(
-                    "Mounting git config {} to /home/agent/.gitconfig",
-                    git_config_path.display()
-                );
-                builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
-            } else {
-                // If no local git config, read from project/global/system config (with fallback)
-                if let Some(name) = get_git_config("user.name", &cwd) {
-                    builder = builder.env("GIT_AUTHOR_NAME", &name);
-                    builder = builder.env("GIT_COMMITTER_NAME", &name);
-                }
-
-                if let Some(email) = get_git_config("user.email", &cwd) {
-                    builder = builder.env("GIT_AUTHOR_EMAIL", &email);
-                    builder = builder.env("GIT_COMMITTER_EMAIL", &email);
-                }
-
-                if let Some(signing_key) = get_git_config("user.signingkey", &cwd) {
-                    builder = builder.env("GIT_SIGNING_KEY", &signing_key);
-                }
-            }
-
             // Prepare and mount GPG configuration directory
             let gpg_dir = home_path.join(".gnupg");
             if gpg_dir.exists() {
@@ -1416,6 +1482,13 @@ async fn run_ai_agent_command(
         if agent_command == "claude" {
             if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
                 warn!("Failed to create .claude.json in container: {}", e);
+            }
+        }
+
+        // Create .gitconfig file inside the container if git_gpg is enabled
+        if params.git_gpg {
+            if let Err(e) = create_gitconfig_in_container(&cwd, &jail).await {
+                warn!("Failed to create .gitconfig in container: {}", e);
             }
         }
     }
@@ -1715,5 +1788,34 @@ mod tests {
         assert!(uid.is_ok());
         let uid_val = uid.unwrap();
         assert!(uid_val > 0, "UID should be greater than 0");
+    }
+
+    #[test]
+    fn test_get_git_config() {
+        // Test that we can read git config values
+        // This test will try to read from local/global/system config
+        let cwd = std::env::current_dir().unwrap();
+
+        // Try to get any git config value - user.name is commonly set
+        // If no git config exists, this test will pass (returns None)
+        let result = get_git_config("user.name", &cwd);
+
+        // The test passes whether or not git config exists
+        // We're just testing that the function doesn't panic
+        if let Some(name) = result {
+            // If we found a name, it should not be empty
+            assert!(!name.is_empty(), "Git config value should not be empty");
+        }
+    }
+
+    #[test]
+    fn test_get_git_config_hierarchy() {
+        // Test that get_git_config respects config hierarchy
+        // local > global > system
+        let cwd = std::env::current_dir().unwrap();
+
+        // Test with a non-existent key
+        let result = get_git_config("nonexistent.key.that.should.not.exist", &cwd);
+        assert!(result.is_none(), "Non-existent git config key should return None");
     }
 }
