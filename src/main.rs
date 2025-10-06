@@ -656,6 +656,103 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
                 info!("Clean-all operation completed");
             }
+
+            Commands::Upgrade { name, image, force } => {
+                let jail_name = resolve_jail_name(name).await?;
+
+                // Create a temporary jail manager to inspect the existing configuration
+                let temp_config = JailConfig {
+                    name: jail_name.clone(),
+                    ..Default::default()
+                };
+                let temp_jail = jail::JailManager::new(temp_config);
+
+                // Check if jail exists
+                if !temp_jail.exists().await? {
+                    return Err(error::JailError::NotFound(format!(
+                        "Jail '{}' does not exist",
+                        jail_name
+                    )));
+                }
+
+                // Inspect the jail to get its current configuration
+                let old_config = temp_jail.inspect().await?;
+                info!("Current jail configuration: {:?}", old_config);
+
+                // Determine the new image to use
+                let new_image = image.unwrap_or_else(|| old_config.base_image.clone());
+
+                // Ask for confirmation unless force is specified
+                if !force {
+                    use std::io::{self, BufRead, Write};
+                    println!("Jail '{}' will be upgraded:", jail_name);
+                    println!("  Current image: {}", old_config.base_image);
+                    println!("  New image:     {}", new_image);
+                    println!("\nThis will:");
+                    println!("  1. Save the current configuration");
+                    println!("  2. Remove the existing jail");
+                    println!("  3. Recreate the jail with the new image");
+                    println!("  4. Restore the configuration (mounts, env, limits)");
+                    print!("\nProceed with upgrade? [y/N] ");
+                    io::stdout().flush()?;
+                    let stdin = io::stdin();
+                    let mut line = String::new();
+                    stdin.lock().read_line(&mut line)?;
+                    if !line.trim().eq_ignore_ascii_case("y") {
+                        info!("Upgrade aborted");
+                        return Ok(());
+                    }
+                }
+
+                info!("Upgrading jail '{}'...", jail_name);
+
+                // Remove the old jail
+                info!("Removing old jail...");
+                temp_jail.remove().await?;
+                info!("Old jail removed");
+
+                // Create a new jail with the updated image but same configuration
+                info!("Creating new jail with image '{}'...", new_image);
+                let mut builder = JailBuilder::new(&jail_name)
+                    .backend(old_config.backend)
+                    .base_image(new_image.clone())
+                    .network(old_config.network.enabled, old_config.network.private);
+
+                // Restore environment variables
+                for (key, value) in &old_config.environment {
+                    builder = builder.env(key.clone(), value.clone());
+                }
+
+                // Restore bind mounts
+                for mount in &old_config.bind_mounts {
+                    builder = builder.bind_mount(
+                        mount.source.clone(),
+                        mount.target.clone(),
+                        mount.readonly,
+                    );
+                }
+
+                // Restore resource limits
+                if let Some(memory) = old_config.limits.memory_mb {
+                    builder = builder.memory_limit(memory);
+                }
+                if let Some(cpu) = old_config.limits.cpu_quota {
+                    builder = builder.cpu_quota(cpu);
+                }
+
+                let new_jail = builder.build();
+                new_jail.create().await?;
+
+                // Create .claude.json file inside the container if needed
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                let home_path = std::path::PathBuf::from(&home);
+                if let Err(e) = create_claude_json_in_container(&home_path, &new_jail).await {
+                    warn!("Failed to create .claude.json in container: {}", e);
+                }
+
+                println!("✓ Jail '{}' successfully upgraded to image '{}'", jail_name, new_image);
+                info!("Upgrade completed successfully");
+            }
         },
     }
 

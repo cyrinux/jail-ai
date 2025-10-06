@@ -321,6 +321,20 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Upgrade jail by recreating it with the latest image
+    Upgrade {
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
+
+        /// Base image to upgrade to (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long)]
+        image: Option<String>,
+
+        /// Force upgrade without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 impl Commands {
