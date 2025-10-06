@@ -369,11 +369,12 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             Commands::Save { name, output } => {
                 let jail_name = resolve_jail_name(name).await?;
                 let config = JailConfig {
-                    name: jail_name,
+                    name: jail_name.clone(),
                     ..Default::default()
                 };
                 let json = serde_json::to_string_pretty(&config)?;
                 tokio::fs::write(&output, json).await?;
+                println!("✓ Configuration for jail '{}' saved to: {}", jail_name, output.display());
                 info!("Configuration saved to: {}", output.display());
             }
 
