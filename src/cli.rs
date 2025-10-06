@@ -334,6 +334,10 @@ pub enum Commands {
         /// Force upgrade without confirmation
         #[arg(short, long)]
         force: bool,
+
+        /// Upgrade all jails
+        #[arg(long)]
+        all: bool,
     },
 }
 
