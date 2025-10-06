@@ -21,6 +21,9 @@ pub trait JailBackend: Send + Sync {
 
     /// List all jail-ai containers (names starting with "jail-")
     async fn list_all(&self) -> Result<Vec<String>>;
+
+    /// Inspect jail and return its configuration
+    async fn inspect(&self, name: &str) -> Result<JailConfig>;
 }
 
 pub mod podman;

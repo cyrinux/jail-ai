@@ -41,6 +41,11 @@ impl JailManager {
     pub fn config(&self) -> &JailConfig {
         &self.config
     }
+
+    /// Inspect jail and retrieve its actual configuration from the backend
+    pub async fn inspect(&self) -> Result<JailConfig> {
+        self.backend.inspect(&self.config.name).await
+    }
 }
 
 /// Builder for creating jail configurations

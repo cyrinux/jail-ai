@@ -196,3 +196,4 @@ FZF keybindings:
 - Use conventional commits with emoji to distinguish commit types
 - Use `git add -p` for selective staging when appropriate
 - Auto-commit when it makes sense (completed features, fixed bugs, etc.)
+- you have to build before commit
