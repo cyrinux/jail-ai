@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     git \
     vim \
     nano \
+    helix \
     tree \
     file \
     less \
