@@ -323,6 +323,17 @@ pub enum Commands {
         args: Vec<String>,
     },
 
+    /// List all jails
+    List {
+        /// Show only jails for current directory
+        #[arg(short, long)]
+        current: bool,
+
+        /// Backend type to list (systemd-nspawn or podman, default: auto-detect)
+        #[arg(short, long)]
+        backend: Option<String>,
+    },
+
     /// Join an interactive shell in the jail for current directory
     Join {
         /// Shell to use (default: bash)
