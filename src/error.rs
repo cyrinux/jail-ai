@@ -17,6 +17,9 @@ pub enum JailError {
     #[error("Jail already exists: {0}")]
     AlreadyExists(String),
 
+    #[error("Jail not found: {0}")]
+    NotFound(String),
+
     #[error("Command execution failed: {0}")]
     ExecutionFailed(String),
 }

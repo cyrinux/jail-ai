@@ -368,10 +368,25 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
             Commands::Save { name, output } => {
                 let jail_name = resolve_jail_name(name).await?;
-                let config = JailConfig {
+
+                // Create a temporary jail manager to inspect the actual configuration
+                let temp_config = JailConfig {
                     name: jail_name.clone(),
                     ..Default::default()
                 };
+                let jail = jail::JailManager::new(temp_config);
+
+                // Check if jail exists
+                if !jail.exists().await? {
+                    return Err(error::JailError::NotFound(format!(
+                        "Jail '{}' does not exist",
+                        jail_name
+                    )));
+                }
+
+                // Inspect the jail to get its actual configuration
+                let config = jail.inspect().await?;
+
                 let json = serde_json::to_string_pretty(&config)?;
                 tokio::fs::write(&output, json).await?;
                 println!("✓ Configuration for jail '{}' saved to: {}", jail_name, output.display());

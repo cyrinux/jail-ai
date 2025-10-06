@@ -200,6 +200,39 @@ impl JailBackend for SystemdNspawnBackend {
         debug!("Found {} jail-ai machines", jails.len());
         Ok(jails)
     }
+
+    async fn inspect(&self, name: &str) -> Result<JailConfig> {
+        debug!("Inspecting systemd-nspawn jail: {}", name);
+
+        if !self.exists(name).await? {
+            return Err(JailError::NotFound(format!("Jail '{}' not found", name)));
+        }
+
+        // For systemd-nspawn, we cannot easily retrieve the full configuration
+        // from a running/stopped machine. We return a minimal config with the name
+        // and detected backend type. Users should maintain their own config files
+        // if they need to preserve full configurations.
+
+        // Try to read machine metadata if available
+        let machine_path = self.get_machine_path(name);
+
+        // Return minimal config - systemd-nspawn doesn't store runtime config in an easily parseable format
+        Ok(JailConfig {
+            name: name.to_string(),
+            backend: crate::config::BackendType::SystemdNspawn,
+            base_image: format!("<machine at {}>", machine_path.display()),
+            bind_mounts: Vec::new(),
+            environment: Vec::new(),
+            network: crate::config::NetworkConfig {
+                enabled: false,
+                private: true,
+            },
+            limits: crate::config::ResourceLimits {
+                memory_mb: None,
+                cpu_quota: None,
+            },
+        })
+    }
 }
 
 #[cfg(test)]

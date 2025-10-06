@@ -218,6 +218,107 @@ impl JailBackend for PodmanBackend {
         debug!("Found {} jail-ai containers", jails.len());
         Ok(jails)
     }
+
+    async fn inspect(&self, name: &str) -> Result<JailConfig> {
+        debug!("Inspecting jail: {}", name);
+
+        if !self.exists(name).await? {
+            return Err(JailError::NotFound(format!("Jail '{}' not found", name)));
+        }
+
+        let mut cmd = Command::new("podman");
+        cmd.arg("inspect").arg(name).arg("--format").arg("json");
+
+        let output = run_command(&mut cmd).await?;
+        let inspect_data: serde_json::Value = serde_json::from_str(&output)
+            .map_err(|e| JailError::Backend(format!("Failed to parse inspect output: {}", e)))?;
+
+        // Extract the first element if it's an array
+        let container = inspect_data
+            .as_array()
+            .and_then(|arr| arr.first())
+            .ok_or_else(|| JailError::Backend("Empty inspect output".to_string()))?;
+
+        // Extract configuration
+        let image = container["Config"]["Image"]
+            .as_str()
+            .unwrap_or(image::DEFAULT_IMAGE_NAME)
+            .to_string();
+
+        // Extract mounts
+        let mut bind_mounts = Vec::new();
+        if let Some(mounts) = container["Mounts"].as_array() {
+            for mount in mounts {
+                if mount["Type"].as_str() == Some("bind") {
+                    let source = mount["Source"].as_str().unwrap_or("").to_string();
+                    let destination = mount["Destination"].as_str().unwrap_or("").to_string();
+                    let readonly = mount["RW"].as_bool().map(|rw| !rw).unwrap_or(false);
+
+                    if !source.is_empty() && !destination.is_empty() {
+                        bind_mounts.push(crate::config::BindMount {
+                            source: source.into(),
+                            target: destination.into(),
+                            readonly,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Extract environment variables
+        let mut environment = Vec::new();
+        if let Some(env_array) = container["Config"]["Env"].as_array() {
+            for env in env_array {
+                if let Some(env_str) = env.as_str() {
+                    if let Some(pos) = env_str.find('=') {
+                        let key = env_str[..pos].to_string();
+                        let value = env_str[pos + 1..].to_string();
+                        // Skip system environment variables
+                        if !key.starts_with("PATH") && !key.starts_with("HOME") && key != "HOSTNAME" {
+                            environment.push((key, value));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract network settings
+        let network_mode = container["HostConfig"]["NetworkMode"]
+            .as_str()
+            .unwrap_or("default");
+        let network = crate::config::NetworkConfig {
+            enabled: network_mode != "none",
+            private: network_mode == "private" || network_mode == "slirp4netns",
+        };
+
+        // Extract resource limits
+        let memory_mb = container["HostConfig"]["Memory"]
+            .as_i64()
+            .filter(|&m| m > 0)
+            .map(|m| (m / 1024 / 1024) as u64);
+
+        let cpu_quota = container["HostConfig"]["CpuQuota"]
+            .as_i64()
+            .filter(|&q| q > 0)
+            .and_then(|quota| {
+                container["HostConfig"]["CpuPeriod"]
+                    .as_i64()
+                    .map(|period| ((quota as f64 / period as f64) * 100.0) as u32)
+            });
+
+        Ok(JailConfig {
+            name: name.to_string(),
+            backend: crate::config::BackendType::Podman,
+            base_image: image,
+            bind_mounts,
+            environment,
+            network,
+            limits: crate::config::ResourceLimits {
+                memory_mb,
+                cpu_quota,
+            },
+        })
+    }
 }
 
 #[cfg(test)]
