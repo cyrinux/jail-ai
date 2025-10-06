@@ -277,14 +277,36 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             }
                         }
 
-                        // Mount GPG configuration
+                        // Mount GPG configuration directory
                         let gpg_dir = home_path.join(".gnupg");
                         if gpg_dir.exists() {
                             info!(
                                 "Mounting GPG config {} to /home/agent/.gnupg",
                                 gpg_dir.display()
                             );
-                            builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
+                            builder = builder.bind_mount(&gpg_dir, "/home/agent/.gnupg", false);
+
+                            // Mount GPG agent sockets for YubiKey and smartcard support
+                            let sockets_to_mount = vec![
+                                ("S.gpg-agent", "GPG agent socket"),
+                                ("S.gpg-agent.extra", "GPG agent extra socket"),
+                                ("S.gpg-agent.browser", "GPG agent browser socket"),
+                                ("S.gpg-agent.ssh", "GPG agent SSH socket"),
+                            ];
+
+                            for (socket_name, description) in sockets_to_mount {
+                                let socket_path = gpg_dir.join(socket_name);
+                                if socket_path.exists() {
+                                    let target = format!("/home/agent/.gnupg/{}", socket_name);
+                                    info!(
+                                        "Mounting {} ({}) to {}",
+                                        description,
+                                        socket_path.display(),
+                                        target
+                                    );
+                                    builder = builder.bind_mount(socket_path, target, false);
+                                }
+                            }
                         }
                     }
 
@@ -1120,14 +1142,36 @@ async fn run_ai_agent_command(
                 }
             }
 
-            // Mount GPG configuration
+            // Mount GPG configuration directory
             let gpg_dir = home_path.join(".gnupg");
             if gpg_dir.exists() {
                 info!(
                     "Mounting GPG config {} to /home/agent/.gnupg",
                     gpg_dir.display()
                 );
-                builder = builder.bind_mount(gpg_dir, "/home/agent/.gnupg", false);
+                builder = builder.bind_mount(&gpg_dir, "/home/agent/.gnupg", false);
+
+                // Mount GPG agent sockets for YubiKey and smartcard support
+                let sockets_to_mount = vec![
+                    ("S.gpg-agent", "GPG agent socket"),
+                    ("S.gpg-agent.extra", "GPG agent extra socket"),
+                    ("S.gpg-agent.browser", "GPG agent browser socket"),
+                    ("S.gpg-agent.ssh", "GPG agent SSH socket"),
+                ];
+
+                for (socket_name, description) in sockets_to_mount {
+                    let socket_path = gpg_dir.join(socket_name);
+                    if socket_path.exists() {
+                        let target = format!("/home/agent/.gnupg/{}", socket_name);
+                        info!(
+                            "Mounting {} ({}) to {}",
+                            description,
+                            socket_path.display(),
+                            target
+                        );
+                        builder = builder.bind_mount(socket_path, target, false);
+                    }
+                }
             }
         }
 
