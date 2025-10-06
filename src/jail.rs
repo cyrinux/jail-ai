@@ -21,8 +21,8 @@ impl JailManager {
     }
 
     /// Remove the jail
-    pub async fn remove(&self) -> Result<()> {
-        self.backend.remove(&self.config.name).await
+    pub async fn remove(&self, remove_volume: bool) -> Result<()> {
+        self.backend.remove(&self.config.name, remove_volume).await
     }
 
     /// Execute a command in the jail

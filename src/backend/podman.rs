@@ -34,6 +34,11 @@ impl PodmanBackend {
             "--restart=always".to_string(),
         ];
 
+        // Persistent volume for /home/agent to preserve data across upgrades
+        let home_volume = format!("{}-home", config.name);
+        args.push("-v".to_string());
+        args.push(format!("{}:/home/agent", home_volume));
+
         // Network settings
         if !config.network.enabled {
             args.push("--network=none".to_string());
@@ -126,7 +131,7 @@ impl JailBackend for PodmanBackend {
         Ok(())
     }
 
-    async fn remove(&self, name: &str) -> Result<()> {
+    async fn remove(&self, name: &str, remove_volume: bool) -> Result<()> {
         info!("Removing podman jail: {}", name);
 
         // Remove container (with force flag to stop if running)
@@ -135,7 +140,20 @@ impl JailBackend for PodmanBackend {
 
         run_command(&mut cmd).await?;
 
-        info!("Jail {} removed", name);
+        if remove_volume {
+            // Remove associated home volume
+            let home_volume = format!("{}-home", name);
+            let mut vol_cmd = Command::new("podman");
+            vol_cmd.arg("volume").arg("rm").arg(&home_volume);
+
+            // Ignore errors if volume doesn't exist
+            let _ = run_command(&mut vol_cmd).await;
+
+            info!("Jail {} removed (including volume {})", name, home_volume);
+        } else {
+            info!("Jail {} removed", name);
+        }
+
         Ok(())
     }
 
@@ -353,6 +371,8 @@ mod tests {
         assert!(args.contains(&"512m".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"TEST=value".to_string()));
+        // Verify persistent home volume is included
+        assert!(args.contains(&"test-jail-home:/home/agent".to_string()));
     }
 
     #[test]
