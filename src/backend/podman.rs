@@ -1,6 +1,7 @@
 use super::{run_command, JailBackend};
 use crate::config::JailConfig;
 use crate::error::{JailError, Result};
+use crate::image;
 use async_trait::async_trait;
 use tokio::process::Command;
 use tracing::{debug, info};
@@ -93,19 +94,24 @@ impl JailBackend for PodmanBackend {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
-        // Check if image exists locally, if not pull it
-        let image_exists = self.image_exists(&config.base_image).await?;
-
-        if !image_exists {
-            debug!("Image {} not found locally, pulling...", config.base_image);
-            let mut pull_cmd = Command::new("podman");
-            pull_cmd.arg("pull").arg(&config.base_image);
-
-            run_command(&mut pull_cmd)
-                .await
-                .map_err(|e| JailError::Backend(format!("Failed to pull image: {}", e)))?;
+        // Ensure image is available (build if default image, pull if custom)
+        if config.base_image == image::DEFAULT_IMAGE_NAME {
+            // For default image, use our automatic build system
+            image::ensure_image_available(&config.base_image).await?;
         } else {
-            debug!("Using local image: {}", config.base_image);
+            // For custom images, check if they exist and pull if needed
+            let image_exists = self.image_exists(&config.base_image).await?;
+            if !image_exists {
+                debug!("Image {} not found locally, pulling...", config.base_image);
+                let mut pull_cmd = Command::new("podman");
+                pull_cmd.arg("pull").arg(&config.base_image);
+
+                run_command(&mut pull_cmd)
+                    .await
+                    .map_err(|e| JailError::Backend(format!("Failed to pull image: {}", e)))?;
+            } else {
+                debug!("Using local image: {}", config.base_image);
+            }
         }
 
         // Create and start the container

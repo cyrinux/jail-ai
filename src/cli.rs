@@ -2,6 +2,9 @@ use clap::{Parser, Subcommand};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
+/// Default image name
+pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
+
 #[derive(Parser, Debug)]
 #[command(name = "jail-ai")]
 #[command(about = "AI Agent Jail Manager - Sandbox AI agents using systemd-nspawn or podman", long_about = None)]
@@ -26,7 +29,7 @@ pub enum Commands {
         backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        #[arg(short, long, default_value = DEFAULT_IMAGE)]
         image: String,
 
         /// Bind mount (format: source:target[:ro])
@@ -141,7 +144,7 @@ pub enum Commands {
         backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        #[arg(short, long, default_value = DEFAULT_IMAGE)]
         image: String,
 
         /// Bind mount (format: source:target[:ro])
@@ -204,7 +207,7 @@ pub enum Commands {
         backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        #[arg(short, long, default_value = DEFAULT_IMAGE)]
         image: String,
 
         /// Bind mount (format: source:target[:ro])
@@ -267,7 +270,7 @@ pub enum Commands {
         backend: Option<String>,
 
         /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = "localhost/jail-ai-env:latest")]
+        #[arg(short, long, default_value = DEFAULT_IMAGE)]
         image: String,
 
         /// Bind mount (format: source:target[:ro])

@@ -1,3 +1,4 @@
+use crate::image;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -68,13 +69,10 @@ impl BackendType {
 
     /// Get all available backends on the system
     pub fn all_available() -> Vec<Self> {
-        vec![
-            BackendType::Podman,
-            BackendType::SystemdNspawn,
-        ]
-        .into_iter()
-        .filter(|b| b.is_available())
-        .collect()
+        vec![BackendType::Podman, BackendType::SystemdNspawn]
+            .into_iter()
+            .filter(|b| b.is_available())
+            .collect()
     }
 
     /// Detect which backend is available on the system.
@@ -84,10 +82,7 @@ impl BackendType {
         use tracing::debug;
 
         // Check backends in order of preference
-        for backend in [
-            BackendType::Podman,
-            BackendType::SystemdNspawn,
-        ] {
+        for backend in [BackendType::Podman, BackendType::SystemdNspawn] {
             if backend.is_available() {
                 debug!("Detected backend: {:?}", backend);
                 return backend;
@@ -105,7 +100,7 @@ impl Default for JailConfig {
         Self {
             name: String::from("ai-agent"),
             backend: BackendType::detect(),
-            base_image: String::from("localhost/jail-ai-env:latest"),
+            base_image: String::from(image::DEFAULT_IMAGE_NAME),
             bind_mounts: Vec::new(),
             environment: Vec::new(),
             network: NetworkConfig {
