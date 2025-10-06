@@ -33,6 +33,77 @@ fn get_containerfile_hash_path() -> PathBuf {
     get_config_dir().join(".containerfile.sha256")
 }
 
+/// Calculate SHA256 hash of a string
+fn calculate_string_hash(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let result = hasher.finalize();
+
+    format!("{:x}", result)
+}
+
+/// Show diff between two text contents with context
+fn show_diff(old_content: &str, new_content: &str) {
+    use similar::{ChangeTag, TextDiff};
+    use std::io::{self, Write};
+
+    // ANSI color codes
+    const RED: &str = "\x1b[31m";
+    const GREEN: &str = "\x1b[32m";
+    const RESET: &str = "\x1b[0m";
+
+    println!("\n--- Current Containerfile (in config)");
+    println!("+++ New Containerfile (from project)");
+
+    let diff = TextDiff::from_lines(old_content, new_content);
+
+    for (idx, group) in diff.grouped_ops(5).iter().enumerate() {
+        if idx > 0 {
+            println!("  ...");
+        }
+
+        for op in group {
+            for change in diff.iter_changes(op) {
+                let prefix = match change.tag() {
+                    ChangeTag::Delete => "-",
+                    ChangeTag::Insert => "+",
+                    ChangeTag::Equal => " ",
+                };
+
+                let color = match change.tag() {
+                    ChangeTag::Delete => RED,
+                    ChangeTag::Insert => GREEN,
+                    ChangeTag::Equal => "",
+                };
+
+                print!("{}{}{}", color, prefix, change);
+                if !change.value().ends_with('\n') {
+                    println!();
+                }
+                print!("{}", RESET);
+            }
+        }
+    }
+
+    println!();
+    io::stdout().flush().unwrap();
+}
+
+/// Prompt user for yes/no input
+fn prompt_user(message: &str) -> bool {
+    use std::io::{self, Write};
+
+    print!("{} [y/N]: ", message);
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+
+    matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+}
+
 /// Ensure the config directory exists and contains a Containerfile
 async fn ensure_containerfile_exists() -> Result<PathBuf> {
     let config_dir = get_config_dir();
@@ -46,8 +117,53 @@ async fn ensure_containerfile_exists() -> Result<PathBuf> {
             .map_err(|e| JailError::Backend(format!("Failed to create config directory: {}", e)))?;
     }
 
-    // Write embedded Containerfile if it doesn't exist
-    if !containerfile_path.exists() {
+    // Calculate embedded Containerfile hash
+    let embedded_hash = calculate_string_hash(EMBEDDED_CONTAINERFILE);
+
+    // Check if user's Containerfile exists and differs from embedded one
+    if containerfile_path.exists() {
+        let user_hash = calculate_file_hash(&containerfile_path).await?;
+
+        if user_hash != embedded_hash {
+            debug!("User Containerfile hash ({}) differs from embedded hash ({})", user_hash, embedded_hash);
+
+            // Read user's Containerfile for diff display
+            let user_content = tokio::fs::read_to_string(&containerfile_path)
+                .await
+                .map_err(|e| JailError::Backend(format!("Failed to read user Containerfile: {}", e)))?;
+
+            // Show diff between user's and embedded Containerfile
+            show_diff(&user_content, EMBEDDED_CONTAINERFILE);
+
+            // Prompt user to replace
+            if prompt_user("Containerfile in project changed, want to replace your own one?") {
+                info!("Replacing user Containerfile with updated version");
+                tokio::fs::remove_file(&containerfile_path)
+                    .await
+                    .map_err(|e| JailError::Backend(format!("Failed to remove old Containerfile: {}", e)))?;
+
+                // Also remove the hash cache to trigger rebuild
+                let hash_path = get_containerfile_hash_path();
+                if hash_path.exists() {
+                    tokio::fs::remove_file(&hash_path)
+                        .await
+                        .map_err(|e| JailError::Backend(format!("Failed to remove hash cache: {}", e)))?;
+                }
+
+                // Write new Containerfile
+                tokio::fs::write(&containerfile_path, EMBEDDED_CONTAINERFILE)
+                    .await
+                    .map_err(|e| JailError::Backend(format!("Failed to write Containerfile: {}", e)))?;
+
+                info!("Containerfile updated at {}", containerfile_path.display());
+            } else {
+                info!("Keeping existing Containerfile");
+            }
+        } else {
+            debug!("User Containerfile matches embedded version");
+        }
+    } else {
+        // Write embedded Containerfile if it doesn't exist
         info!(
             "Writing default Containerfile to {}",
             containerfile_path.display()
