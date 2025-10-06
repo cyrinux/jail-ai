@@ -230,53 +230,19 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 false,
                             );
                         } else {
-                            // If no local git config, read from project's git config (or global as fallback)
-                            if let Ok(git_name) = std::process::Command::new("git")
-                                .current_dir(&cwd)
-                                .args(["config", "user.name"])
-                                .output()
-                            {
-                                if git_name.status.success() {
-                                    let name = String::from_utf8_lossy(&git_name.stdout)
-                                        .trim()
-                                        .to_string();
-                                    if !name.is_empty() {
-                                        builder = builder.env("GIT_AUTHOR_NAME", &name);
-                                        builder = builder.env("GIT_COMMITTER_NAME", &name);
-                                    }
-                                }
+                            // If no local git config, read from project/global/system config (with fallback)
+                            if let Some(name) = get_git_config("user.name", &cwd) {
+                                builder = builder.env("GIT_AUTHOR_NAME", &name);
+                                builder = builder.env("GIT_COMMITTER_NAME", &name);
                             }
 
-                            if let Ok(git_email) = std::process::Command::new("git")
-                                .current_dir(&cwd)
-                                .args(["config", "user.email"])
-                                .output()
-                            {
-                                if git_email.status.success() {
-                                    let email = String::from_utf8_lossy(&git_email.stdout)
-                                        .trim()
-                                        .to_string();
-                                    if !email.is_empty() {
-                                        builder = builder.env("GIT_AUTHOR_EMAIL", &email);
-                                        builder = builder.env("GIT_COMMITTER_EMAIL", &email);
-                                    }
-                                }
+                            if let Some(email) = get_git_config("user.email", &cwd) {
+                                builder = builder.env("GIT_AUTHOR_EMAIL", &email);
+                                builder = builder.env("GIT_COMMITTER_EMAIL", &email);
                             }
 
-                            if let Ok(git_signing_key) = std::process::Command::new("git")
-                                .current_dir(&cwd)
-                                .args(["config", "user.signingkey"])
-                                .output()
-                            {
-                                if git_signing_key.status.success() {
-                                    let signing_key =
-                                        String::from_utf8_lossy(&git_signing_key.stdout)
-                                            .trim()
-                                            .to_string();
-                                    if !signing_key.is_empty() {
-                                        builder = builder.env("GIT_SIGNING_KEY", &signing_key);
-                                    }
-                                }
+                            if let Some(signing_key) = get_git_config("user.signingkey", &cwd) {
+                                builder = builder.env("GIT_SIGNING_KEY", &signing_key);
                             }
                         }
 
@@ -755,6 +721,44 @@ fn get_git_root() -> Option<PathBuf> {
         }
     }
 
+    None
+}
+
+/// Get git config value with fallback to system config
+/// First tries project/global config, then falls back to system config
+fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
+    use tracing::debug;
+
+    // Try project/global config first
+    if let Ok(output) = std::process::Command::new("git")
+        .current_dir(cwd)
+        .args(["config", key])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                debug!("Found {} in project/global config: {}", key, value);
+                return Some(value);
+            }
+        }
+    }
+
+    // Fallback to system config
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["config", "--system", key])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                debug!("Found {} in system config: {}", key, value);
+                return Some(value);
+            }
+        }
+    }
+
+    debug!("No value found for {} in any git config", key);
     None
 }
 
@@ -1337,50 +1341,19 @@ async fn run_ai_agent_command(
                 );
                 builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
             } else {
-                // If no local git config, read from project's git config (or global as fallback)
-                if let Ok(git_name) = std::process::Command::new("git")
-                    .current_dir(&cwd)
-                    .args(["config", "user.name"])
-                    .output()
-                {
-                    if git_name.status.success() {
-                        let name = String::from_utf8_lossy(&git_name.stdout).trim().to_string();
-                        if !name.is_empty() {
-                            builder = builder.env("GIT_AUTHOR_NAME", &name);
-                            builder = builder.env("GIT_COMMITTER_NAME", &name);
-                        }
-                    }
+                // If no local git config, read from project/global/system config (with fallback)
+                if let Some(name) = get_git_config("user.name", &cwd) {
+                    builder = builder.env("GIT_AUTHOR_NAME", &name);
+                    builder = builder.env("GIT_COMMITTER_NAME", &name);
                 }
 
-                if let Ok(git_email) = std::process::Command::new("git")
-                    .current_dir(&cwd)
-                    .args(["config", "user.email"])
-                    .output()
-                {
-                    if git_email.status.success() {
-                        let email = String::from_utf8_lossy(&git_email.stdout)
-                            .trim()
-                            .to_string();
-                        if !email.is_empty() {
-                            builder = builder.env("GIT_AUTHOR_EMAIL", &email);
-                            builder = builder.env("GIT_COMMITTER_EMAIL", &email);
-                        }
-                    }
+                if let Some(email) = get_git_config("user.email", &cwd) {
+                    builder = builder.env("GIT_AUTHOR_EMAIL", &email);
+                    builder = builder.env("GIT_COMMITTER_EMAIL", &email);
                 }
 
-                if let Ok(git_signing_key) = std::process::Command::new("git")
-                    .current_dir(&cwd)
-                    .args(["config", "user.signingkey"])
-                    .output()
-                {
-                    if git_signing_key.status.success() {
-                        let signing_key = String::from_utf8_lossy(&git_signing_key.stdout)
-                            .trim()
-                            .to_string();
-                        if !signing_key.is_empty() {
-                            builder = builder.env("GIT_SIGNING_KEY", &signing_key);
-                        }
-                    }
+                if let Some(signing_key) = get_git_config("user.signingkey", &cwd) {
+                    builder = builder.env("GIT_SIGNING_KEY", &signing_key);
                 }
             }
 
