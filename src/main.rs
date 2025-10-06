@@ -277,34 +277,33 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             }
                         }
 
-                        // Mount GPG configuration directory
+                        // Prepare and mount GPG configuration directory
                         let gpg_dir = home_path.join(".gnupg");
                         if gpg_dir.exists() {
-                            info!(
-                                "Mounting GPG config {} to /home/agent/.gnupg",
-                                gpg_dir.display()
-                            );
-                            builder = builder.bind_mount(&gpg_dir, "/home/agent/.gnupg", false);
-
-                            // Mount GPG agent sockets for YubiKey and smartcard support
-                            let sockets_to_mount = vec![
-                                ("S.gpg-agent", "GPG agent socket"),
-                                ("S.gpg-agent.extra", "GPG agent extra socket"),
-                                ("S.gpg-agent.browser", "GPG agent browser socket"),
-                                ("S.gpg-agent.ssh", "GPG agent SSH socket"),
-                            ];
-
-                            for (socket_name, description) in sockets_to_mount {
-                                let socket_path = gpg_dir.join(socket_name);
-                                if socket_path.exists() {
-                                    let target = format!("/home/agent/.gnupg/{}", socket_name);
+                            match prepare_gpg_config(&gpg_dir) {
+                                Ok((temp_gpg_dir, sockets)) => {
                                     info!(
-                                        "Mounting {} ({}) to {}",
-                                        description,
-                                        socket_path.display(),
-                                        target
+                                        "Mounting prepared GPG config {} to /home/agent/.gnupg",
+                                        temp_gpg_dir.display()
                                     );
-                                    builder = builder.bind_mount(socket_path, target, false);
+                                    builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
+
+                                    // Mount GPG agent sockets for YubiKey and smartcard support
+                                    for socket_path in sockets {
+                                        if let Some(socket_name) = socket_path.file_name() {
+                                            let socket_name_str = socket_name.to_string_lossy();
+                                            let target = format!("/home/agent/.gnupg/{}", socket_name_str);
+                                            info!(
+                                                "Mounting GPG socket {} to {}",
+                                                socket_path.display(),
+                                                target
+                                            );
+                                            builder = builder.bind_mount(socket_path, target, false);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to prepare GPG config: {}", e);
                                 }
                             }
                         }
@@ -803,6 +802,124 @@ async fn create_claude_json_in_container(home_path: &std::path::Path, jail: &jai
     Ok(())
 }
 
+/// Prepare GPG configuration by resolving symlinks and copying to a temporary directory
+/// This handles NixOS where config files are symlinks to /nix/store
+/// Returns (temp_dir_path, sockets_to_mount) where sockets need to be mounted separately
+fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::PathBuf, Vec<std::path::PathBuf>)> {
+    use std::os::unix::fs::FileTypeExt;
+    use tracing::debug;
+
+    if !gpg_dir.exists() {
+        return Err(error::JailError::Config(format!("GPG directory does not exist: {}", gpg_dir.display())));
+    }
+
+    // Create a temporary directory for GPG config
+    let temp_dir = std::env::temp_dir().join(format!("jail-ai-gpg-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir)?;
+    debug!("Created temporary GPG config directory: {}", temp_dir.display());
+
+    let mut sockets = Vec::new();
+
+    // Iterate through all entries in ~/.gnupg
+    for entry in std::fs::read_dir(gpg_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let file_name_str = file_name.to_string_lossy();
+
+        // Skip directories (private-keys-v1.d, crls.d, public-keys.d)
+        if path.is_dir() {
+            debug!("Skipping directory: {}", file_name_str);
+            continue;
+        }
+
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let file_type = metadata.file_type();
+
+        // Socket files need to be mounted directly, not copied
+        if file_type.is_socket() {
+            debug!("Found socket: {}", file_name_str);
+            sockets.push(path.clone());
+            continue;
+        }
+
+        // For regular files and symlinks, resolve and copy the content
+        if file_type.is_file() || file_type.is_symlink() {
+            let target_path = temp_dir.join(&file_name);
+
+            if file_type.is_symlink() {
+                // Resolve symlink and copy the actual file content
+                debug!("Resolving symlink: {} -> {:?}", file_name_str, std::fs::read_link(&path)?);
+                let content = std::fs::read(&path)?;
+                std::fs::write(&target_path, content)?;
+                debug!("Copied resolved symlink {} to temp dir", file_name_str);
+            } else {
+                // Copy regular file
+                std::fs::copy(&path, &target_path)?;
+                debug!("Copied file {} to temp dir", file_name_str);
+            }
+
+            // Preserve permissions
+            #[cfg(unix)]
+            {
+                let perms = std::fs::metadata(&path)?.permissions();
+                std::fs::set_permissions(&target_path, perms)?;
+            }
+        }
+    }
+
+    // Copy directories (private-keys-v1.d, crls.d, public-keys.d)
+    for dir_name in &["private-keys-v1.d", "crls.d", "public-keys.d"] {
+        let src_dir = gpg_dir.join(dir_name);
+        if src_dir.exists() && src_dir.is_dir() {
+            let dst_dir = temp_dir.join(dir_name);
+            std::fs::create_dir_all(&dst_dir)?;
+            debug!("Copying directory: {}", dir_name);
+
+            copy_dir_recursive(&src_dir, &dst_dir)?;
+        }
+    }
+
+    info!("Prepared GPG config in temporary directory: {}", temp_dir.display());
+    Ok((temp_dir, sockets))
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> error::Result<()> {
+    use tracing::debug;
+
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let dst_path = dst.join(&file_name);
+
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let file_type = metadata.file_type();
+
+        if file_type.is_dir() {
+            std::fs::create_dir_all(&dst_path)?;
+            copy_dir_recursive(&path, &dst_path)?;
+        } else if file_type.is_file() || file_type.is_symlink() {
+            // Resolve symlinks and copy content
+            let content = std::fs::read(&path)?;
+            std::fs::write(&dst_path, content)?;
+
+            // Preserve permissions
+            #[cfg(unix)]
+            {
+                let perms = std::fs::metadata(&path)?.permissions();
+                std::fs::set_permissions(&dst_path, perms)?;
+            }
+
+            debug!("Copied {} to {}", path.display(), dst_path.display());
+        }
+        // Skip sockets and other special files in subdirectories
+    }
+
+    Ok(())
+}
+
 /// Get the host's timezone
 fn get_host_timezone() -> Option<String> {
     // Try TZ environment variable first
@@ -1142,34 +1259,33 @@ async fn run_ai_agent_command(
                 }
             }
 
-            // Mount GPG configuration directory
+            // Prepare and mount GPG configuration directory
             let gpg_dir = home_path.join(".gnupg");
             if gpg_dir.exists() {
-                info!(
-                    "Mounting GPG config {} to /home/agent/.gnupg",
-                    gpg_dir.display()
-                );
-                builder = builder.bind_mount(&gpg_dir, "/home/agent/.gnupg", false);
-
-                // Mount GPG agent sockets for YubiKey and smartcard support
-                let sockets_to_mount = vec![
-                    ("S.gpg-agent", "GPG agent socket"),
-                    ("S.gpg-agent.extra", "GPG agent extra socket"),
-                    ("S.gpg-agent.browser", "GPG agent browser socket"),
-                    ("S.gpg-agent.ssh", "GPG agent SSH socket"),
-                ];
-
-                for (socket_name, description) in sockets_to_mount {
-                    let socket_path = gpg_dir.join(socket_name);
-                    if socket_path.exists() {
-                        let target = format!("/home/agent/.gnupg/{}", socket_name);
+                match prepare_gpg_config(&gpg_dir) {
+                    Ok((temp_gpg_dir, sockets)) => {
                         info!(
-                            "Mounting {} ({}) to {}",
-                            description,
-                            socket_path.display(),
-                            target
+                            "Mounting prepared GPG config {} to /home/agent/.gnupg",
+                            temp_gpg_dir.display()
                         );
-                        builder = builder.bind_mount(socket_path, target, false);
+                        builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
+
+                        // Mount GPG agent sockets for YubiKey and smartcard support
+                        for socket_path in sockets {
+                            if let Some(socket_name) = socket_path.file_name() {
+                                let socket_name_str = socket_name.to_string_lossy();
+                                let target = format!("/home/agent/.gnupg/{}", socket_name_str);
+                                info!(
+                                    "Mounting GPG socket {} to {}",
+                                    socket_path.display(),
+                                    target
+                                );
+                                builder = builder.bind_mount(socket_path, target, false);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to prepare GPG config: {}", e);
                     }
                 }
             }
