@@ -93,6 +93,10 @@ pub enum Commands {
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
+
+        /// Remove associated volume (persistent data)
+        #[arg(short, long)]
+        volume: bool,
     },
 
     /// Show jail status
@@ -320,6 +324,10 @@ pub enum Commands {
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
+
+        /// Remove associated volumes (persistent data)
+        #[arg(short, long)]
+        volume: bool,
     },
 
     /// Upgrade jail by recreating it with the latest image

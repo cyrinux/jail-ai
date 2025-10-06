@@ -11,7 +11,7 @@ pub trait JailBackend: Send + Sync {
     async fn create(&self, config: &JailConfig) -> Result<()>;
 
     /// Remove the jail
-    async fn remove(&self, name: &str) -> Result<()>;
+    async fn remove(&self, name: &str, remove_volume: bool) -> Result<()>;
 
     /// Execute a command inside the jail
     async fn exec(&self, name: &str, command: &[String], interactive: bool) -> Result<String>;

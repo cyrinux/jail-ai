@@ -349,7 +349,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Jail created: {}", jail.config().name);
             }
 
-            Commands::Remove { name, force } => {
+            Commands::Remove { name, force, volume } => {
                 let jail_name = resolve_jail_name(name).await?;
 
                 if !force {
@@ -370,7 +370,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
-                jail.remove().await?;
+                jail.remove(volume).await?;
 
                 info!("Jail removed: {}", jail_name);
             }
@@ -599,7 +599,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 }
             }
 
-            Commands::CleanAll { backend, force } => {
+            Commands::CleanAll { backend, force, volume } => {
                 // Determine which backends to clean
                 let backends = if let Some(backend_str) = backend {
                     vec![Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?]
@@ -670,7 +670,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         };
                         let jail = jail::JailManager::new(config);
 
-                        if let Err(e) = jail.remove().await {
+                        if let Err(e) = jail.remove(volume).await {
                             error!("Failed to remove jail {}: {}", jail_name, e);
                         } else {
                             info!("Successfully removed jail: {}", jail_name);
@@ -1514,9 +1514,9 @@ async fn upgrade_single_jail(
 
     info!("Upgrading jail '{}'...", jail_name);
 
-    // Remove the old jail
+    // Remove the old jail (keep volume to preserve data)
     info!("Removing old jail...");
-    temp_jail.remove().await?;
+    temp_jail.remove(false).await?;
     info!("Old jail removed");
 
     // Create a new jail with the updated image but same configuration

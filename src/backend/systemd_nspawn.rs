@@ -112,7 +112,7 @@ impl JailBackend for SystemdNspawnBackend {
         Ok(())
     }
 
-    async fn remove(&self, name: &str) -> Result<()> {
+    async fn remove(&self, name: &str, _remove_volume: bool) -> Result<()> {
         info!("Removing systemd-nspawn jail: {}", name);
 
         // Try to terminate if running (ignore errors if not running)
