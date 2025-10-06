@@ -287,29 +287,33 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Start { name } => {
+                let jail_name = resolve_jail_name(name)?;
                 let config = JailConfig {
-                    name: name.clone(),
+                    name: jail_name.clone(),
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
                 jail.start().await?;
-                info!("Jail started: {}", name);
+                info!("Jail started: {}", jail_name);
             }
 
             Commands::Stop { name } => {
+                let jail_name = resolve_jail_name(name)?;
                 let config = JailConfig {
-                    name: name.clone(),
+                    name: jail_name.clone(),
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
                 jail.stop().await?;
-                info!("Jail stopped: {}", name);
+                info!("Jail stopped: {}", jail_name);
             }
 
             Commands::Remove { name, force } => {
+                let jail_name = resolve_jail_name(name)?;
+
                 if !force {
                     use std::io::{self, BufRead, Write};
-                    print!("Remove jail '{}'? [y/N] ", name);
+                    print!("Remove jail '{}'? [y/N] ", jail_name);
                     io::stdout().flush()?;
                     let stdin = io::stdin();
                     let mut line = String::new();
@@ -321,12 +325,12 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 }
 
                 let config = JailConfig {
-                    name: name.clone(),
+                    name: jail_name.clone(),
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
                 jail.remove().await?;
-                info!("Jail removed: {}", name);
+                info!("Jail removed: {}", jail_name);
             }
 
             Commands::Exec {
@@ -338,8 +342,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     return Err(error::JailError::Config("No command specified".to_string()));
                 }
 
+                let jail_name = resolve_jail_name(name)?;
                 let config = JailConfig {
-                    name: name.clone(),
+                    name: jail_name,
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
@@ -352,22 +357,24 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Status { name } => {
+                let jail_name = resolve_jail_name(name)?;
                 let config = JailConfig {
-                    name: name.clone(),
+                    name: jail_name.clone(),
                     ..Default::default()
                 };
                 let jail = jail::JailManager::new(config);
                 let exists = jail.exists().await?;
                 if exists {
-                    info!("Jail '{}' exists", name);
+                    info!("Jail '{}' exists", jail_name);
                 } else {
-                    info!("Jail '{}' does not exist", name);
+                    info!("Jail '{}' does not exist", jail_name);
                 }
             }
 
             Commands::Save { name, output } => {
+                let jail_name = resolve_jail_name(name)?;
                 let config = JailConfig {
-                    name,
+                    name: jail_name,
                     ..Default::default()
                 };
                 let json = serde_json::to_string_pretty(&config)?;
@@ -554,13 +561,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Join { shell } => {
-                let cwd = std::env::current_dir()?;
-                let jail_name = cli::Commands::generate_jail_name(&cwd);
+                let jail_name = auto_detect_jail_name()?;
 
                 info!(
-                    "Joining jail: {} for directory: {}",
-                    jail_name,
-                    cwd.display()
+                    "Joining jail: {}",
+                    jail_name
                 );
 
                 // Check if jail exists
@@ -670,6 +675,27 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
     }
 
     Ok(())
+}
+
+/// Auto-detect jail name from current directory (or git root if available)
+fn auto_detect_jail_name() -> error::Result<String> {
+    let cwd = std::env::current_dir()?;
+    let workspace_dir = get_git_root().unwrap_or(cwd);
+    let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
+    info!(
+        "Auto-detected jail name from workspace: {}",
+        jail_name
+    );
+    Ok(jail_name)
+}
+
+/// Resolve jail name: use provided name or auto-detect from current directory
+fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
+    if let Some(name) = name {
+        Ok(name)
+    } else {
+        auto_detect_jail_name()
+    }
 }
 
 /// Get the git root directory if the current directory is within a git repository
@@ -877,12 +903,11 @@ async fn run_ai_agent_command(
     params: AgentCommandParams,
 ) -> error::Result<()> {
     let cwd = std::env::current_dir()?;
-    let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-    let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+    let base_name = auto_detect_jail_name()?;
     let agent_suffix = cli::Commands::sanitize_jail_name(agent_command);
     let jail_name = format!("{}-{}", base_name, agent_suffix);
 
-    info!("Using jail: {} for agent: {} in workspace: {}", jail_name, agent_command, workspace_dir.display());
+    info!("Using jail: {} for agent: {}", jail_name, agent_command);
 
     // Create jail if it doesn't exist
     let temp_config = JailConfig {

@@ -84,20 +84,20 @@ pub enum Commands {
 
     /// Start a jail
     Start {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
     },
 
     /// Stop a jail
     Stop {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
     },
 
     /// Remove a jail
     Remove {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
 
         /// Force removal without confirmation
         #[arg(short, long)]
@@ -106,8 +106,8 @@ pub enum Commands {
 
     /// Execute a command in a jail
     Exec {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
 
         /// Run in interactive mode with TTY (default: true, use --no-interactive to disable)
         #[arg(short, long, default_value_t = true, action = clap::ArgAction::Set)]
@@ -120,14 +120,14 @@ pub enum Commands {
 
     /// Show jail status
     Status {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
     },
 
     /// Save jail configuration to file
     Save {
-        /// Name of the jail
-        name: String,
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
 
         /// Output file path
         #[arg(short, long)]
