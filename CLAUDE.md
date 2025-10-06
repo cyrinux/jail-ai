@@ -121,7 +121,7 @@ The `localhost/jail-ai-env:latest` image includes:
 - **Search**: ripgrep, fd-find
 - **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3
 - **Build tools**: gcc, make, pkg-config
-- **Utilities**: git, vim, nano, jq, tree, tmux, htop, gh (GitHub CLI)
+- **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest
 - **Rust tools**: clippy, rustfmt
 - **AI Coding Agents**:
@@ -165,10 +165,10 @@ When `--git-gpg` flag is used, jail-ai will:
 
 **Git Configuration:**
 1. **Local Git Config**: If a `.git/config` file exists in the current directory, it will be mounted to `/home/agent/.gitconfig` in the jail
-2. **Global Git Config Fallback**: If no local git config exists, it will read your global git configuration and set environment variables:
-   - `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` from `git config --global user.name`
-   - `GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL` from `git config --global user.email`
-   - `GIT_SIGNING_KEY` from `git config --global user.signingkey`
+2. **Project Git Config Fallback**: If no local git config file exists, it will read your project's git configuration (or global as fallback) and set environment variables:
+   - `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` from `git config user.name` (project config or global)
+   - `GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL` from `git config user.email` (project config or global)
+   - `GIT_SIGNING_KEY` from `git config user.signingkey` (project config or global)
 
 **GPG Configuration:**
 - Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
