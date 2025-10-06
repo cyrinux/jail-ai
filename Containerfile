@@ -53,6 +53,10 @@ RUN apt-get update && apt-get install -y \
     # Shell enhancements
     zsh \
     fonts-powerline \
+    # Terminal info
+    ncurses-term \
+    kitty-terminfo \
+    foot-terminfo \
     && rm -rf /var/lib/apt/lists/*
 
 # Create agent user with configurable UID/GID
