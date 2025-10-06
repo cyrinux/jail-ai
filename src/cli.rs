@@ -313,9 +313,9 @@ pub enum Commands {
 
     /// Join an interactive shell in the jail for current directory
     Join {
-        /// Shell to use (default: bash)
-        #[arg(short, long, default_value = "bash")]
-        shell: String,
+        /// Shell to use (auto-detects, tries zsh first, then bash)
+        #[arg(short, long)]
+        shell: Option<String>,
     },
 
     /// Stop and remove all jail-ai containers
