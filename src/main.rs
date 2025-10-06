@@ -802,9 +802,24 @@ async fn create_claude_json_in_container(home_path: &std::path::Path, jail: &jai
     Ok(())
 }
 
-/// Prepare GPG configuration by resolving symlinks and copying to a temporary directory
+/// Get the jail-ai config directory path (XDG_CONFIG_HOME or ~/.config/jail-ai)
+fn get_jail_ai_config_dir() -> error::Result<PathBuf> {
+    let base_dir = if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(config_home)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config")
+    } else {
+        return Err(error::JailError::Config(
+            "Could not determine config directory (HOME not set)".to_string(),
+        ));
+    };
+
+    Ok(base_dir.join("jail-ai"))
+}
+
+/// Prepare GPG configuration by resolving symlinks and copying to a persistent directory
 /// This handles NixOS where config files are symlinks to /nix/store
-/// Returns (temp_dir_path, sockets_to_mount) where sockets need to be mounted separately
+/// Returns (persistent_dir_path, sockets_to_mount) where sockets need to be mounted separately
 fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::PathBuf, Vec<std::path::PathBuf>)> {
     use std::os::unix::fs::FileTypeExt;
     use tracing::debug;
@@ -813,10 +828,26 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
         return Err(error::JailError::Config(format!("GPG directory does not exist: {}", gpg_dir.display())));
     }
 
-    // Create a temporary directory for GPG config
-    let temp_dir = std::env::temp_dir().join(format!("jail-ai-gpg-{}", std::process::id()));
-    std::fs::create_dir_all(&temp_dir)?;
-    debug!("Created temporary GPG config directory: {}", temp_dir.display());
+    // Create a persistent directory for GPG config in ~/.config/jail-ai/gpg-cache
+    let cache_dir = get_jail_ai_config_dir()?.join("gpg-cache");
+    std::fs::create_dir_all(&cache_dir)?;
+
+    // Create a unique directory based on the source GPG directory path
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(gpg_dir.to_string_lossy().as_bytes());
+    let hash = hex::encode(hasher.finalize());
+    let persistent_dir = cache_dir.join(&hash[..16]);
+
+    // Remove old cache if it exists to ensure fresh config
+    if persistent_dir.exists() {
+        debug!("Removing old GPG cache: {}", persistent_dir.display());
+        std::fs::remove_dir_all(&persistent_dir)?;
+    }
+
+    std::fs::create_dir_all(&persistent_dir)?;
+    info!("Preparing GPG config in cache directory: {}", persistent_dir.display());
+    debug!("Source GPG directory: {}", gpg_dir.display());
 
     let mut sockets = Vec::new();
 
@@ -843,20 +874,28 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
             continue;
         }
 
+        // Skip gpg-agent.conf from the host - we'll generate our own
+        if file_name_str == "gpg-agent.conf" {
+            debug!("Skipping host gpg-agent.conf - will generate custom config");
+            continue;
+        }
+
         // For regular files and symlinks, resolve and copy the content
         if file_type.is_file() || file_type.is_symlink() {
-            let target_path = temp_dir.join(&file_name);
+            let target_path = persistent_dir.join(&file_name);
 
             if file_type.is_symlink() {
                 // Resolve symlink and copy the actual file content
-                debug!("Resolving symlink: {} -> {:?}", file_name_str, std::fs::read_link(&path)?);
+                let symlink_target = std::fs::read_link(&path)?;
+                info!("Resolving GPG config symlink: {} -> {}", file_name_str, symlink_target.display());
                 let content = std::fs::read(&path)?;
+                let content_len = content.len();
                 std::fs::write(&target_path, content)?;
-                debug!("Copied resolved symlink {} to temp dir", file_name_str);
+                debug!("Copied {} bytes from resolved symlink {} to cache", content_len, file_name_str);
             } else {
                 // Copy regular file
                 std::fs::copy(&path, &target_path)?;
-                debug!("Copied file {} to temp dir", file_name_str);
+                debug!("Copied regular file {} to cache", file_name_str);
             }
 
             // Preserve permissions
@@ -872,7 +911,7 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
     for dir_name in &["private-keys-v1.d", "crls.d", "public-keys.d"] {
         let src_dir = gpg_dir.join(dir_name);
         if src_dir.exists() && src_dir.is_dir() {
-            let dst_dir = temp_dir.join(dir_name);
+            let dst_dir = persistent_dir.join(dir_name);
             std::fs::create_dir_all(&dst_dir)?;
             debug!("Copying directory: {}", dir_name);
 
@@ -880,8 +919,34 @@ fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::Pa
         }
     }
 
-    info!("Prepared GPG config in temporary directory: {}", temp_dir.display());
-    Ok((temp_dir, sockets))
+    // Generate custom gpg-agent.conf for the jail with pinentry-curses
+    let gpg_agent_conf_path = persistent_dir.join("gpg-agent.conf");
+    let gpg_agent_conf_content = "\
+# Generated by jail-ai for container use
+# Using pinentry-curses for terminal-based PIN entry
+pinentry-program /usr/bin/pinentry-curses
+enable-ssh-support
+grab
+allow-preset-passphrase
+max-cache-ttl 86400
+default-cache-ttl 3600
+";
+    std::fs::write(&gpg_agent_conf_path, gpg_agent_conf_content)?;
+    info!("Generated custom gpg-agent.conf with pinentry-curses");
+    debug!("gpg-agent.conf path: {}", gpg_agent_conf_path.display());
+
+    // Set proper permissions for gpg-agent.conf (0600)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&gpg_agent_conf_path)?.permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&gpg_agent_conf_path, perms)?;
+        debug!("Set gpg-agent.conf permissions to 0600");
+    }
+
+    info!("Prepared GPG config in persistent cache directory: {}", persistent_dir.display());
+    Ok((persistent_dir, sockets))
 }
 
 /// Recursively copy a directory
