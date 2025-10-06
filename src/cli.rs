@@ -311,13 +311,6 @@ pub enum Commands {
         backend: Option<String>,
     },
 
-    /// Join an interactive shell in the jail for current directory
-    Join {
-        /// Shell to use (auto-detects, tries zsh first, then bash)
-        #[arg(short, long)]
-        shell: Option<String>,
-    },
-
     /// Stop and remove all jail-ai containers
     CleanAll {
         /// Backend type to clean (systemd-nspawn or podman, default: both)
