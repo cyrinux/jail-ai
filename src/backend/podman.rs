@@ -30,6 +30,7 @@ impl PodmanBackend {
             config.name.clone(),
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
             "--userns=keep-id".to_string(),
+            "--restart=always".to_string(),
         ];
 
         // Network settings
