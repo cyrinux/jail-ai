@@ -10,8 +10,10 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build-image: ## Build the AI agent environment container image
+build-image: ## Build the AI agent environment container image (optional - jail-ai auto-builds)
 	@echo "Building container image: $(IMAGE_FULL)"
+	@echo "Note: jail-ai will automatically build the default image when needed."
+	@echo "This target is useful for testing image builds before they are needed."
 	podman build -t $(IMAGE_FULL) -f Containerfile \
 		--build-arg PUID=$$(id -u) \
 		--build-arg PGID=$$(id -g) \
@@ -56,13 +58,13 @@ clippy: ## Run clippy lints
 fmt: ## Format code
 	cargo fmt
 
-dev-jail: build-image ## Create a development jail with the custom image
+dev-jail: ## Create a development jail (image auto-built if needed)
 	cargo run -- create dev-agent --backend podman --image $(IMAGE_FULL) --no-network
 
 # Example usage targets
 .PHONY: example-create example-exec example-remove
 
-example-create: build-image ## Example: Create a jail with custom image
+example-create: ## Example: Create a jail (image auto-built if needed)
 	cargo run -- create my-agent --backend podman --image $(IMAGE_FULL)
 
 example-exec: ## Example: Execute a command in the jail

@@ -24,13 +24,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Customize with: `make build-image IMAGE_NAME=custom-name IMAGE_TAG=version`
 - **Test image**: `make test-image`
 - **Clean image**: `make clean`
+- **Automatic building**: jail-ai will automatically build the default image if not present
+  - Containerfile is embedded in the binary and copied to `~/.config/jail-ai/Containerfile` on first use
+  - Edit `~/.config/jail-ai/Containerfile` to customize the image
+  - Changes are detected automatically and the image is rebuilt on next jail creation
+  - See `config/README.md` for customization details
 
 ### Usage Examples
 ```bash
-# Build the custom development image first
-make build-image
+# The default image is automatically built if not present
+# No need to run make build-image manually anymore!
 
-# Create jail with auto-mounted workspace (uses custom image by default)
+# Create jail with auto-mounted workspace (uses default image, auto-builds if needed)
 cargo run -- create my-agent
 
 # Create jail with specific image

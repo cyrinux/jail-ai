@@ -2,6 +2,7 @@ mod backend;
 mod cli;
 mod config;
 mod error;
+mod image;
 mod jail;
 
 use clap::Parser;
@@ -9,9 +10,9 @@ use cli::{Cli, Commands};
 use config::JailConfig;
 use error::JailError;
 use jail::JailBuilder;
+use std::path::PathBuf;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
@@ -144,7 +145,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
                     // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
-                        let workspace_dir = get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
+                        let workspace_dir =
+                            get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
                         info!(
                             "Auto-mounting {} to {}",
                             workspace_dir.display(),
@@ -178,7 +180,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 "Mounting {} to /home/agent/.config/.copilot",
                                 copilot_config.display()
                             );
-                            builder = builder.bind_mount(copilot_config, "/home/agent/.config/.copilot", false);
+                            builder = builder.bind_mount(
+                                copilot_config,
+                                "/home/agent/.config/.copilot",
+                                false,
+                            );
                         }
                     }
 
@@ -204,7 +210,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 "Mounting git config {} to /home/agent/.gitconfig",
                                 git_config_path.display()
                             );
-                            builder = builder.bind_mount(git_config_path, "/home/agent/.gitconfig", false);
+                            builder = builder.bind_mount(
+                                git_config_path,
+                                "/home/agent/.gitconfig",
+                                false,
+                            );
                         } else {
                             // If no local git config, try to get global git config and set env vars
                             if let Ok(git_name) = std::process::Command::new("git")
@@ -212,7 +222,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 .output()
                             {
                                 if git_name.status.success() {
-                                    let name = String::from_utf8_lossy(&git_name.stdout).trim().to_string();
+                                    let name = String::from_utf8_lossy(&git_name.stdout)
+                                        .trim()
+                                        .to_string();
                                     if !name.is_empty() {
                                         builder = builder.env("GIT_AUTHOR_NAME", &name);
                                         builder = builder.env("GIT_COMMITTER_NAME", &name);
@@ -225,7 +237,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 .output()
                             {
                                 if git_email.status.success() {
-                                    let email = String::from_utf8_lossy(&git_email.stdout).trim().to_string();
+                                    let email = String::from_utf8_lossy(&git_email.stdout)
+                                        .trim()
+                                        .to_string();
                                     if !email.is_empty() {
                                         builder = builder.env("GIT_AUTHOR_EMAIL", &email);
                                         builder = builder.env("GIT_COMMITTER_EMAIL", &email);
@@ -238,7 +252,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                 .output()
                             {
                                 if git_signing_key.status.success() {
-                                    let signing_key = String::from_utf8_lossy(&git_signing_key.stdout).trim().to_string();
+                                    let signing_key =
+                                        String::from_utf8_lossy(&git_signing_key.stdout)
+                                            .trim()
+                                            .to_string();
                                     if !signing_key.is_empty() {
                                         builder = builder.env("GIT_SIGNING_KEY", &signing_key);
                                     }
@@ -552,7 +569,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             ..Default::default()
                         };
                         let jail = jail::JailManager::new(config);
-                        let status = if jail.exists().await? { "active" } else { "inactive" };
+                        let status = if jail.exists().await? {
+                            "active"
+                        } else {
+                            "inactive"
+                        };
 
                         println!("  {} [{}] ({})", jail_name, status, agent_suffix);
                     }
@@ -563,10 +584,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             Commands::Join { shell } => {
                 let jail_name = auto_detect_jail_name()?;
 
-                info!(
-                    "Joining jail: {}",
-                    jail_name
-                );
+                info!("Joining jail: {}", jail_name);
 
                 // Check if jail exists
                 let config = JailConfig {
@@ -682,10 +700,7 @@ fn auto_detect_jail_name() -> error::Result<String> {
     let cwd = std::env::current_dir()?;
     let workspace_dir = get_git_root().unwrap_or(cwd);
     let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
-    info!(
-        "Auto-detected jail name from workspace: {}",
-        jail_name
-    );
+    info!("Auto-detected jail name from workspace: {}", jail_name);
     Ok(jail_name)
 }
 
@@ -703,7 +718,7 @@ fn get_git_root() -> Option<PathBuf> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output();
-    
+
     match output {
         Ok(output) if output.status.success() => {
             let git_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -719,7 +734,7 @@ fn get_git_root() -> Option<PathBuf> {
             // Not a git repository or git command failed
         }
     }
-    
+
     None
 }
 
@@ -802,7 +817,7 @@ async fn create_default_jail(
 
     let mut builder = JailBuilder::new(name)
         .backend(backend_type)
-        .base_image("localhost/jail-ai-env:latest")
+        .base_image(image::DEFAULT_IMAGE_NAME)
         .network(true, true);
 
     // Set timezone from host
@@ -863,13 +878,14 @@ fn select_jail(jails: &[String]) -> error::Result<String> {
     io::stdout().flush().unwrap();
 
     let mut input = String::new();
-    io::stdin().read_line(&mut input).map_err(|e| {
-        JailError::Config(format!("Failed to read input: {}", e))
-    })?;
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| JailError::Config(format!("Failed to read input: {}", e)))?;
 
-    let selection: usize = input.trim().parse().map_err(|_| {
-        JailError::Config("Invalid selection".to_string())
-    })?;
+    let selection: usize = input
+        .trim()
+        .parse()
+        .map_err(|_| JailError::Config("Invalid selection".to_string()))?;
 
     if selection < 1 || selection > jails.len() {
         return Err(JailError::Config("Selection out of range".to_string()));
@@ -1032,7 +1048,9 @@ async fn run_ai_agent_command(
                     .output()
                 {
                     if git_email.status.success() {
-                        let email = String::from_utf8_lossy(&git_email.stdout).trim().to_string();
+                        let email = String::from_utf8_lossy(&git_email.stdout)
+                            .trim()
+                            .to_string();
                         if !email.is_empty() {
                             builder = builder.env("GIT_AUTHOR_EMAIL", &email);
                             builder = builder.env("GIT_COMMITTER_EMAIL", &email);
@@ -1045,7 +1063,9 @@ async fn run_ai_agent_command(
                     .output()
                 {
                     if git_signing_key.status.success() {
-                        let signing_key = String::from_utf8_lossy(&git_signing_key.stdout).trim().to_string();
+                        let signing_key = String::from_utf8_lossy(&git_signing_key.stdout)
+                            .trim()
+                            .to_string();
                         if !signing_key.is_empty() {
                             builder = builder.env("GIT_SIGNING_KEY", &signing_key);
                         }
