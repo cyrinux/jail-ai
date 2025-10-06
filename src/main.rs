@@ -495,6 +495,64 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 .await?;
             }
 
+            Commands::List { current, backend } => {
+                // Determine backend to use
+                let backend_type = if let Some(backend_str) = backend {
+                    Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+                } else {
+                    config::BackendType::detect()
+                };
+
+                let temp_config = JailConfig {
+                    name: "temp".to_string(),
+                    backend: backend_type,
+                    ..Default::default()
+                };
+                let backend = backend::create_backend(&temp_config);
+
+                // Get all jails
+                let all_jails = backend.list_all().await?;
+
+                // Filter by current directory if requested
+                let jails = if current {
+                    let cwd = std::env::current_dir()?;
+                    let workspace_dir = get_git_root().unwrap_or(cwd);
+                    let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+                    all_jails
+                        .into_iter()
+                        .filter(|name| name.starts_with(&base_name))
+                        .collect::<Vec<_>>()
+                } else {
+                    all_jails
+                };
+
+                if jails.is_empty() {
+                    if current {
+                        println!("No jails found for current directory");
+                    } else {
+                        println!("No jails found");
+                    }
+                } else {
+                    println!("Jails (backend: {:?}):", backend_type);
+                    for jail_name in &jails {
+                        // Extract agent name from jail name
+                        let agent_suffix = jail_name.split('-').next_back().unwrap_or("unknown");
+
+                        // Check if jail is running
+                        let config = JailConfig {
+                            name: jail_name.clone(),
+                            backend: backend_type,
+                            ..Default::default()
+                        };
+                        let jail = jail::JailManager::new(config);
+                        let status = if jail.exists().await? { "active" } else { "inactive" };
+
+                        println!("  {} [{}] ({})", jail_name, status, agent_suffix);
+                    }
+                    println!("\nTotal: {} jail(s)", jails.len());
+                }
+            }
+
             Commands::Join { shell } => {
                 let cwd = std::env::current_dir()?;
                 let jail_name = cli::Commands::generate_jail_name(&cwd);
