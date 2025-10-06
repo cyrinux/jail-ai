@@ -97,6 +97,7 @@ make dev-jail
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed with minimal auth mounting by default
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
+- **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
 - **Minimal Auth Mounting**: By default, only minimal auth files (`.claude.json`) are mounted for authentication
 - **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
