@@ -16,7 +16,9 @@
       "Bash(podman exec:*)",
       "WebFetch(domain:cursor.com)",
       "Bash(git rebase:*)",
-      "Bash(git rerere:*)"
+      "Bash(git rerere:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

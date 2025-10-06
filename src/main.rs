@@ -7,6 +7,7 @@ mod jail;
 use clap::Parser;
 use cli::{Cli, Commands};
 use config::JailConfig;
+use error::JailError;
 use jail::JailBuilder;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -42,27 +43,31 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             // Default behavior: auto-init and exec based on workspace (git root if available)
             let cwd = std::env::current_dir()?;
             let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-            let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
 
-            info!(
-                "No command specified, using default behavior for jail '{}'",
-                jail_name
-            );
+            // Find all jails for this directory
+            let matching_jails = find_jails_for_directory(&workspace_dir).await?;
 
-            // Check if jail exists
-            let temp_config = JailConfig {
-                name: jail_name.clone(),
-                ..Default::default()
-            };
-            let temp_jail = jail::JailManager::new(temp_config);
-            let exists = temp_jail.exists().await?;
+            let jail_name = if matching_jails.is_empty() {
+                // No jails exist, create a default one
+                let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+                info!("No jail found for this directory, creating default jail...");
+                let jail_name = format!("{}-default", base_name);
 
-            if !exists {
-                info!("Jail '{}' does not exist, creating it...", jail_name);
+                info!("Creating jail '{}'...", jail_name);
                 let jail = create_default_jail(&jail_name, &workspace_dir).await?;
                 jail.create().await?;
                 info!("Jail '{}' created successfully", jail_name);
-            }
+
+                jail_name
+            } else if matching_jails.len() == 1 {
+                // Only one jail exists, use it
+                let jail_name = matching_jails[0].clone();
+                info!("Found single jail for this directory: '{}'", jail_name);
+                jail_name
+            } else {
+                // Multiple jails exist, ask user to choose
+                select_jail(&matching_jails)?
+            };
 
             // Exec into jail with interactive shell
             info!("Executing interactive shell in jail '{}'...", jail_name);
@@ -732,6 +737,61 @@ async fn create_default_jail(
     builder = builder.bind_mount(workspace_dir, "/workspace", false);
 
     Ok(builder.build())
+}
+
+/// Find all jails matching the current directory pattern
+async fn find_jails_for_directory(workspace_dir: &std::path::Path) -> error::Result<Vec<String>> {
+    let base_name = cli::Commands::generate_jail_name(workspace_dir);
+    let backend_type = config::BackendType::detect();
+
+    // Create a temporary config just to access the backend
+    let temp_config = JailConfig {
+        name: "temp".to_string(),
+        backend: backend_type,
+        ..Default::default()
+    };
+    let backend = backend::create_backend(&temp_config);
+
+    // List all jails
+    let all_jails = backend.list_all().await?;
+
+    // Filter jails that match the base pattern (jail-{project}-{hash}-)
+    let matching_jails: Vec<String> = all_jails
+        .into_iter()
+        .filter(|name| name.starts_with(&base_name) && name.len() > base_name.len())
+        .collect();
+
+    Ok(matching_jails)
+}
+
+/// Prompt user to select a jail from a list
+fn select_jail(jails: &[String]) -> error::Result<String> {
+    use std::io::{self, Write};
+
+    println!("Multiple jails found for this directory:");
+    for (i, jail) in jails.iter().enumerate() {
+        // Extract agent name from jail name
+        let agent_name = jail.split('-').next_back().unwrap_or("unknown");
+        println!("  {}. {} (agent: {})", i + 1, jail, agent_name);
+    }
+
+    print!("Select a jail (1-{}): ", jails.len());
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).map_err(|e| {
+        JailError::Config(format!("Failed to read input: {}", e))
+    })?;
+
+    let selection: usize = input.trim().parse().map_err(|_| {
+        JailError::Config("Invalid selection".to_string())
+    })?;
+
+    if selection < 1 || selection > jails.len() {
+        return Err(JailError::Config("Selection out of range".to_string()));
+    }
+
+    Ok(jails[selection - 1].clone())
 }
 
 /// Parameters for AI agent commands
