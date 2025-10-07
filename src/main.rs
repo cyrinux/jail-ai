@@ -145,6 +145,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.env("TERM", term);
                     }
 
+                    // Set default editor to vim
+                    builder = builder.env("EDITOR", "vim");
+
                     // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
                         let workspace_dir =
@@ -262,6 +265,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                     builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
 
                                     // Mount GPG agent sockets for YubiKey and smartcard support
+                                    let mut ssh_auth_sock_target: Option<String> = None;
                                     for socket_path in sockets {
                                         if let Some(socket_name) = socket_path.file_name() {
                                             let socket_name_str = socket_name.to_string_lossy();
@@ -271,8 +275,19 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                                                 socket_path.display(),
                                                 target
                                             );
-                                            builder = builder.bind_mount(socket_path, target, false);
+                                            builder = builder.bind_mount(&socket_path, target.clone(), false);
+                                            
+                                            // Track SSH auth socket for environment variable
+                                            if socket_name_str == "S.gpg-agent.ssh" {
+                                                ssh_auth_sock_target = Some(target);
+                                            }
                                         }
+                                    }
+                                    
+                                    // Set SSH_AUTH_SOCK if we mounted the SSH socket
+                                    if let Some(sock_path) = ssh_auth_sock_target {
+                                        info!("Setting SSH_AUTH_SOCK to {}", sock_path);
+                                        builder = builder.env("SSH_AUTH_SOCK", sock_path);
                                     }
                                 }
                                 Err(e) => {
@@ -1402,6 +1417,9 @@ async fn create_default_jail(
         builder = builder.env("TERM", term);
     }
 
+    // Set default editor to vim
+    builder = builder.env("EDITOR", "vim");
+
     // Auto-mount workspace (git root if available, otherwise provided workspace)
     let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
     info!("Auto-mounting {} to /workspace", workspace_dir.display());
@@ -1579,6 +1597,9 @@ async fn run_ai_agent_command(
             builder = builder.env("TERM", term);
         }
 
+        // Set default editor to vim
+        builder = builder.env("EDITOR", "vim");
+
         // Auto-mount workspace (git root if available, otherwise current directory)
         if !params.no_workspace {
             let workspace_dir = get_git_root().unwrap_or(cwd.clone());
@@ -1687,6 +1708,7 @@ async fn run_ai_agent_command(
                         builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
 
                         // Mount GPG agent sockets for YubiKey and smartcard support
+                        let mut ssh_auth_sock_target: Option<String> = None;
                         for socket_path in sockets {
                             if let Some(socket_name) = socket_path.file_name() {
                                 let socket_name_str = socket_name.to_string_lossy();
@@ -1696,8 +1718,19 @@ async fn run_ai_agent_command(
                                     socket_path.display(),
                                     target
                                 );
-                                builder = builder.bind_mount(socket_path, target, false);
+                                builder = builder.bind_mount(&socket_path, target.clone(), false);
+                                
+                                // Track SSH auth socket for environment variable
+                                if socket_name_str == "S.gpg-agent.ssh" {
+                                    ssh_auth_sock_target = Some(target);
+                                }
                             }
+                        }
+                        
+                        // Set SSH_AUTH_SOCK if we mounted the SSH socket
+                        if let Some(sock_path) = ssh_auth_sock_target {
+                            info!("Setting SSH_AUTH_SOCK to {}", sock_path);
+                            builder = builder.env("SSH_AUTH_SOCK", sock_path);
                         }
                     }
                     Err(e) => {

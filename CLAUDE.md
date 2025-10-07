@@ -105,7 +105,7 @@ make dev-jail
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, and Gemini CLI pre-installed
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
-- **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
+- **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
 - **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
@@ -182,6 +182,11 @@ When `--git-gpg` flag is used, jail-ai will:
 **GPG Configuration:**
 - Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
 - This allows GPG signing to work inside the jail using your host's GPG keys
+- **GPG Agent Sockets**: Automatically mounts all GPG agent sockets from `/run/user/<UID>/gnupg/` including:
+  - `S.gpg-agent` - Main GPG agent socket
+  - `S.gpg-agent.ssh` - SSH authentication socket (sets `SSH_AUTH_SOCK` environment variable)
+  - `S.gpg-agent.extra` - Extra GPG agent socket
+  - `S.gpg-agent.browser` - Browser GPG agent socket
 - **SSH-based GPG Signing**: If `gpg.format=ssh` is configured, automatically mounts your SSH allowed signers file (`gpg.ssh.allowedsignersfile`) to `/home/agent/.ssh/allowed_signers` in the jail
   - If the SSH allowed signers file doesn't exist, a warning is logged but the jail creation continues
   - SSH GPG signing may not work properly without the allowed signers file
