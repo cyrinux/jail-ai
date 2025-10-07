@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ### Build and Development
+
 - **Build jail-ai**: `cargo build` or `make build`
 - **Build release**: `cargo build --release`
 - **Run**: `cargo run -- <args>` or `make run ARGS="<args>"`
@@ -18,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Format**: `cargo fmt` or `make fmt`
 
 ### Container Image
+
 - **Build custom AI agent image**: `make build-image`
   - Image includes: bash, ripgrep, cargo, go, node, python, and common dev tools
   - Default image name: `localhost/jail-ai-env:latest`
@@ -31,6 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - See `config/README.md` for customization details
 
 ### Usage Examples
+
 ```bash
 # The default image is automatically built if not present
 # No need to run make build-image manually anymore!
@@ -82,6 +85,7 @@ make dev-jail
 ```
 
 ### Version Management
+
 - Version is managed in `Cargo.toml` and should follow semantic versioning
 - Auto-bump version when making changes according to semver rules
 
@@ -117,6 +121,7 @@ make dev-jail
 ## Custom Image Tools
 
 The `localhost/jail-ai-env:latest` image includes:
+
 - **Shell**: zsh (default with Powerlevel10k theme), bash
 - **Shell Enhancements**:
   - **fzf** - Fuzzy finder for command history and file search
@@ -138,12 +143,14 @@ The `localhost/jail-ai-env:latest` image includes:
 The AI coding agents require authentication.
 
 **Default behavior (minimal auth):**
+
 - `jail-ai claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 - `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
 
 **Opt-in mounting** (use flags to enable):
+
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
@@ -151,6 +158,7 @@ The AI coding agents require authentication.
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`)
 
 Example aliases for different security levels:
+
 ```bash
 # Claude: minimal auth by default
 alias jail-claude='jail-ai claude'
@@ -173,13 +181,16 @@ alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'
 When `--git-gpg` flag is used, jail-ai will:
 
 **Git Configuration:**
+
 1. **Local Git Config**: If a `.git/config` file exists in the current directory, it will be mounted to `/home/agent/.gitconfig` in the jail
-2. **Project Git Config Fallback**: If no local git config file exists, it will read your project's git configuration (or global as fallback) and set environment variables:
-   - `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` from `git config user.name` (project config or global)
-   - `GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL` from `git config user.email` (project config or global)
-   - `GIT_SIGNING_KEY` from `git config user.signingkey` (project config or global)
+2. **Project Git Config Fallback**: If no local git config file exists, it will read your project's git configuration (or global as fallback) and create a `.gitconfig` file in the container with the following values:
+   - `user.name`, `user.email`, `user.signingkey`
+   - `commit.gpgsign`, `tag.gpgsign` - Enables automatic GPG signing for commits and tags
+   - `gpg.format`, `gpg.program`, `gpg.ssh.allowedsignersfile` - GPG configuration
+   - `core.editor`, `init.defaultbranch`, `pull.rebase`, `push.autosetupremote` - Git behavior settings
 
 **GPG Configuration:**
+
 - Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
 - This allows GPG signing to work inside the jail using your host's GPG keys
 - **GPG Agent Sockets**: Automatically mounts all GPG agent sockets from `/run/user/<UID>/gnupg/` including:
@@ -192,19 +203,21 @@ When `--git-gpg` flag is used, jail-ai will:
   - SSH GPG signing may not work properly without the allowed signers file
   - Supports both quoted and unquoted git config values (e.g., `"ssh"` or `ssh`)
 
-This ensures that git commits made inside the jail will use your configured identity and signing key.
+This ensures that git commits and tags made inside the jail will use your configured identity and signing key.
 
 **Note**: Git and GPG configuration mapping are **opt-in** (disabled by default). Use `--git-gpg` flag to enable them.
 
 ## Shell Features
 
 The container uses **zsh** as the default shell with:
+
 - **Powerlevel10k (p10k)** - Fast, minimal theme with git integration
 - **fzf** integration for command history search (Ctrl+R) and fuzzy completion
 - **Smart history** - 10000 entries with deduplication and sharing
 - **Useful aliases** - `ll` for detailed listing, colored ripgrep
 
 FZF keybindings:
+
 - `Ctrl+R` - Search command history
 - `Ctrl+T` - Search files in current directory
 - `Alt+C` - Change to subdirectory
@@ -215,3 +228,4 @@ FZF keybindings:
 - Use `git add -p` for selective staging when appropriate
 - Auto-commit when it makes sense (completed features, fixed bugs, etc.)
 - you have to build before commit
+- Never modify my git config.

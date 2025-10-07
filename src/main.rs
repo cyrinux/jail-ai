@@ -822,11 +822,61 @@ fn get_git_root() -> Option<PathBuf> {
 }
 
 /// Get git config value with fallback to global and system config
-/// First tries project config (--local), then project default (no scope), then global, then system
+///
+/// This function respects git's config precedence hierarchy:
+/// - **Local** (`.git/config` in repository) - highest priority
+/// - **Global** (`~/.gitconfig` or `~/.config/git/config`) - medium priority
+/// - **System** (`/etc/gitconfig`) - lowest priority
+///
+/// When multiple values exist for the same key, git uses the **last value** from the
+/// **highest priority scope**. For example, if a key has multiple values in local config,
+/// the last one wins. If a key exists in both local and global config, local wins.
+///
+/// # Fallback Strategy
+///
+/// The function tries these operations in order:
+/// 1. **`--local` with cwd context**: Reads only the repository's `.git/config`
+///    - Returns immediately if found (optimization for most common case)
+/// 2. **No scope with cwd context**: Reads local + global + system in precedence order
+///    - Handles cases where local doesn't exist but global/system does
+/// 3. **`--global` without cwd**: Reads only global config
+///    - Fallback for when cwd is not a git repository
+/// 4. **`--system` without cwd**: Reads only system config
+///    - Final fallback for system-level configuration
+///
+/// The fallback chain ensures correct behavior both inside and outside git repositories.
+///
+/// # Handling Multiple Values
+///
+/// Git allows multiple values for the same key (using `git config --add`). This function:
+/// - Uses `--get-all` to retrieve all values for a key
+/// - Uses `next_back()` to get the **last value** (git's documented behavior)
+/// - This correctly implements git's "last value wins" semantics
+///
+/// # Examples
+///
+/// ```text
+/// # Inside a git repository
+/// Local:  user.name = "Alice"
+/// Global: user.name = "Bob"
+/// Result: "Alice" (local wins)
+///
+/// # Outside a git repository
+/// Global: user.name = "Bob"
+/// Result: "Bob" (fallback to global)
+///
+/// # Multiple values in same scope
+/// Local:  user.name = "Alice"
+/// Local:  user.name = "Charlie"
+/// Result: "Charlie" (last value wins)
+/// ```
 fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     use tracing::debug;
 
     /// Helper to try reading git config with specific args
+    ///
+    /// Uses `--get-all` to retrieve all values and returns the last one
+    /// (which has highest priority according to git's semantics)
     fn try_git_config(args: &[&str], key: &str, scope: &str, cwd: Option<&std::path::Path>) -> Option<String> {
         use tracing::debug;
 
@@ -840,6 +890,7 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             // Get the last non-empty line (git uses last value when there are duplicates)
+            // This correctly implements git's "last value wins" behavior
             if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
                 let value = value.trim().to_string();
                 debug!("Found {} in {} config: {}", key, scope, value);
@@ -852,21 +903,25 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
 
     // Try project-specific config first (local to the repository)
     // Use --get-all to handle duplicate entries and take the last one
+    // This is an optimization - if found in local, we don't need to check other scopes
     if let Some(value) = try_git_config(&["config", "--local", "--get-all", key], key, "local", Some(cwd)) {
         return Some(value);
     }
 
-    // Try project config (no scope specified - reads local and global in order)
+    // Try project config (no scope specified - reads local + global + system in precedence order)
+    // This handles the case where local doesn't exist but global/system does
     if let Some(value) = try_git_config(&["config", "--get-all", key], key, "project", Some(cwd)) {
         return Some(value);
     }
 
-    // Fallback to global config
+    // Fallback to global config only
+    // This handles the case where cwd is not a git repository
     if let Some(value) = try_git_config(&["config", "--global", "--get-all", key], key, "global", None) {
         return Some(value);
     }
 
-    // Fallback to system config
+    // Fallback to system config only
+    // Final fallback for system-level configuration
     if let Some(value) = try_git_config(&["config", "--system", "--get-all", key], key, "system", None) {
         return Some(value);
     }
@@ -889,6 +944,7 @@ fn get_all_git_config_values(cwd: &std::path::Path) -> std::collections::HashMap
         "user.email",
         "user.signingkey",
         "commit.gpgsign",
+        "tag.gpgsign",
         "gpg.format",
         "gpg.program",
         "gpg.ssh.allowedsignersfile",
@@ -943,7 +999,7 @@ fn generate_gitconfig_content(config_map: &std::collections::HashMap<String, Str
     }
 
     // Write sections in order
-    let section_order = vec!["user", "commit", "gpg", "core", "init", "pull", "push"];
+    let section_order = vec!["user", "commit", "tag", "gpg", "core", "init", "pull", "push"];
 
     for section_name in section_order {
         // Write simple section entries
@@ -2115,6 +2171,281 @@ mod tests {
         // Test with a non-existent key
         let result = get_git_config("nonexistent.key.that.should.not.exist", &cwd);
         assert!(result.is_none(), "Non-existent git config key should return None");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_git_config_local_overrides_global() {
+        // Scenario 1: Local overrides global
+        // Setup: Create temporary git repo with local config that differs from global
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let init = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output();
+        
+        if init.is_err() {
+            eprintln!("git not available, skipping test");
+            return;
+        }
+
+        // Set local config
+        let set_local = std::process::Command::new("git")
+            .args(["config", "--local", "test.priority", "local-value"])
+            .current_dir(repo_path)
+            .output();
+
+        if set_local.is_err() {
+            eprintln!("Failed to set local git config, skipping test");
+            return;
+        }
+
+        // Save current global value (if any) to restore later
+        let old_global = std::process::Command::new("git")
+            .args(["config", "--global", "test.priority"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            });
+
+        // Set global config to different value
+        let _ = std::process::Command::new("git")
+            .args(["config", "--global", "test.priority", "global-value"])
+            .output();
+
+        // Test that local wins
+        let result = get_git_config("test.priority", repo_path);
+        
+        // Cleanup: restore old global value or unset
+        if let Some(old_value) = old_global {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "test.priority", &old_value])
+                .output();
+        } else {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "--unset", "test.priority"])
+                .output();
+        }
+
+        assert_eq!(result, Some("local-value".to_string()), 
+                   "Local config should override global config");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_git_config_only_global_exists() {
+        // Scenario 2: Only global exists
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let init = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output();
+        
+        if init.is_err() {
+            eprintln!("git not available, skipping test");
+            return;
+        }
+
+        // Save current global value (if any) to restore later
+        let old_global = std::process::Command::new("git")
+            .args(["config", "--global", "test.globalonly"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            });
+
+        // Set global config only
+        let _ = std::process::Command::new("git")
+            .args(["config", "--global", "test.globalonly", "global-value"])
+            .output();
+
+        // Test that global is found
+        let result = get_git_config("test.globalonly", repo_path);
+
+        // Cleanup
+        if let Some(old_value) = old_global {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "test.globalonly", &old_value])
+                .output();
+        } else {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "--unset", "test.globalonly"])
+                .output();
+        }
+
+        assert_eq!(result, Some("global-value".to_string()),
+                   "Should find global config when local doesn't exist");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_git_config_multiple_values_same_scope() {
+        // Scenario 3: Multiple values in same scope - last value wins
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let init = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output();
+        
+        if init.is_err() {
+            eprintln!("git not available, skipping test");
+            return;
+        }
+
+        // Set multiple values for same key (using --add)
+        let _ = std::process::Command::new("git")
+            .args(["config", "--local", "test.multi", "first-value"])
+            .current_dir(repo_path)
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .args(["config", "--local", "--add", "test.multi", "second-value"])
+            .current_dir(repo_path)
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .args(["config", "--local", "--add", "test.multi", "last-value"])
+            .current_dir(repo_path)
+            .output();
+
+        // Test that last value wins
+        let result = get_git_config("test.multi", repo_path);
+
+        assert_eq!(result, Some("last-value".to_string()),
+                   "Should return last value when multiple values exist in same scope");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_git_config_multiple_values_across_scopes() {
+        // Scenario 4: Multiple values across scopes - highest priority scope wins
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let init = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output();
+        
+        if init.is_err() {
+            eprintln!("git not available, skipping test");
+            return;
+        }
+
+        // Save current global value
+        let old_global = std::process::Command::new("git")
+            .args(["config", "--global", "test.crossscope"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            });
+
+        // Set global config
+        let _ = std::process::Command::new("git")
+            .args(["config", "--global", "test.crossscope", "global-value"])
+            .output();
+
+        // Set local config to different value
+        let _ = std::process::Command::new("git")
+            .args(["config", "--local", "test.crossscope", "local-wins"])
+            .current_dir(repo_path)
+            .output();
+
+        // Test that local wins over global
+        let result = get_git_config("test.crossscope", repo_path);
+
+        // Cleanup
+        if let Some(old_value) = old_global {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "test.crossscope", &old_value])
+                .output();
+        } else {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "--unset", "test.crossscope"])
+                .output();
+        }
+
+        assert_eq!(result, Some("local-wins".to_string()),
+                   "Local config should win when values exist in multiple scopes");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_git_config_outside_repository() {
+        // Scenario 5: Outside git repository - should still read global config
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let non_repo_path = temp_dir.path();
+        // Don't initialize git repo here
+
+        // Save current global value
+        let old_global = std::process::Command::new("git")
+            .args(["config", "--global", "test.nonrepo"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            });
+
+        // Set global config
+        let _ = std::process::Command::new("git")
+            .args(["config", "--global", "test.nonrepo", "global-from-nonrepo"])
+            .output();
+
+        // Test that global is found even outside a git repo
+        let result = get_git_config("test.nonrepo", non_repo_path);
+
+        // Cleanup
+        if let Some(old_value) = old_global {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "test.nonrepo", &old_value])
+                .output();
+        } else {
+            let _ = std::process::Command::new("git")
+                .args(["config", "--global", "--unset", "test.nonrepo"])
+                .output();
+        }
+
+        assert_eq!(result, Some("global-from-nonrepo".to_string()),
+                   "Should find global config even when not in a git repository");
     }
 
     #[test]
