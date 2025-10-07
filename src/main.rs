@@ -780,8 +780,10 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
         .output()
     {
         if output.status.success() {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !value.is_empty() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // Get the last non-empty line (git returns last value when there are duplicates)
+            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
+                let value = value.trim().to_string();
                 debug!("Found {} in project config: {}", key, value);
                 return Some(value);
             }
@@ -794,8 +796,10 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
         .output()
     {
         if output.status.success() {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !value.is_empty() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // Get the last non-empty line (git returns last value when there are duplicates)
+            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
+                let value = value.trim().to_string();
                 debug!("Found {} in global config: {}", key, value);
                 return Some(value);
             }
@@ -808,8 +812,10 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
         .output()
     {
         if output.status.success() {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !value.is_empty() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // Get the last non-empty line (git returns last value when there are duplicates)
+            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
+                let value = value.trim().to_string();
                 debug!("Found {} in system config: {}", key, value);
                 return Some(value);
             }
