@@ -91,6 +91,10 @@ pub enum Commands {
         /// Enable git and GPG configuration mapping
         #[arg(long)]
         git_gpg: bool,
+
+        /// Force rebuild of the default image, even if it already exists
+        #[arg(long)]
+        force_rebuild: bool,
     },
 
     /// Remove a jail
@@ -185,6 +189,10 @@ pub enum Commands {
         #[arg(long)]
         git_gpg: bool,
 
+        /// Force rebuild of the default image, even if it already exists
+        #[arg(long)]
+        force_rebuild: bool,
+
         /// Additional arguments to pass to claude
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -251,6 +259,10 @@ pub enum Commands {
         /// Enable git and GPG configuration mapping
         #[arg(long)]
         git_gpg: bool,
+
+        /// Force rebuild of the default image, even if it already exists
+        #[arg(long)]
+        force_rebuild: bool,
 
         /// Additional arguments to pass to copilot
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -319,6 +331,10 @@ pub enum Commands {
         #[arg(long)]
         git_gpg: bool,
 
+        /// Force rebuild of the default image, even if it already exists
+        #[arg(long)]
+        force_rebuild: bool,
+
         /// Additional arguments to pass to cursor-agent
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -385,6 +401,10 @@ pub enum Commands {
         /// Enable git and GPG configuration mapping
         #[arg(long)]
         git_gpg: bool,
+
+        /// Force rebuild of the default image, even if it already exists
+        #[arg(long)]
+        force_rebuild: bool,
 
         /// Additional arguments to pass to gemini
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
