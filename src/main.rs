@@ -22,7 +22,7 @@ async fn main() {
     let filter = if cli.verbose {
         "jail_ai=debug,info"
     } else {
-        "jail_ai=info"
+        "jail_ai=warn"
     };
 
     tracing_subscriber::registry()

@@ -15,6 +15,10 @@ pub struct Cli {
     /// Enable verbose logging
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// Quiet mode (suppress INFO logs, only show warnings and errors)
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    pub quiet: bool,
 }
 
 #[derive(Subcommand, Debug)]
