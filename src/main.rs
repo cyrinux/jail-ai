@@ -94,6 +94,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 claude_dir,
                 copilot_dir,
                 cursor_dir,
+                gemini_dir,
                 agent_configs,
                 git_gpg,
             } => {
@@ -212,6 +213,22 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             );
                             builder =
                                 builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+                        }
+                    }
+
+                    // Opt-in: Mount ~/.config/gemini for Gemini CLI
+                    if gemini_dir || agent_configs {
+                        let gemini_config = home_path.join(".config").join("gemini");
+                        if gemini_config.exists() {
+                            info!(
+                                "Mounting {} to /home/agent/.config/gemini",
+                                gemini_config.display()
+                            );
+                            builder = builder.bind_mount(
+                                gemini_config,
+                                "/home/agent/.config/gemini",
+                                false,
+                            );
                         }
                     }
 
@@ -375,6 +392,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 claude_dir,
                 copilot_dir,
                 cursor_dir,
+                gemini_dir,
                 agent_configs,
                 git_gpg,
                 args,
@@ -394,6 +412,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         claude_dir,
                         copilot_dir,
                         cursor_dir,
+                        gemini_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -415,6 +434,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 claude_dir,
                 copilot_dir,
                 cursor_dir,
+                gemini_dir,
                 agent_configs,
                 git_gpg,
                 args,
@@ -434,6 +454,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         claude_dir,
                         copilot_dir,
                         cursor_dir,
+                        gemini_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -455,6 +476,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 claude_dir,
                 copilot_dir,
                 cursor_dir,
+                gemini_dir: _,
                 agent_configs,
                 git_gpg,
                 args,
@@ -474,6 +496,49 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         claude_dir,
                         copilot_dir,
                         cursor_dir,
+                        gemini_dir: false,
+                        agent_configs,
+                        git_gpg,
+                        args,
+                    },
+                )
+                .await?;
+            }
+
+            Commands::Gemini {
+                backend,
+                image,
+                mount,
+                env,
+                no_network,
+                memory,
+                cpu,
+                no_workspace,
+                workspace_path,
+                claude_dir,
+                copilot_dir,
+                cursor_dir,
+                gemini_dir,
+                agent_configs,
+                git_gpg,
+                args,
+            } => {
+                run_ai_agent_command(
+                    "gemini",
+                    AgentCommandParams {
+                        backend,
+                        image,
+                        mount,
+                        env,
+                        no_network,
+                        memory,
+                        cpu,
+                        no_workspace,
+                        workspace_path,
+                        claude_dir,
+                        copilot_dir,
+                        cursor_dir,
+                        gemini_dir,
                         agent_configs,
                         git_gpg,
                         args,
@@ -1306,6 +1371,7 @@ struct AgentCommandParams {
     claude_dir: bool,
     copilot_dir: bool,
     cursor_dir: bool,
+    gemini_dir: bool,
     agent_configs: bool,
     git_gpg: bool,
     args: Vec<String>,
@@ -1418,6 +1484,18 @@ async fn run_ai_agent_command(
                     cursor_config.display()
                 );
                 builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+            }
+        }
+
+        // Opt-in: Mount ~/.config/gemini for Gemini CLI
+        if params.gemini_dir || params.agent_configs {
+            let gemini_config = home_path.join(".config").join("gemini");
+            if gemini_config.exists() {
+                info!(
+                    "Mounting {} to /home/agent/.config/gemini",
+                    gemini_config.display()
+                );
+                builder = builder.bind_mount(gemini_config, "/home/agent/.config/gemini", false);
             }
         }
 
