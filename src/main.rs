@@ -203,8 +203,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         }
                     }
 
-                    // Opt-in: Mount ~/.cursor for Cursor Agent
+                    // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
                     if cursor_dir || agent_configs {
+                        // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
                         let cursor_config = home_path.join(".cursor");
                         if cursor_config.exists() {
                             info!(
@@ -213,6 +214,20 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             );
                             builder =
                                 builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+                        }
+
+                        // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
+                        let cursor_config_dir = home_path.join(".config").join("cursor");
+                        if cursor_config_dir.exists() {
+                            info!(
+                                "Mounting {} to /home/agent/.config/cursor",
+                                cursor_config_dir.display()
+                            );
+                            builder = builder.bind_mount(
+                                cursor_config_dir,
+                                "/home/agent/.config/cursor",
+                                false,
+                            );
                         }
                     }
 
@@ -1477,8 +1492,9 @@ async fn run_ai_agent_command(
             }
         }
 
-        // Opt-in: Mount ~/.cursor for Cursor Agent
+        // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
         if params.cursor_dir || params.agent_configs {
+            // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
             let cursor_config = home_path.join(".cursor");
             if cursor_config.exists() {
                 info!(
@@ -1486,6 +1502,20 @@ async fn run_ai_agent_command(
                     cursor_config.display()
                 );
                 builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
+            }
+
+            // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
+            let cursor_config_dir = home_path.join(".config").join("cursor");
+            if cursor_config_dir.exists() {
+                info!(
+                    "Mounting {} to /home/agent/.config/cursor",
+                    cursor_config_dir.display()
+                );
+                builder = builder.bind_mount(
+                    cursor_config_dir,
+                    "/home/agent/.config/cursor",
+                    false,
+                );
             }
         }
 
