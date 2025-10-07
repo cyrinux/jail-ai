@@ -774,14 +774,15 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     use tracing::debug;
 
     // Try project-specific config first (local to the repository)
+    // Use --get-all to handle duplicate entries and take the last one
     if let Ok(output) = std::process::Command::new("git")
         .current_dir(cwd)
-        .args(["config", "--local", key])
+        .args(["config", "--local", "--get-all", key])
         .output()
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git returns last value when there are duplicates)
+            // Get the last non-empty line (git uses last value when there are duplicates)
             if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
                 let value = value.trim().to_string();
                 debug!("Found {} in project config: {}", key, value);
@@ -791,13 +792,14 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     }
 
     // Fallback to global config
+    // Use --get-all to handle duplicate entries and take the last one
     if let Ok(output) = std::process::Command::new("git")
-        .args(["config", "--global", key])
+        .args(["config", "--global", "--get-all", key])
         .output()
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git returns last value when there are duplicates)
+            // Get the last non-empty line (git uses last value when there are duplicates)
             if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
                 let value = value.trim().to_string();
                 debug!("Found {} in global config: {}", key, value);
@@ -807,13 +809,14 @@ fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     }
 
     // Fallback to system config
+    // Use --get-all to handle duplicate entries and take the last one
     if let Ok(output) = std::process::Command::new("git")
-        .args(["config", "--system", key])
+        .args(["config", "--system", "--get-all", key])
         .output()
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git returns last value when there are duplicates)
+            // Get the last non-empty line (git uses last value when there are duplicates)
             if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
                 let value = value.trim().to_string();
                 debug!("Found {} in system config: {}", key, value);
