@@ -231,6 +231,7 @@ impl JailBackend for SystemdNspawnBackend {
                 memory_mb: None,
                 cpu_quota: None,
             },
+            force_rebuild: false,
         })
     }
 }
@@ -263,6 +264,7 @@ mod tests {
                 memory_mb: Some(512),
                 cpu_quota: Some(50),
             },
+            force_rebuild: false,
         };
 
         let cmd = backend.build_nspawn_command(&config);

@@ -102,7 +102,7 @@ impl JailBackend for PodmanBackend {
         // Ensure image is available (build if default image, pull if custom)
         if config.base_image == image::DEFAULT_IMAGE_NAME {
             // For default image, use our automatic build system
-            image::ensure_image_available(&config.base_image).await?;
+            image::ensure_image_available(&config.base_image, config.force_rebuild).await?;
         } else {
             // For custom images, check if they exist and pull if needed
             let image_exists = self.image_exists(&config.base_image).await?;
@@ -357,6 +357,7 @@ impl JailBackend for PodmanBackend {
                 memory_mb,
                 cpu_quota,
             },
+            force_rebuild: false,
         })
     }
 }
@@ -382,6 +383,7 @@ mod tests {
                 memory_mb: Some(512),
                 cpu_quota: Some(50),
             },
+            force_rebuild: false,
         };
 
         let args = backend.build_run_args(&config);

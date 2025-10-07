@@ -97,6 +97,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 gemini_dir,
                 agent_configs,
                 git_gpg,
+                force_rebuild,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -303,6 +304,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.cpu_quota(cpu_quota);
                     }
 
+                    // Set force rebuild flag
+                    builder = builder.force_rebuild(force_rebuild);
+
                     builder.build()
                 };
 
@@ -410,6 +414,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 gemini_dir,
                 agent_configs,
                 git_gpg,
+                force_rebuild,
                 args,
             } => {
                 run_ai_agent_command(
@@ -430,6 +435,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         gemini_dir,
                         agent_configs,
                         git_gpg,
+                        force_rebuild,
                         args,
                     },
                 )
@@ -452,6 +458,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 gemini_dir,
                 agent_configs,
                 git_gpg,
+                force_rebuild,
                 args,
             } => {
                 run_ai_agent_command(
@@ -472,6 +479,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         gemini_dir,
                         agent_configs,
                         git_gpg,
+                        force_rebuild,
                         args,
                     },
                 )
@@ -494,6 +502,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 gemini_dir: _,
                 agent_configs,
                 git_gpg,
+                force_rebuild,
                 args,
             } => {
                 run_ai_agent_command(
@@ -514,6 +523,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         gemini_dir: false,
                         agent_configs,
                         git_gpg,
+                        force_rebuild,
                         args,
                     },
                 )
@@ -536,6 +546,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 gemini_dir,
                 agent_configs,
                 git_gpg,
+                force_rebuild,
                 args,
             } => {
                 run_ai_agent_command(
@@ -556,6 +567,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         gemini_dir,
                         agent_configs,
                         git_gpg,
+                        force_rebuild,
                         args,
                     },
                 )
@@ -1391,6 +1403,7 @@ struct AgentCommandParams {
     gemini_dir: bool,
     agent_configs: bool,
     git_gpg: bool,
+    force_rebuild: bool,
     args: Vec<String>,
 }
 
@@ -1584,6 +1597,9 @@ async fn run_ai_agent_command(
         if let Some(cpu_quota) = params.cpu {
             builder = builder.cpu_quota(cpu_quota);
         }
+
+        // Set force rebuild flag
+        builder = builder.force_rebuild(params.force_rebuild);
 
         let jail = builder.build();
         jail.create().await?;

@@ -24,6 +24,10 @@ pub struct JailConfig {
 
     /// Resource limits
     pub limits: ResourceLimits,
+
+    /// Force rebuild of the default image
+    #[serde(default)]
+    pub force_rebuild: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -111,6 +115,7 @@ impl Default for JailConfig {
                 memory_mb: None,
                 cpu_quota: None,
             },
+            force_rebuild: false,
         }
     }
 }

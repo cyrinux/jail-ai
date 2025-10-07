@@ -297,7 +297,7 @@ async fn build_image_from_containerfile(containerfile_path: &Path, image_name: &
 }
 
 /// Ensure the jail-ai image exists, building it if necessary
-pub async fn ensure_image_available(image_name: &str) -> Result<()> {
+pub async fn ensure_image_available(image_name: &str, force_rebuild: bool) -> Result<()> {
     // Only manage the default image automatically
     if image_name != DEFAULT_IMAGE_NAME {
         debug!(
@@ -318,9 +318,13 @@ pub async fn ensure_image_available(image_name: &str) -> Result<()> {
     let containerfile_changed = has_containerfile_changed(&containerfile_path).await?;
     let image_available = image_exists(image_name).await?;
 
-    // Build if image doesn't exist or Containerfile has changed
+    // Build if image doesn't exist, Containerfile has changed, or force_rebuild is true
     if !image_available {
         info!("Image {} not found locally, building...", image_name);
+        build_image_from_containerfile(&containerfile_path, image_name).await?;
+        store_containerfile_hash(&containerfile_path).await?;
+    } else if force_rebuild {
+        info!("Force rebuilding image {}...", image_name);
         build_image_from_containerfile(&containerfile_path, image_name).await?;
         store_containerfile_hash(&containerfile_path).await?;
     } else if containerfile_changed {
