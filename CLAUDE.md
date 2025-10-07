@@ -50,7 +50,7 @@ cargo run -- create my-agent --claude-dir
 # Create jail with ~/.config directory for GitHub Copilot
 cargo run -- create my-agent --copilot-dir
 
-# Create jail with ~/.cursor directory for Cursor Agent
+# Create jail with ~/.cursor and ~/.config/cursor directories for Cursor Agent
 cargo run -- create my-agent --cursor-dir
 
 # Create jail with ~/.config/gemini directory for Gemini CLI
@@ -146,7 +146,7 @@ The AI coding agents require authentication.
 **Opt-in mounting** (use flags to enable):
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
-- `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` directory (Cursor Agent authentication and settings)
+- `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
 - `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`)
 
