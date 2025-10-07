@@ -49,6 +49,7 @@ impl JailManager {
 }
 
 /// Builder for creating jail configurations
+#[derive(Clone)]
 pub struct JailBuilder {
     config: JailConfig,
 }
