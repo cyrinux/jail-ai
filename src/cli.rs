@@ -76,7 +76,11 @@ pub enum Commands {
         #[arg(long)]
         cursor_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
+        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        #[arg(long)]
+        gemini_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -165,7 +169,11 @@ pub enum Commands {
         #[arg(long)]
         cursor_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
+        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        #[arg(long)]
+        gemini_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -228,7 +236,11 @@ pub enum Commands {
         #[arg(long)]
         cursor_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
+        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        #[arg(long)]
+        gemini_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -291,7 +303,11 @@ pub enum Commands {
         #[arg(long)]
         cursor_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
+        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        #[arg(long)]
+        gemini_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -300,6 +316,73 @@ pub enum Commands {
         git_gpg: bool,
 
         /// Additional arguments to pass to cursor-agent
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Quick start Gemini CLI in a jail for current directory
+    Gemini {
+        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        #[arg(short, long)]
+        backend: Option<String>,
+
+        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+        #[arg(short, long, default_value = DEFAULT_IMAGE)]
+        image: String,
+
+        /// Bind mount (format: source:target[:ro])
+        #[arg(short = 'm', long)]
+        mount: Vec<String>,
+
+        /// Environment variable (format: KEY=VALUE)
+        #[arg(short = 'e', long)]
+        env: Vec<String>,
+
+        /// Disable network access
+        #[arg(long)]
+        no_network: bool,
+
+        /// Memory limit in MB
+        #[arg(long)]
+        memory: Option<u64>,
+
+        /// CPU quota percentage (0-100)
+        #[arg(long)]
+        cpu: Option<u32>,
+
+        /// Skip auto-mounting current working directory to /workspace
+        #[arg(long)]
+        no_workspace: bool,
+
+        /// Custom workspace path inside jail (default: /workspace)
+        #[arg(long, default_value = "/workspace")]
+        workspace_path: String,
+
+        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
+        #[arg(long)]
+        claude_dir: bool,
+
+        /// Mount entire ~/.config directory for GitHub Copilot
+        #[arg(long)]
+        copilot_dir: bool,
+
+        /// Mount entire ~/.cursor directory for Cursor Agent
+        #[arg(long)]
+        cursor_dir: bool,
+
+        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        #[arg(long)]
+        gemini_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
+        #[arg(long)]
+        agent_configs: bool,
+
+        /// Enable git and GPG configuration mapping
+        #[arg(long)]
+        git_gpg: bool,
+
+        /// Additional arguments to pass to gemini
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

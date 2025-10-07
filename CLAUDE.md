@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`jail-ai` is a Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor) using systemd-nspawn or podman backends. It provides isolation, resource limits, and workspace management for secure AI agent execution.
+`jail-ai` is a Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor, Gemini) using systemd-nspawn or podman backends. It provides isolation, resource limits, and workspace management for secure AI agent execution.
 
 ## Commands
 
@@ -53,7 +53,10 @@ cargo run -- create my-agent --copilot-dir
 # Create jail with ~/.cursor directory for Cursor Agent
 cargo run -- create my-agent --cursor-dir
 
-# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir)
+# Create jail with ~/.config/gemini directory for Gemini CLI
+cargo run -- create my-agent --gemini-dir
+
+# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
 cargo run -- create my-agent --agent-configs
 
 # Create jail with git and GPG configuration mapping
@@ -100,11 +103,11 @@ make dev-jail
 ## Key Features
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
-- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, and Cursor Agent pre-installed
+- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, and Gemini CLI pre-installed
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
-- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, or `--agent-configs` for all
+- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
 - **Resource Limits**: Memory and CPU quota restrictions
@@ -128,6 +131,7 @@ The `localhost/jail-ai-env:latest` image includes:
   - **Claude Code** (`claude`) - Anthropic's CLI coding assistant
   - **GitHub Copilot CLI** (`copilot`) - GitHub's AI pair programmer
   - **Cursor Agent** (`cursor-agent`) - Cursor's terminal AI agent
+  - **Gemini CLI** (`gemini`) - Google's AI terminal assistant
 
 ### AI Agent Authentication
 
@@ -137,12 +141,14 @@ The AI coding agents require authentication.
 - `jail-ai claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
+- `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
 
 **Opt-in mounting** (use flags to enable):
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` directory (Cursor Agent authentication and settings)
-- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`)
+- `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
+- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`)
 
 Example aliases for different security levels:
 ```bash
@@ -154,6 +160,9 @@ alias jail-copilot='jail-ai copilot --copilot-dir'
 
 # Cursor: needs explicit config for auth
 alias jail-cursor='jail-ai cursor --cursor-dir'
+
+# Gemini: needs explicit config for auth
+alias jail-gemini='jail-ai gemini --gemini-dir'
 
 # Claude with full config + git/GPG
 alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'

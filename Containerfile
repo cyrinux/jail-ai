@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     git \
+    tig \
     vim \
     nano \
     tree \
@@ -131,7 +132,8 @@ RUN export POETRY_HOME=/usr/local/poetry \
 
 # Install AI coding assistants globally
 RUN npm install -g @anthropic-ai/claude-code \
-    && npm install -g @github/copilot
+    && npm install -g @github/copilot \
+    && npm install -g @google/gemini-cli
 
 # Create Claude wrapper with --dangerously-skip-permissions
 RUN CLAUDE_BIN=$(which claude || echo "") && \
@@ -226,7 +228,7 @@ RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
 # Create workspace and empty config directories for mounting
 # These directories will be empty in the image, ready for bind mounts
 RUN mkdir -p /workspace && chown agent:agent /workspace \
-    && mkdir -p /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.gnupg \
+    && mkdir -p /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.config/gemini /home/agent/.gnupg \
     && chown -R agent:agent /home/agent
 
 # Switch to agent user

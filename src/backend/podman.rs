@@ -163,6 +163,28 @@ impl JailBackend for PodmanBackend {
             name, command, interactive
         );
 
+        // Check if container exists and is stopped
+        if self.exists(name).await? {
+            // Check container state
+            let mut state_cmd = Command::new("podman");
+            state_cmd
+                .arg("inspect")
+                .arg(name)
+                .arg("--format")
+                .arg("{{.State.Status}}");
+
+            if let Ok(state) = run_command(&mut state_cmd).await {
+                let state = state.trim();
+                if state == "exited" || state == "stopped" || state == "created" {
+                    info!("Container {} is {}, starting it...", name, state);
+                    let mut start_cmd = Command::new("podman");
+                    start_cmd.arg("start").arg(name);
+                    run_command(&mut start_cmd).await?;
+                    info!("Container {} started successfully", name);
+                }
+            }
+        }
+
         let mut cmd = Command::new("podman");
         cmd.arg("exec");
 
