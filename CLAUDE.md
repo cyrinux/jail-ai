@@ -182,6 +182,10 @@ When `--git-gpg` flag is used, jail-ai will:
 **GPG Configuration:**
 - Mount your `~/.gnupg` directory to `/home/agent/.gnupg` in the jail
 - This allows GPG signing to work inside the jail using your host's GPG keys
+- **SSH-based GPG Signing**: If `gpg.format=ssh` is configured, automatically mounts your SSH allowed signers file (`gpg.ssh.allowedsignersfile`) to `/home/agent/.ssh/allowed_signers` in the jail
+  - If the SSH allowed signers file doesn't exist, a warning is logged but the jail creation continues
+  - SSH GPG signing may not work properly without the allowed signers file
+  - Supports both quoted and unquoted git config values (e.g., `"ssh"` or `ssh`)
 
 This ensures that git commits made inside the jail will use your configured identity and signing key.
 
