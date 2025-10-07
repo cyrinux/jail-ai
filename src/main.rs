@@ -769,60 +769,53 @@ fn get_git_root() -> Option<PathBuf> {
 }
 
 /// Get git config value with fallback to global and system config
-/// First tries project config, then global config, then system config
+/// First tries project config (--local), then project default (no scope), then global, then system
 fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
     use tracing::debug;
 
-    // Try project-specific config first (local to the repository)
-    // Use --get-all to handle duplicate entries and take the last one
-    if let Ok(output) = std::process::Command::new("git")
-        .current_dir(cwd)
-        .args(["config", "--local", "--get-all", key])
-        .output()
-    {
+    /// Helper to try reading git config with specific args
+    fn try_git_config(args: &[&str], key: &str, scope: &str, cwd: Option<&std::path::Path>) -> Option<String> {
+        use tracing::debug;
+
+        let mut cmd = std::process::Command::new("git");
+        if let Some(cwd) = cwd {
+            cmd.current_dir(cwd);
+        }
+
+        let output = cmd.args(args).output().ok()?;
+
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             // Get the last non-empty line (git uses last value when there are duplicates)
             if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
                 let value = value.trim().to_string();
-                debug!("Found {} in project config: {}", key, value);
+                debug!("Found {} in {} config: {}", key, scope, value);
                 return Some(value);
             }
         }
+
+        None
+    }
+
+    // Try project-specific config first (local to the repository)
+    // Use --get-all to handle duplicate entries and take the last one
+    if let Some(value) = try_git_config(&["config", "--local", "--get-all", key], key, "local", Some(cwd)) {
+        return Some(value);
+    }
+
+    // Try project config (no scope specified - reads local and global in order)
+    if let Some(value) = try_git_config(&["config", "--get-all", key], key, "project", Some(cwd)) {
+        return Some(value);
     }
 
     // Fallback to global config
-    // Use --get-all to handle duplicate entries and take the last one
-    if let Ok(output) = std::process::Command::new("git")
-        .args(["config", "--global", "--get-all", key])
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git uses last value when there are duplicates)
-            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
-                let value = value.trim().to_string();
-                debug!("Found {} in global config: {}", key, value);
-                return Some(value);
-            }
-        }
+    if let Some(value) = try_git_config(&["config", "--global", "--get-all", key], key, "global", None) {
+        return Some(value);
     }
 
     // Fallback to system config
-    // Use --get-all to handle duplicate entries and take the last one
-    if let Ok(output) = std::process::Command::new("git")
-        .args(["config", "--system", "--get-all", key])
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git uses last value when there are duplicates)
-            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
-                let value = value.trim().to_string();
-                debug!("Found {} in system config: {}", key, value);
-                return Some(value);
-            }
-        }
+    if let Some(value) = try_git_config(&["config", "--system", "--get-all", key], key, "system", None) {
+        return Some(value);
     }
 
     debug!("No value found for {} in any git config", key);
