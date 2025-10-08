@@ -99,7 +99,7 @@ pub struct AgentConfigFlags {
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
-    pub openai_dir: bool,
+    pub codex_dir: bool,
     pub agent_configs: bool,
 }
 
@@ -182,15 +182,15 @@ pub fn mount_agent_configs(
         }
     }
 
-    // Opt-in: Mount ~/.config/openai for OpenAI CLI
-    if flags.openai_dir || flags.agent_configs {
-        let openai_config = home_path.join(".config").join("openai");
-        if openai_config.exists() {
+    // Opt-in: Mount ~/.config/codex for Codex CLI
+    if flags.codex_dir || flags.agent_configs {
+        let codex_config = home_path.join(".config").join("codex");
+        if codex_config.exists() {
             info!(
-                "Mounting {} to /home/agent/.config/openai",
-                openai_config.display()
+                "Mounting {} to /home/agent/.config/codex",
+                codex_config.display()
             );
-            builder = builder.bind_mount(openai_config, "/home/agent/.config/openai", false);
+            builder = builder.bind_mount(codex_config, "/home/agent/.config/codex", false);
         }
     }
 

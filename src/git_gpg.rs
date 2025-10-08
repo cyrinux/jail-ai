@@ -224,6 +224,17 @@ pub fn generate_gitconfig_content(
         }
     }
 
+    // Add GitHub credential helper configuration
+    content.push_str("[credential \"https://gist.github.com\"]\n");
+    content.push_str("\thelper = \"\"\n");
+    content.push_str("\thelper = \"gh auth git-credential\"\n");
+    content.push('\n');
+
+    content.push_str("[credential \"https://github.com\"]\n");
+    content.push_str("\thelper = \"\"\n");
+    content.push_str("\thelper = \"gh auth git-credential\"\n");
+    content.push('\n');
+
     content
 }
 
