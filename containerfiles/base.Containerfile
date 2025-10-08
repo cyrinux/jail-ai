@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tree \
     file \
     less \
+    kitty-terminfo \
     # Build essentials
     build-essential \
     pkg-config \

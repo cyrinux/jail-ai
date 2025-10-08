@@ -11,37 +11,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Nix package manager (multi-user installation)
-RUN curl -L https://nixos.org/nix/install | sh -s -- --daemon --yes
-
-# Enable Nix flakes and other experimental features
-RUN mkdir -p /etc/nix && \
-    echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
-
-# Add Nix to PATH for all users
-ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
-
-# Create necessary directories for Nix
-RUN mkdir -p /nix/var/nix/profiles/per-user/agent && \
-    chown -R agent:agent /nix/var/nix/profiles/per-user/agent
+# Create /nix directory with proper permissions for single-user install
+RUN mkdir -p /nix && chown -R agent:agent /nix
 
 USER agent
-WORKDIR /workspace
 
-# Configure Nix for the agent user
+# Install Nix package manager (single-user installation for containers)
+# Single-user mode doesn't require a daemon service to be running
+RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
+
+# Enable Nix flakes and other experimental features
 RUN mkdir -p /home/agent/.config/nix && \
     echo "experimental-features = nix-command flakes" > /home/agent/.config/nix/nix.conf
 
 # Add Nix environment setup to shell configs
+# Source the nix.sh profile script which sets up NIX_PROFILES, PATH, and other environment variables
 RUN echo '' >> /home/agent/.zshrc && \
     echo '# Nix environment' >> /home/agent/.zshrc && \
-    echo 'if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then' >> /home/agent/.zshrc && \
-    echo '  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' >> /home/agent/.zshrc && \
+    echo 'if [ -e /home/agent/.nix-profile/etc/profile.d/nix.sh ]; then' >> /home/agent/.zshrc && \
+    echo '  . /home/agent/.nix-profile/etc/profile.d/nix.sh' >> /home/agent/.zshrc && \
     echo 'fi' >> /home/agent/.zshrc && \
+    echo '# Ensure Nix paths are in PATH (fallback if sourcing fails)' >> /home/agent/.zshrc && \
+    echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.zshrc && \
     echo '' >> /home/agent/.bashrc && \
     echo '# Nix environment' >> /home/agent/.bashrc && \
-    echo 'if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then' >> /home/agent/.bashrc && \
-    echo '  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' >> /home/agent/.bashrc && \
-    echo 'fi'
+    echo 'if [ -e /home/agent/.nix-profile/etc/profile.d/nix.sh ]; then' >> /home/agent/.bashrc && \
+    echo '  . /home/agent/.nix-profile/etc/profile.d/nix.sh' >> /home/agent/.bashrc && \
+    echo 'fi' >> /home/agent/.bashrc && \
+    echo '# Ensure Nix paths are in PATH (fallback if sourcing fails)' >> /home/agent/.bashrc && \
+    echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.bashrc
+
+WORKDIR /workspace
 
 CMD ["/bin/zsh"]

@@ -240,11 +240,12 @@ pub async fn build_project_image(
 
     // Step 3: Build final project-specific image
     if let Some(agent) = agent_name {
-        // For agents: build base → agent (project-specific)
-        // Node.js is now in base, so agents inherit it directly
+        // For agents: build base → language layers → agent (project-specific)
+        // This ensures agent has all language tooling (rust, nix, etc.)
         info!("Building agent layer for project...");
 
-        // Build project-specific agent image
+        // Build project-specific agent image FROM the language_image (not base!)
+        // This ensures the agent inherits all language layers built above
         let agent_layer = format!("agent-{}", agent);
         let final_image_name = get_agent_project_image_name(agent, &project_hash);
 
@@ -253,7 +254,7 @@ pub async fn build_project_image(
                 "Building project-specific agent image: {}",
                 final_image_name
             );
-            build_image_from_containerfile(&agent_layer, Some(&base_image), &final_image_name)
+            build_image_from_containerfile(&agent_layer, Some(&language_image), &final_image_name)
                 .await?;
         } else {
             debug!("Project-specific agent image already exists");

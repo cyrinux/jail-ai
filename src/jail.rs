@@ -114,11 +114,6 @@ impl JailBuilder {
         self
     }
 
-    pub fn use_layered_images(mut self, use_layered: bool) -> Self {
-        self.config.use_layered_images = use_layered;
-        self
-    }
-
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }

@@ -30,22 +30,6 @@ impl ProjectType {
             ProjectType::Generic => "base",
         }
     }
-
-    /// Get all language layers for this project type
-    pub fn language_layers(&self) -> Vec<&'static str> {
-        match self {
-            ProjectType::Multi(types) => types.iter().map(|t| t.language_layer()).collect(),
-            _ => vec![self.language_layer()],
-        }
-    }
-
-    /// Check if this project type includes a specific language
-    pub fn includes(&self, language: &str) -> bool {
-        match self {
-            ProjectType::Multi(types) => types.iter().any(|t| t.language_layer() == language),
-            _ => self.language_layer() == language,
-        }
-    }
 }
 
 /// Detect project type based on files in the directory
@@ -110,18 +94,6 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
             info!("Detected multiple project types: {:?}", detected_types);
             ProjectType::Multi(detected_types)
         }
-    }
-}
-
-/// Determine which agent is needed based on command
-pub fn detect_agent_type(agent_name: &str) -> Option<&'static str> {
-    match agent_name.to_lowercase().as_str() {
-        "claude" => Some("claude"),
-        "copilot" => Some("copilot"),
-        "cursor" => Some("cursor"),
-        "gemini" => Some("gemini"),
-        "codex" => Some("codex"),
-        _ => None,
     }
 }
 
@@ -212,15 +184,5 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let project_type = detect_project_type(temp_dir.path());
         assert_eq!(project_type, ProjectType::Generic);
-    }
-
-    #[test]
-    fn test_detect_agent_type() {
-        assert_eq!(detect_agent_type("claude"), Some("claude"));
-        assert_eq!(detect_agent_type("copilot"), Some("copilot"));
-        assert_eq!(detect_agent_type("cursor"), Some("cursor"));
-        assert_eq!(detect_agent_type("gemini"), Some("gemini"));
-        assert_eq!(detect_agent_type("codex"), Some("codex"));
-        assert_eq!(detect_agent_type("unknown"), None);
     }
 }
