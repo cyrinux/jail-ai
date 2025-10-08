@@ -28,6 +28,14 @@ pub struct JailConfig {
     /// Force rebuild of the default image
     #[serde(default)]
     pub force_rebuild: bool,
+
+    /// Use layered images (auto-detect project type and build on-demand)
+    #[serde(default = "default_true")]
+    pub use_layered_images: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,6 +105,7 @@ impl Default for JailConfig {
                 cpu_quota: None,
             },
             force_rebuild: false,
+            use_layered_images: true,
         }
     }
 }
