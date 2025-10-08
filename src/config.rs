@@ -7,7 +7,7 @@ pub struct JailConfig {
     /// Name of the jail
     pub name: String,
 
-    /// Backend type (systemd-nspawn or podman)
+    /// Backend type (podman)
     pub backend: BackendType,
 
     /// Base image or directory for the jail
@@ -33,7 +33,6 @@ pub struct JailConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BackendType {
-    SystemdNspawn,
     Podman,
 }
 
@@ -59,12 +58,7 @@ pub struct ResourceLimits {
 impl BackendType {
     /// Check if this backend is available on the system
     pub fn is_available(&self) -> bool {
-        let command = match self {
-            BackendType::Podman => "podman",
-            BackendType::SystemdNspawn => "systemd-nspawn",
-        };
-
-        std::process::Command::new(command)
+        std::process::Command::new("podman")
             .arg("--version")
             .output()
             .map(|o| o.status.success())
@@ -73,28 +67,15 @@ impl BackendType {
 
     /// Get all available backends on the system
     pub fn all_available() -> Vec<Self> {
-        vec![BackendType::Podman, BackendType::SystemdNspawn]
-            .into_iter()
-            .filter(|b| b.is_available())
-            .collect()
+        if BackendType::Podman.is_available() {
+            vec![BackendType::Podman]
+        } else {
+            vec![]
+        }
     }
 
-    /// Detect which backend is available on the system.
-    /// Checks in order: podman -> systemd-nspawn
-    /// Returns the first available backend, or Podman as fallback.
+    /// Always returns Podman (only supported backend)
     pub fn detect() -> Self {
-        use tracing::debug;
-
-        // Check backends in order of preference
-        for backend in [BackendType::Podman, BackendType::SystemdNspawn] {
-            if backend.is_available() {
-                debug!("Detected backend: {:?}", backend);
-                return backend;
-            }
-        }
-
-        // Default to Podman if nothing is detected
-        debug!("No backend detected, defaulting to podman");
         BackendType::Podman
     }
 }

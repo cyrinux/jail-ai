@@ -37,7 +37,7 @@ impl PodmanBackend {
         // Persistent volume for /home/agent to preserve data across upgrades
         let home_volume = format!("{}-home", config.name);
         args.push("-v".to_string());
-        args.push(format!("{}:/home/agent", home_volume));
+        args.push(format!("{home_volume}:/home/agent"));
 
         // Network settings
         if !config.network.enabled {
@@ -60,13 +60,13 @@ impl PodmanBackend {
         // Environment variables
         for (key, value) in &config.environment {
             args.push("-e".to_string());
-            args.push(format!("{}={}", key, value));
+            args.push(format!("{key}={value}"));
         }
 
         // Resource limits
         if let Some(memory_mb) = config.limits.memory_mb {
             args.push("-m".to_string());
-            args.push(format!("{}m", memory_mb));
+            args.push(format!("{memory_mb}m"));
         }
         if let Some(cpu_quota) = config.limits.cpu_quota {
             args.push("--cpus".to_string());
@@ -113,7 +113,7 @@ impl JailBackend for PodmanBackend {
 
                 run_command(&mut pull_cmd)
                     .await
-                    .map_err(|e| JailError::Backend(format!("Failed to pull image: {}", e)))?;
+                    .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
             } else {
                 debug!("Using local image: {}", config.base_image);
             }
@@ -142,7 +142,7 @@ impl JailBackend for PodmanBackend {
 
         if remove_volume {
             // Remove associated home volume
-            let home_volume = format!("{}-home", name);
+            let home_volume = format!("{name}-home");
             let mut vol_cmd = Command::new("podman");
             vol_cmd.arg("volume").arg("rm").arg(&home_volume);
 
@@ -206,13 +206,12 @@ impl JailBackend for PodmanBackend {
                 .stderr(Stdio::inherit());
 
             let status = cmd.status().await.map_err(|e| {
-                JailError::Backend(format!("Failed to execute interactive command: {}", e))
+                JailError::Backend(format!("Failed to execute interactive command: {e}"))
             })?;
 
             if !status.success() {
                 return Err(JailError::ExecutionFailed(format!(
-                    "Interactive command failed with status: {}",
-                    status
+                    "Interactive command failed with status: {status}"
                 )));
             }
 
@@ -230,7 +229,7 @@ impl JailBackend for PodmanBackend {
         cmd.arg("ps")
             .arg("-a")
             .arg("--filter")
-            .arg(format!("name={}", name))
+            .arg(format!("name={name}"))
             .arg("--format")
             .arg("{{.Names}}");
 
@@ -263,7 +262,7 @@ impl JailBackend for PodmanBackend {
         debug!("Inspecting jail: {}", name);
 
         if !self.exists(name).await? {
-            return Err(JailError::NotFound(format!("Jail '{}' not found", name)));
+            return Err(JailError::NotFound(format!("Jail '{name}' not found")));
         }
 
         let mut cmd = Command::new("podman");
@@ -271,7 +270,7 @@ impl JailBackend for PodmanBackend {
 
         let output = run_command(&mut cmd).await?;
         let inspect_data: serde_json::Value = serde_json::from_str(&output)
-            .map_err(|e| JailError::Backend(format!("Failed to parse inspect output: {}", e)))?;
+            .map_err(|e| JailError::Backend(format!("Failed to parse inspect output: {e}")))?;
 
         // Extract the first element if it's an array
         let container = inspect_data
@@ -314,7 +313,8 @@ impl JailBackend for PodmanBackend {
                         let key = env_str[..pos].to_string();
                         let value = env_str[pos + 1..].to_string();
                         // Skip system environment variables
-                        if !key.starts_with("PATH") && !key.starts_with("HOME") && key != "HOSTNAME" {
+                        if !key.starts_with("PATH") && !key.starts_with("HOME") && key != "HOSTNAME"
+                        {
                             environment.push((key, value));
                         }
                     }

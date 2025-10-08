@@ -7,7 +7,7 @@ pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
 
 #[derive(Parser, Debug)]
 #[command(name = "jail-ai")]
-#[command(about = "AI Agent Jail Manager - Sandbox AI agents using systemd-nspawn or podman", long_about = None)]
+#[command(about = "AI Agent Jail Manager - Sandbox AI agents using podman", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -28,7 +28,7 @@ pub enum Commands {
         /// Name of the jail (auto-generated from current directory if not provided)
         name: Option<String>,
 
-        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -129,7 +129,7 @@ pub enum Commands {
 
     /// Quick start Claude Code in a jail for current directory
     Claude {
-        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -200,7 +200,7 @@ pub enum Commands {
 
     /// Quick start GitHub Copilot CLI in a jail for current directory
     Copilot {
-        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -271,7 +271,7 @@ pub enum Commands {
 
     /// Quick start Cursor Agent in a jail for current directory
     Cursor {
-        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -342,7 +342,7 @@ pub enum Commands {
 
     /// Quick start Gemini CLI in a jail for current directory
     Gemini {
-        /// Backend type (systemd-nspawn or podman, auto-detected if not specified)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -417,14 +417,14 @@ pub enum Commands {
         #[arg(short, long)]
         current: bool,
 
-        /// Backend type to list (systemd-nspawn or podman, default: auto-detect)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
     },
 
     /// Stop and remove all jail-ai containers
     CleanAll {
-        /// Backend type to clean (systemd-nspawn or podman, default: both)
+        /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
 
@@ -459,13 +459,9 @@ pub enum Commands {
 impl Commands {
     pub fn parse_backend(backend: &str) -> Result<crate::config::BackendType, String> {
         match backend.to_lowercase().as_str() {
-            "systemd-nspawn" | "nspawn" | "systemd" => {
-                Ok(crate::config::BackendType::SystemdNspawn)
-            }
             "podman" | "pod" => Ok(crate::config::BackendType::Podman),
             _ => Err(format!(
-                "Invalid backend '{}'. Supported: systemd-nspawn, podman",
-                backend
+                "Invalid backend '{backend}'. Only 'podman' is supported"
             )),
         }
     }
@@ -474,8 +470,7 @@ impl Commands {
         let parts: Vec<&str> = mount_str.split(':').collect();
         if parts.len() < 2 {
             return Err(format!(
-                "Invalid mount format '{}'. Expected: source:target[:ro]",
-                mount_str
+                "Invalid mount format '{mount_str}'. Expected: source:target[:ro]"
             ));
         }
 
@@ -492,8 +487,7 @@ impl Commands {
         let parts: Vec<&str> = env_str.splitn(2, '=').collect();
         if parts.len() != 2 {
             return Err(format!(
-                "Invalid environment variable format '{}'. Expected: KEY=VALUE",
-                env_str
+                "Invalid environment variable format '{env_str}'. Expected: KEY=VALUE"
             ));
         }
 
@@ -577,8 +571,8 @@ mod tests {
             Ok(crate::config::BackendType::Podman)
         ));
         assert!(matches!(
-            Commands::parse_backend("systemd-nspawn"),
-            Ok(crate::config::BackendType::SystemdNspawn)
+            Commands::parse_backend("pod"),
+            Ok(crate::config::BackendType::Podman)
         ));
         assert!(Commands::parse_backend("invalid").is_err());
     }

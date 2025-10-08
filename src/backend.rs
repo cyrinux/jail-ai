@@ -27,16 +27,10 @@ pub trait JailBackend: Send + Sync {
 }
 
 pub mod podman;
-pub mod systemd_nspawn;
 
 /// Create a backend based on the configuration
-pub fn create_backend(config: &JailConfig) -> Box<dyn JailBackend> {
-    match config.backend {
-        crate::config::BackendType::SystemdNspawn => {
-            Box::new(systemd_nspawn::SystemdNspawnBackend::new())
-        }
-        crate::config::BackendType::Podman => Box::new(podman::PodmanBackend::new()),
-    }
+pub fn create_backend(_config: &JailConfig) -> Box<dyn JailBackend> {
+    Box::new(podman::PodmanBackend::new())
 }
 
 /// Helper to run a command and capture output
@@ -48,7 +42,7 @@ async fn run_command(cmd: &mut Command) -> Result<String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| JailError::Backend(format!("Failed to execute command: {}", e)))?;
+        .map_err(|e| JailError::Backend(format!("Failed to execute command: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

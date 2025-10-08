@@ -1,18 +1,23 @@
+mod agent_commands;
 mod backend;
 mod cli;
 mod config;
 mod error;
+mod git_gpg;
 mod image;
 mod jail;
+mod jail_setup;
 
 use clap::Parser;
 use cli::{Cli, Commands};
 use config::JailConfig;
-use error::JailError;
 use jail::JailBuilder;
-use std::path::PathBuf;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// Import functions from modules
+use agent_commands::get_git_root;
+use git_gpg::create_claude_json_in_container;
 
 #[tokio::main]
 async fn main() {
@@ -43,16 +48,16 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
         None => {
             // Default behavior: auto-init and exec based on workspace (git root if available)
             let cwd = std::env::current_dir()?;
-            let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+            let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd.clone());
 
             // Find all jails for this directory
-            let matching_jails = find_jails_for_directory(&workspace_dir).await?;
+            let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
 
             let jail_name = if matching_jails.is_empty() {
                 // No jails exist, create a default one
                 let base_name = cli::Commands::generate_jail_name(&workspace_dir);
                 info!("No jail found for this directory, creating default jail...");
-                let jail_name = format!("{}-default", base_name);
+                let jail_name = format!("{base_name}-default");
 
                 info!("Creating jail '{}'...", jail_name);
                 let jail = create_default_jail(&jail_name, &workspace_dir).await?;
@@ -67,7 +72,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 jail_name
             } else {
                 // Multiple jails exist, ask user to choose
-                select_jail(&matching_jails)?
+                agent_commands::select_jail(&matching_jails)?
             };
 
             // Exec into jail with interactive shell
@@ -135,18 +140,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         .base_image(image)
                         .network(!no_network, true);
 
-                    // Set timezone from host
-                    if let Some(tz) = get_host_timezone() {
-                        builder = builder.env("TZ", tz);
-                    }
-
-                    // Inherit TERM from host
-                    if let Ok(term) = std::env::var("TERM") {
-                        builder = builder.env("TERM", term);
-                    }
-
-                    // Set default editor to vim
-                    builder = builder.env("EDITOR", "vim");
+                    // Setup default environment variables
+                    builder = jail_setup::setup_default_environment(builder);
 
                     // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
@@ -160,152 +155,27 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         builder = builder.bind_mount(workspace_dir, workspace_path, false);
                     }
 
-                    // Opt-in: Mount agent config directories
+                    // Mount agent config directories
                     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                     let home_path = std::path::PathBuf::from(&home);
 
-                    // Opt-in: Mount entire ~/.claude directory
-                    if claude_dir || agent_configs {
-                        let claude_config = home_path.join(".claude");
-                        if claude_config.exists() {
-                            info!(
-                                "Mounting {} to /home/agent/.claude",
-                                claude_config.display()
-                            );
-                            builder =
-                                builder.bind_mount(claude_config, "/home/agent/.claude", false);
-                        }
-                    } else {
-                        // If not mounting full .claude directory, mount minimal auth files
-                        let claude_creds = home_path.join(".claude").join(".credentials.json");
-                        if claude_creds.exists() {
-                            info!(
-                                "Auto-mounting {} to /home/agent/.claude/.credentials.json",
-                                claude_creds.display()
-                            );
-                            builder = builder.bind_mount(
-                                claude_creds,
-                                "/home/agent/.claude/.credentials.json",
-                                false,
-                            );
-                        }
-                    }
-
-                    // Opt-in: Mount ~/.config/.copilot for GitHub Copilot
-                    if copilot_dir || agent_configs {
-                        let copilot_config = home_path.join(".config").join(".copilot");
-                        if copilot_config.exists() {
-                            info!(
-                                "Mounting {} to /home/agent/.config/.copilot",
-                                copilot_config.display()
-                            );
-                            builder = builder.bind_mount(
-                                copilot_config,
-                                "/home/agent/.config/.copilot",
-                                false,
-                            );
-                        }
-                    }
-
-                    // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
-                    if cursor_dir || agent_configs {
-                        // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
-                        let cursor_config = home_path.join(".cursor");
-                        if cursor_config.exists() {
-                            info!(
-                                "Mounting {} to /home/agent/.cursor",
-                                cursor_config.display()
-                            );
-                            builder =
-                                builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
-                        }
-
-                        // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
-                        let cursor_config_dir = home_path.join(".config").join("cursor");
-                        if cursor_config_dir.exists() {
-                            info!(
-                                "Mounting {} to /home/agent/.config/cursor",
-                                cursor_config_dir.display()
-                            );
-                            builder = builder.bind_mount(
-                                cursor_config_dir,
-                                "/home/agent/.config/cursor",
-                                false,
-                            );
-                        }
-                    }
-
-                    // Opt-in: Mount ~/.config/gemini for Gemini CLI
-                    if gemini_dir || agent_configs {
-                        let gemini_config = home_path.join(".config").join("gemini");
-                        if gemini_config.exists() {
-                            info!(
-                                "Mounting {} to /home/agent/.config/gemini",
-                                gemini_config.display()
-                            );
-                            builder = builder.bind_mount(
-                                gemini_config,
-                                "/home/agent/.config/gemini",
-                                false,
-                            );
-                        }
-                    }
+                    builder = jail_setup::mount_agent_configs(
+                        builder,
+                        &home_path,
+                        "", // No specific agent for create command
+                        &jail_setup::AgentConfigFlags {
+                            claude_dir,
+                            copilot_dir,
+                            cursor_dir,
+                            gemini_dir,
+                            agent_configs,
+                        },
+                    );
 
                     // Opt-in: GPG configuration
                     if git_gpg {
-                        // Prepare and mount GPG configuration directory
-                        let gpg_dir = home_path.join(".gnupg");
-                        if gpg_dir.exists() {
-                            match prepare_gpg_config(&gpg_dir) {
-                                Ok((temp_gpg_dir, sockets)) => {
-                                    info!(
-                                        "Mounting prepared GPG config {} to /home/agent/.gnupg",
-                                        temp_gpg_dir.display()
-                                    );
-                                    builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
-
-                                    // Mount GPG agent sockets for YubiKey and smartcard support
-                                    let mut ssh_auth_sock_target: Option<String> = None;
-                                    for socket_path in sockets {
-                                        if let Some(socket_name) = socket_path.file_name() {
-                                            let socket_name_str = socket_name.to_string_lossy();
-                                            let target = format!("/home/agent/.gnupg/{}", socket_name_str);
-                                            info!(
-                                                "Mounting GPG socket {} to {}",
-                                                socket_path.display(),
-                                                target
-                                            );
-                                            builder = builder.bind_mount(&socket_path, target.clone(), false);
-                                            
-                                            // Track SSH auth socket for environment variable
-                                            if socket_name_str == "S.gpg-agent.ssh" {
-                                                ssh_auth_sock_target = Some(target);
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Set SSH_AUTH_SOCK if we mounted the SSH socket
-                                    if let Some(sock_path) = ssh_auth_sock_target {
-                                        info!("Setting SSH_AUTH_SOCK to {}", sock_path);
-                                        builder = builder.env("SSH_AUTH_SOCK", sock_path);
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("Failed to prepare GPG config: {}", e);
-                                }
-                            }
-                        }
-
-                        // Handle SSH allowed signers file mounting for SSH-based GPG signing
                         let cwd = std::env::current_dir()?;
-                        match handle_ssh_allowed_signers_mounting(&cwd, &builder) {
-                            Ok((updated_builder, _mounted)) => {
-                                builder = updated_builder;
-                            }
-                            Err(e) => {
-                                warn!("Failed to handle SSH allowed signers file mounting: {}", e);
-                            }
-                        }
+                        builder = git_gpg::setup_git_gpg_config(builder, &cwd, &home_path)?;
                     }
 
                     // Parse mounts
@@ -341,14 +211,14 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 // Create .claude.json file inside the container
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                 let home_path = std::path::PathBuf::from(&home);
-                if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
+                if let Err(e) = git_gpg::create_claude_json_in_container(&home_path, &jail).await {
                     warn!("Failed to create .claude.json in container: {}", e);
                 }
 
                 // Create .gitconfig file inside the container if git_gpg is enabled
                 if git_gpg {
                     let cwd = std::env::current_dir()?;
-                    if let Err(e) = create_gitconfig_in_container(&cwd, &jail).await {
+                    if let Err(e) = git_gpg::create_gitconfig_in_container(&cwd, &jail).await {
                         warn!("Failed to create .gitconfig in container: {}", e);
                     }
                 }
@@ -356,12 +226,16 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Jail created: {}", jail.config().name);
             }
 
-            Commands::Remove { name, force, volume } => {
+            Commands::Remove {
+                name,
+                force,
+                volume,
+            } => {
                 let jail_name = resolve_jail_name(name).await?;
 
                 if !force {
                     use std::io::{self, BufRead, Write};
-                    print!("Remove jail '{}'? [y/N] ", jail_name);
+                    print!("Remove jail '{jail_name}'? [y/N] ");
                     io::stdout().flush()?;
                     let stdin = io::stdin();
                     let mut line = String::new();
@@ -410,8 +284,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 // Check if jail exists
                 if !jail.exists().await? {
                     return Err(error::JailError::NotFound(format!(
-                        "Jail '{}' does not exist",
-                        jail_name
+                        "Jail '{jail_name}' does not exist"
                     )));
                 }
 
@@ -420,7 +293,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
 
                 let json = serde_json::to_string_pretty(&config)?;
                 tokio::fs::write(&output, json).await?;
-                println!("✓ Configuration for jail '{}' saved to: {}", jail_name, output.display());
+                println!(
+                    "✓ Configuration for jail '{}' saved to: {}",
+                    jail_name,
+                    output.display()
+                );
                 info!("Configuration saved to: {}", output.display());
             }
 
@@ -443,9 +320,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 force_rebuild,
                 args,
             } => {
-                run_ai_agent_command(
+                agent_commands::run_ai_agent_command(
                     "claude",
-                    AgentCommandParams {
+                    agent_commands::AgentCommandParams {
                         backend,
                         image,
                         mount,
@@ -487,9 +364,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 force_rebuild,
                 args,
             } => {
-                run_ai_agent_command(
+                agent_commands::run_ai_agent_command(
                     "copilot",
-                    AgentCommandParams {
+                    agent_commands::AgentCommandParams {
                         backend,
                         image,
                         mount,
@@ -531,9 +408,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 force_rebuild,
                 args,
             } => {
-                run_ai_agent_command(
+                agent_commands::run_ai_agent_command(
                     "cursor-agent",
-                    AgentCommandParams {
+                    agent_commands::AgentCommandParams {
                         backend,
                         image,
                         mount,
@@ -575,9 +452,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 force_rebuild,
                 args,
             } => {
-                run_ai_agent_command(
+                agent_commands::run_ai_agent_command(
                     "gemini",
-                    AgentCommandParams {
+                    agent_commands::AgentCommandParams {
                         backend,
                         image,
                         mount,
@@ -621,7 +498,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 // Filter by current directory if requested
                 let jails = if current {
                     let cwd = std::env::current_dir()?;
-                    let workspace_dir = get_git_root().unwrap_or(cwd);
+                    let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
                     let base_name = cli::Commands::generate_jail_name(&workspace_dir);
                     all_jails
                         .into_iter()
@@ -638,10 +515,10 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         println!("No jails found");
                     }
                 } else {
-                    println!("Jails (backend: {:?}):", backend_type);
+                    println!("Jails (backend: {backend_type:?}):");
                     for jail_name in &jails {
                         // Extract agent name from jail name
-                        let agent_suffix = extract_agent_name(jail_name);
+                        let agent_suffix = agent_commands::extract_agent_name(jail_name);
 
                         // Check if jail is running
                         let config = JailConfig {
@@ -656,13 +533,17 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                             "inactive"
                         };
 
-                        println!("  {} [{}] ({})", jail_name, status, agent_suffix);
+                        println!("  {jail_name} [{status}] ({agent_suffix})");
                     }
                     println!("\nTotal: {} jail(s)", jails.len());
                 }
             }
 
-            Commands::CleanAll { backend, force, volume } => {
+            Commands::CleanAll {
+                backend,
+                force,
+                volume,
+            } => {
                 // Determine which backends to clean
                 let backends = if let Some(backend_str) = backend {
                     vec![Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?]
@@ -710,7 +591,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                         use std::io::{self, BufRead, Write};
                         println!("Containers to be removed:");
                         for jail_name in &jails {
-                            println!("  - {}", jail_name);
+                            println!("  - {jail_name}");
                         }
                         print!("Remove all {} container(s)? [y/N] ", jails.len());
                         io::stdout().flush()?;
@@ -744,7 +625,12 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Clean-all operation completed");
             }
 
-            Commands::Upgrade { name, image, force, all } => {
+            Commands::Upgrade {
+                name,
+                image,
+                force,
+                all,
+            } => {
                 if all {
                     // Upgrade all jails
                     upgrade_all_jails(image, force).await?;
@@ -760,697 +646,6 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
     Ok(())
 }
 
-/// Auto-detect jail name from current directory (or git root if available)
-fn auto_detect_jail_name() -> error::Result<String> {
-    let cwd = std::env::current_dir()?;
-    let workspace_dir = get_git_root().unwrap_or(cwd);
-    let jail_name = cli::Commands::generate_jail_name(&workspace_dir);
-    info!("Auto-detected jail name from workspace: {}", jail_name);
-    Ok(jail_name)
-}
-
-/// Resolve jail name: use provided name or auto-detect from current directory
-async fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
-    if let Some(name) = name {
-        Ok(name)
-    } else {
-        // Auto-detect: find all matching jails for this directory
-        let cwd = std::env::current_dir()?;
-        let workspace_dir = get_git_root().unwrap_or(cwd);
-        let matching_jails = find_jails_for_directory(&workspace_dir).await?;
-
-        let jail_name = if matching_jails.is_empty() {
-            return Err(error::JailError::Config(
-                "No jails found for this directory. Create one first.".to_string(),
-            ));
-        } else if matching_jails.len() == 1 {
-            // Only one jail exists, use it
-            matching_jails[0].clone()
-        } else {
-            // Multiple jails exist, ask user to choose
-            select_jail(&matching_jails)?
-        };
-
-        info!("Auto-detected jail: {}", jail_name);
-        Ok(jail_name)
-    }
-}
-
-/// Get the git root directory if the current directory is within a git repository
-fn get_git_root() -> Option<PathBuf> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output();
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let git_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !git_root.is_empty() {
-                let path = PathBuf::from(git_root);
-                if path.exists() {
-                    info!("Found git root: {}", path.display());
-                    return Some(path);
-                }
-            }
-        }
-        _ => {
-            // Not a git repository or git command failed
-        }
-    }
-
-    None
-}
-
-/// Get git config value with fallback to global and system config
-///
-/// This function respects git's config precedence hierarchy:
-/// - **Local** (`.git/config` in repository) - highest priority
-/// - **Global** (`~/.gitconfig` or `~/.config/git/config`) - medium priority
-/// - **System** (`/etc/gitconfig`) - lowest priority
-///
-/// When multiple values exist for the same key, git uses the **last value** from the
-/// **highest priority scope**. For example, if a key has multiple values in local config,
-/// the last one wins. If a key exists in both local and global config, local wins.
-///
-/// # Fallback Strategy
-///
-/// The function tries these operations in order:
-/// 1. **`--local` with cwd context**: Reads only the repository's `.git/config`
-///    - Returns immediately if found (optimization for most common case)
-/// 2. **No scope with cwd context**: Reads local + global + system in precedence order
-///    - Handles cases where local doesn't exist but global/system does
-/// 3. **`--global` without cwd**: Reads only global config
-///    - Fallback for when cwd is not a git repository
-/// 4. **`--system` without cwd**: Reads only system config
-///    - Final fallback for system-level configuration
-///
-/// The fallback chain ensures correct behavior both inside and outside git repositories.
-///
-/// # Handling Multiple Values
-///
-/// Git allows multiple values for the same key (using `git config --add`). This function:
-/// - Uses `--get-all` to retrieve all values for a key
-/// - Uses `next_back()` to get the **last value** (git's documented behavior)
-/// - This correctly implements git's "last value wins" semantics
-///
-/// # Examples
-///
-/// ```text
-/// # Inside a git repository
-/// Local:  user.name = "Alice"
-/// Global: user.name = "Bob"
-/// Result: "Alice" (local wins)
-///
-/// # Outside a git repository
-/// Global: user.name = "Bob"
-/// Result: "Bob" (fallback to global)
-///
-/// # Multiple values in same scope
-/// Local:  user.name = "Alice"
-/// Local:  user.name = "Charlie"
-/// Result: "Charlie" (last value wins)
-/// ```
-fn get_git_config(key: &str, cwd: &std::path::Path) -> Option<String> {
-    use tracing::debug;
-
-    /// Helper to try reading git config with specific args
-    ///
-    /// Uses `--get-all` to retrieve all values and returns the last one
-    /// (which has highest priority according to git's semantics)
-    fn try_git_config(args: &[&str], key: &str, scope: &str, cwd: Option<&std::path::Path>) -> Option<String> {
-        use tracing::debug;
-
-        let mut cmd = std::process::Command::new("git");
-        if let Some(cwd) = cwd {
-            cmd.current_dir(cwd);
-        }
-
-        let output = cmd.args(args).output().ok()?;
-
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Get the last non-empty line (git uses last value when there are duplicates)
-            // This correctly implements git's "last value wins" behavior
-            if let Some(value) = output_str.lines().filter(|l| !l.trim().is_empty()).next_back() {
-                let value = value.trim().to_string();
-                debug!("Found {} in {} config: {}", key, scope, value);
-                return Some(value);
-            }
-        }
-
-        None
-    }
-
-    // Try project-specific config first (local to the repository)
-    // Use --get-all to handle duplicate entries and take the last one
-    // This is an optimization - if found in local, we don't need to check other scopes
-    if let Some(value) = try_git_config(&["config", "--local", "--get-all", key], key, "local", Some(cwd)) {
-        return Some(value);
-    }
-
-    // Try project config (no scope specified - reads local + global + system in precedence order)
-    // This handles the case where local doesn't exist but global/system does
-    if let Some(value) = try_git_config(&["config", "--get-all", key], key, "project", Some(cwd)) {
-        return Some(value);
-    }
-
-    // Fallback to global config only
-    // This handles the case where cwd is not a git repository
-    if let Some(value) = try_git_config(&["config", "--global", "--get-all", key], key, "global", None) {
-        return Some(value);
-    }
-
-    // Fallback to system config only
-    // Final fallback for system-level configuration
-    if let Some(value) = try_git_config(&["config", "--system", "--get-all", key], key, "system", None) {
-        return Some(value);
-    }
-
-    debug!("No value found for {} in any git config", key);
-    None
-}
-
-/// Read all relevant git config values from the host
-/// Returns a HashMap of config keys and their values
-fn get_all_git_config_values(cwd: &std::path::Path) -> std::collections::HashMap<String, String> {
-    use std::collections::HashMap;
-    use tracing::debug;
-
-    let mut config_map = HashMap::new();
-
-    // List of git config keys we want to read
-    let config_keys = vec![
-        "user.name",
-        "user.email",
-        "user.signingkey",
-        "commit.gpgsign",
-        "tag.gpgsign",
-        "gpg.format",
-        "gpg.program",
-        "gpg.ssh.allowedsignersfile",
-        "core.editor",
-        "init.defaultbranch",
-        "pull.rebase",
-        "push.autosetupremote",
-    ];
-
-    for key in config_keys {
-        if let Some(value) = get_git_config(key, cwd) {
-            debug!("Read git config: {} = {}", key, value);
-            config_map.insert(key.to_string(), value);
-        }
-    }
-
-    config_map
-}
-
-/// Generate .gitconfig file content from git config values
-fn generate_gitconfig_content(config_map: &std::collections::HashMap<String, String>) -> String {
-    use std::collections::HashMap;
-
-    let mut content = String::from("# Generated by jail-ai from host git config\n\n");
-
-    // Group config by section and subsection
-    // Key format: section.subsection.name or section.name
-    let mut sections: HashMap<String, Vec<(String, String)>> = HashMap::new();
-    let mut subsections: HashMap<(String, String), Vec<(String, String)>> = HashMap::new();
-
-    for (key, value) in config_map {
-        let parts: Vec<&str> = key.split('.').collect();
-        
-        if parts.len() == 2 {
-            // Simple: section.name
-            let section = parts[0];
-            let name = parts[1];
-            sections
-                .entry(section.to_string())
-                .or_default()
-                .push((name.to_string(), value.clone()));
-        } else if parts.len() == 3 {
-            // Subsection: section.subsection.name
-            let section = parts[0];
-            let subsection = parts[1];
-            let name = parts[2];
-            subsections
-                .entry((section.to_string(), subsection.to_string()))
-                .or_default()
-                .push((name.to_string(), value.clone()));
-        }
-    }
-
-    // Write sections in order
-    let section_order = vec!["user", "commit", "tag", "gpg", "core", "init", "pull", "push"];
-
-    for section_name in section_order {
-        // Write simple section entries
-        if let Some(entries) = sections.get(section_name) {
-            content.push_str(&format!("[{}]\n", section_name));
-            for (name, value) in entries {
-                content.push_str(&format!("\t{} = {}\n", name, value));
-            }
-            content.push('\n');
-        }
-        
-        // Write subsection entries for this section
-        for ((sec, subsec), entries) in &subsections {
-            if sec == section_name {
-                content.push_str(&format!("[{} \"{}\"]\n", sec, subsec));
-                for (name, value) in entries {
-                    content.push_str(&format!("\t{} = {}\n", name, value));
-                }
-                content.push('\n');
-            }
-        }
-    }
-
-    content
-}
-
-/// Handle SSH allowed signers file mounting for SSH-based GPG signing
-/// Returns the updated builder and true if SSH GPG signing is configured and file was mounted
-fn handle_ssh_allowed_signers_mounting(
-    cwd: &std::path::Path,
-    builder: &jail::JailBuilder,
-) -> error::Result<(jail::JailBuilder, bool)> {
-    // Read git config to check for SSH GPG configuration
-    let config_map = get_all_git_config_values(cwd);
-    
-    if let Some(gpg_format) = config_map.get("gpg.format") {
-        // Handle both quoted and unquoted values: "ssh" or ssh
-        let format_value = gpg_format.trim_matches('"');
-        if format_value == "ssh" {
-            if let Some(allowedsigners_file) = config_map.get("gpg.ssh.allowedsignersfile") {
-                // Handle both quoted and unquoted values: "~/.ssh/allowed_signers" or ~/.ssh/allowed_signers
-                let file_path = allowedsigners_file.trim_matches('"');
-                // Expand ~ to home directory
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                let expanded_path = file_path.replace("~", &home);
-                let signers_path = std::path::PathBuf::from(&expanded_path);
-                
-                if signers_path.exists() {
-                    info!("Mounting SSH allowed signers file: {} to /home/agent/.ssh/allowed_signers", signers_path.display());
-                    let updated_builder = builder.clone().bind_mount(&signers_path, "/home/agent/.ssh/allowed_signers", false);
-                    return Ok((updated_builder, true));
-                } else {
-                    warn!("SSH allowed signers file not found: {} - SSH GPG signing may not work properly", signers_path.display());
-                }
-            } else {
-                warn!("SSH GPG format configured but gpg.ssh.allowedsignersfile not set - SSH GPG signing may not work properly");
-            }
-        }
-    }
-    
-    Ok((builder.clone(), false))
-}
-
-/// Create a .gitconfig file inside the container
-/// Reads git config from host and creates the file directly inside the container
-async fn create_gitconfig_in_container(cwd: &std::path::Path, jail: &jail::JailManager) -> error::Result<()> {
-    use tracing::debug;
-
-    // Read all relevant git config values from host
-    let config_map = get_all_git_config_values(cwd);
-
-    if config_map.is_empty() {
-        debug!("No git config values found on host, skipping .gitconfig creation");
-        return Ok(());
-    }
-
-    // Note: SSH allowed signers file mounting is handled during jail creation
-    // This function only creates the .gitconfig file
-
-    // Generate .gitconfig content
-    let gitconfig_content = generate_gitconfig_content(&config_map);
-    debug!("Generated .gitconfig content:\n{}", gitconfig_content);
-
-    // Create the .gitconfig file inside the container using a shell command
-    let create_file_cmd = vec![
-        "sh".to_string(),
-        "-c".to_string(),
-        format!("cat > /home/agent/.gitconfig << 'GITCONFIG_EOF'\n{}\nGITCONFIG_EOF", gitconfig_content),
-    ];
-
-    jail.exec(&create_file_cmd, false).await?;
-
-    info!("Created .gitconfig inside container with host's git configuration");
-
-    Ok(())
-}
-
-/// Create a .claude.json file inside the container
-/// Reads oauthAccount and userID from host's ~/.claude.json if it exists
-/// Creates the file directly inside the container, not as a mount
-async fn create_claude_json_in_container(home_path: &std::path::Path, jail: &jail::JailManager) -> error::Result<()> {
-    use serde_json::{json, Value};
-
-    let host_claude_json = home_path.join(".claude.json");
-
-    let mut claude_json = json!({
-        "hasCompletedOnboarding": true,
-        "bypassPermissionsModeAccepted": true
-    });
-
-    // Try to read host's .claude.json and extract oauthAccount and userID
-    if host_claude_json.exists() {
-        if let Ok(content) = tokio::fs::read_to_string(&host_claude_json).await {
-            if let Ok(host_data) = serde_json::from_str::<Value>(&content) {
-                // Copy oauthAccount if present
-                if let Some(oauth_account) = host_data.get("oauthAccount") {
-                    claude_json["oauthAccount"] = oauth_account.clone();
-                }
-
-                // Copy userID if present
-                if let Some(user_id) = host_data.get("userID") {
-                    claude_json["userID"] = user_id.clone();
-                }
-            }
-        }
-    }
-
-    let json_content = serde_json::to_string(&claude_json)?;
-
-    // Create the .claude.json file inside the container using a shell command
-    // We use cat with a heredoc to create the file
-    let create_file_cmd = vec![
-        "sh".to_string(),
-        "-c".to_string(),
-        format!("mkdir -p /home/agent && cat > /home/agent/.claude.json << 'CLAUDE_JSON_EOF'\n{}\nCLAUDE_JSON_EOF", json_content),
-    ];
-
-    jail.exec(&create_file_cmd, false).await?;
-
-    info!("Created .claude.json inside container");
-
-    Ok(())
-}
-
-/// Get the jail-ai config directory path (XDG_CONFIG_HOME or ~/.config/jail-ai)
-fn get_jail_ai_config_dir() -> error::Result<PathBuf> {
-    let base_dir = if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
-        PathBuf::from(config_home)
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config")
-    } else {
-        return Err(error::JailError::Config(
-            "Could not determine config directory (HOME not set)".to_string(),
-        ));
-    };
-
-    Ok(base_dir.join("jail-ai"))
-}
-
-/// Get the user's UID for runtime directory detection
-fn get_user_uid() -> error::Result<u32> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let home = std::env::var("HOME").map_err(|_| {
-            error::JailError::Config("HOME environment variable not set".to_string())
-        })?;
-        let metadata = std::fs::metadata(&home)?;
-        Ok(metadata.uid())
-    }
-
-    #[cfg(not(unix))]
-    {
-        Err(error::JailError::Config(
-            "UID detection not supported on non-Unix systems".to_string(),
-        ))
-    }
-}
-
-/// Prepare GPG configuration by resolving symlinks and copying to a persistent directory
-/// This handles NixOS where config files are symlinks to /nix/store
-/// Returns (persistent_dir_path, sockets_to_mount) where sockets need to be mounted separately
-fn prepare_gpg_config(gpg_dir: &std::path::Path) -> error::Result<(std::path::PathBuf, Vec<std::path::PathBuf>)> {
-    use std::os::unix::fs::FileTypeExt;
-    use tracing::debug;
-
-    if !gpg_dir.exists() {
-        return Err(error::JailError::Config(format!("GPG directory does not exist: {}", gpg_dir.display())));
-    }
-
-    // Create a persistent directory for GPG config in ~/.config/jail-ai/gpg-cache
-    let cache_dir = get_jail_ai_config_dir()?.join("gpg-cache");
-    std::fs::create_dir_all(&cache_dir)?;
-
-    // Create a unique directory based on the source GPG directory path
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(gpg_dir.to_string_lossy().as_bytes());
-    let hash = hex::encode(hasher.finalize());
-    let persistent_dir = cache_dir.join(&hash[..16]);
-
-    // Remove old cache if it exists to ensure fresh config
-    if persistent_dir.exists() {
-        debug!("Removing old GPG cache: {}", persistent_dir.display());
-        std::fs::remove_dir_all(&persistent_dir)?;
-    }
-
-    std::fs::create_dir_all(&persistent_dir)?;
-    info!("Preparing GPG config in cache directory: {}", persistent_dir.display());
-    debug!("Source GPG directory: {}", gpg_dir.display());
-
-    let mut sockets = Vec::new();
-
-    // Look for GPG agent sockets in the runtime directory (/run/user/UID/gnupg/)
-    // This is where gpg-agent actually creates the sockets
-    let uid = get_user_uid()?;
-    let runtime_gpg_dir = std::path::PathBuf::from(format!("/run/user/{}/gnupg", uid));
-
-    if runtime_gpg_dir.exists() {
-        debug!("Checking runtime GPG directory: {}", runtime_gpg_dir.display());
-
-        // Common GPG agent socket names
-        let socket_names = vec![
-            "S.gpg-agent",
-            "S.gpg-agent.extra",
-            "S.gpg-agent.ssh",
-            "S.gpg-agent.browser",
-        ];
-
-        for socket_name in socket_names {
-            let socket_path = runtime_gpg_dir.join(socket_name);
-            if socket_path.exists() {
-                let metadata = std::fs::symlink_metadata(&socket_path)?;
-                if metadata.file_type().is_socket() {
-                    debug!("Found runtime socket: {}", socket_path.display());
-                    sockets.push(socket_path);
-                }
-            }
-        }
-    } else {
-        debug!("Runtime GPG directory does not exist: {}", runtime_gpg_dir.display());
-    }
-
-    // Also check ~/.gnupg for any sockets (fallback)
-    for entry in std::fs::read_dir(gpg_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_name = entry.file_name();
-        let file_name_str = file_name.to_string_lossy();
-
-        // Skip directories (private-keys-v1.d, crls.d, public-keys.d)
-        if path.is_dir() {
-            debug!("Skipping directory: {}", file_name_str);
-            continue;
-        }
-
-        let metadata = std::fs::symlink_metadata(&path)?;
-        let file_type = metadata.file_type();
-
-        // Socket files need to be mounted directly, not copied
-        if file_type.is_socket() {
-            debug!("Found socket in ~/.gnupg: {}", file_name_str);
-            // Only add if not already in the list from runtime dir
-            if !sockets.iter().any(|s| s.file_name() == Some(file_name.as_os_str())) {
-                sockets.push(path.clone());
-            }
-            continue;
-        }
-
-        // Skip gpg-agent.conf from the host - we'll generate our own
-        if file_name_str == "gpg-agent.conf" {
-            debug!("Skipping host gpg-agent.conf - will generate custom config");
-            continue;
-        }
-
-        // For regular files and symlinks, resolve and copy the content
-        if file_type.is_file() || file_type.is_symlink() {
-            let target_path = persistent_dir.join(&file_name);
-
-            if file_type.is_symlink() {
-                // Resolve symlink and copy the actual file content
-                let symlink_target = std::fs::read_link(&path)?;
-                info!("Resolving GPG config symlink: {} -> {}", file_name_str, symlink_target.display());
-                let content = std::fs::read(&path)?;
-                let content_len = content.len();
-                std::fs::write(&target_path, content)?;
-                debug!("Copied {} bytes from resolved symlink {} to cache", content_len, file_name_str);
-            } else {
-                // Copy regular file
-                std::fs::copy(&path, &target_path)?;
-                debug!("Copied regular file {} to cache", file_name_str);
-            }
-
-            // Preserve permissions
-            #[cfg(unix)]
-            {
-                let perms = std::fs::metadata(&path)?.permissions();
-                std::fs::set_permissions(&target_path, perms)?;
-            }
-        }
-    }
-
-    // Copy directories (private-keys-v1.d, crls.d, public-keys.d)
-    for dir_name in &["private-keys-v1.d", "crls.d", "public-keys.d"] {
-        let src_dir = gpg_dir.join(dir_name);
-        if src_dir.exists() && src_dir.is_dir() {
-            let dst_dir = persistent_dir.join(dir_name);
-            std::fs::create_dir_all(&dst_dir)?;
-            debug!("Copying directory: {}", dir_name);
-
-            copy_dir_recursive(&src_dir, &dst_dir)?;
-        }
-    }
-
-    // Generate custom gpg-agent.conf for the jail with pinentry-curses
-    let gpg_agent_conf_path = persistent_dir.join("gpg-agent.conf");
-    let gpg_agent_conf_content = "\
-# Generated by jail-ai for container use
-# Using pinentry-curses for terminal-based PIN entry
-pinentry-program /usr/bin/pinentry-curses
-enable-ssh-support
-grab
-allow-preset-passphrase
-max-cache-ttl 86400
-default-cache-ttl 3600
-";
-    std::fs::write(&gpg_agent_conf_path, gpg_agent_conf_content)?;
-    info!("Generated custom gpg-agent.conf with pinentry-curses");
-    debug!("gpg-agent.conf path: {}", gpg_agent_conf_path.display());
-
-    // Set proper permissions for gpg-agent.conf (0600)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&gpg_agent_conf_path)?.permissions();
-        perms.set_mode(0o600);
-        std::fs::set_permissions(&gpg_agent_conf_path, perms)?;
-        debug!("Set gpg-agent.conf permissions to 0600");
-    }
-
-    info!("Prepared GPG config in persistent cache directory: {}", persistent_dir.display());
-    debug!("Found {} GPG agent sockets to mount", sockets.len());
-    Ok((persistent_dir, sockets))
-}
-
-/// Recursively copy a directory
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> error::Result<()> {
-    use tracing::debug;
-
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_name = entry.file_name();
-        let dst_path = dst.join(&file_name);
-
-        let metadata = std::fs::symlink_metadata(&path)?;
-        let file_type = metadata.file_type();
-
-        if file_type.is_dir() {
-            std::fs::create_dir_all(&dst_path)?;
-            copy_dir_recursive(&path, &dst_path)?;
-        } else if file_type.is_file() || file_type.is_symlink() {
-            // Resolve symlinks and copy content
-            let content = std::fs::read(&path)?;
-            std::fs::write(&dst_path, content)?;
-
-            // Preserve permissions
-            #[cfg(unix)]
-            {
-                let perms = std::fs::metadata(&path)?.permissions();
-                std::fs::set_permissions(&dst_path, perms)?;
-            }
-
-            debug!("Copied {} to {}", path.display(), dst_path.display());
-        }
-        // Skip sockets and other special files in subdirectories
-    }
-
-    Ok(())
-}
-
-/// Get the host's timezone
-fn get_host_timezone() -> Option<String> {
-    // Try TZ environment variable first
-    if let Ok(tz) = std::env::var("TZ") {
-        if !tz.is_empty() {
-            info!("Using timezone from TZ env var: {}", tz);
-            return Some(tz);
-        }
-    }
-
-    // Try timedatectl (systemd-based systems)
-    if let Ok(output) = std::process::Command::new("timedatectl")
-        .arg("show")
-        .arg("--property=Timezone")
-        .arg("--value")
-        .output()
-    {
-        if output.status.success() {
-            let tz = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !tz.is_empty() && tz != "n/a" {
-                info!("Using timezone from timedatectl: {}", tz);
-                return Some(tz);
-            }
-        }
-    }
-
-    // Try reading /etc/timezone
-    if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
-        let tz = tz.trim().to_string();
-        if !tz.is_empty() {
-            info!("Using timezone from /etc/timezone: {}", tz);
-            return Some(tz);
-        }
-    }
-
-    // Try reading /etc/localtime symlink
-    if let Ok(link) = std::fs::read_link("/etc/localtime") {
-        if let Some(tz) = link.to_str() {
-            // Extract timezone from paths like:
-            // - /usr/share/zoneinfo/Europe/Paris
-            // - /run/current-system/sw/share/zoneinfo/Europe/Paris (NixOS)
-            // - ../usr/share/zoneinfo/Europe/Paris (relative symlinks)
-            for prefix in [
-                "/usr/share/zoneinfo/",
-                "/run/current-system/sw/share/zoneinfo/",
-                "../usr/share/zoneinfo/",
-            ] {
-                if let Some(tz_name) = tz.strip_prefix(prefix) {
-                    info!("Using timezone from /etc/localtime: {}", tz_name);
-                    return Some(tz_name.to_string());
-                }
-            }
-            // Try extracting from any path containing "zoneinfo/"
-            if let Some(pos) = tz.find("zoneinfo/") {
-                let tz_name = &tz[pos + "zoneinfo/".len()..];
-                if !tz_name.is_empty() {
-                    info!(
-                        "Using timezone from /etc/localtime (extracted): {}",
-                        tz_name
-                    );
-                    return Some(tz_name.to_string());
-                }
-            }
-        }
-    }
-
-    warn!("Could not determine host timezone, container will use UTC. Try setting TZ environment variable or ensure timedatectl is available.");
-    None
-}
-
 /// Helper function to create a jail with default configuration
 async fn create_default_jail(
     name: &str,
@@ -1463,18 +658,8 @@ async fn create_default_jail(
         .base_image(image::DEFAULT_IMAGE_NAME)
         .network(true, true);
 
-    // Set timezone from host
-    if let Some(tz) = get_host_timezone() {
-        builder = builder.env("TZ", tz);
-    }
-
-    // Inherit TERM from host
-    if let Ok(term) = std::env::var("TERM") {
-        builder = builder.env("TERM", term);
-    }
-
-    // Set default editor to vim
-    builder = builder.env("EDITOR", "vim");
+    // Setup default environment variables
+    builder = jail_setup::setup_default_environment(builder);
 
     // Auto-mount workspace (git root if available, otherwise provided workspace)
     let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
@@ -1484,385 +669,33 @@ async fn create_default_jail(
     Ok(builder.build())
 }
 
-/// Find all jails matching the current directory pattern
-async fn find_jails_for_directory(workspace_dir: &std::path::Path) -> error::Result<Vec<String>> {
-    let base_name = cli::Commands::generate_jail_name(workspace_dir);
-    let backend_type = config::BackendType::detect();
+/// Resolve jail name: use provided name or auto-detect from current directory
+async fn resolve_jail_name(name: Option<String>) -> error::Result<String> {
+    if let Some(name) = name {
+        Ok(name)
+    } else {
+        // Auto-detect: find all matching jails for this directory
+        let cwd = std::env::current_dir()?;
+        let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
+        let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
 
-    // Create a temporary config just to access the backend
-    let temp_config = JailConfig {
-        name: "temp".to_string(),
-        backend: backend_type,
-        ..Default::default()
-    };
-    let backend = backend::create_backend(&temp_config);
-
-    // List all jails
-    let all_jails = backend.list_all().await?;
-
-    // Filter jails that match the base pattern (jail-{project}-{hash}-)
-    let matching_jails: Vec<String> = all_jails
-        .into_iter()
-        .filter(|name| name.starts_with(&base_name) && name.len() > base_name.len())
-        .collect();
-
-    Ok(matching_jails)
-}
-
-/// Extract agent name from jail name for display purposes
-/// Jail name format: jail-{project}-{hash}-{agent}
-/// Returns a simplified agent name for display (e.g., "cursor" instead of "cursor-agent")
-fn extract_agent_name(jail_name: &str) -> &str {
-    // The format is: jail-{project}-{hash}-{agent}
-    // The hash is always 8 characters, so we need to find it and take everything after it
-    
-    if jail_name.starts_with("jail-") {
-        // Find the hash part (8 characters) and take everything after it
-        let parts: Vec<&str> = jail_name.split('-').collect();
-        
-        // Look for a part that is exactly 8 characters (the hash)
-        for (i, part) in parts.iter().enumerate() {
-            if part.len() == 8 && part.chars().all(|c| c.is_ascii_hexdigit()) {
-                // Found the hash at index i, agent starts after the next dash
-                if i + 1 < parts.len() {
-                    // Find the position of the agent part in the original string
-                    // Count characters up to and including the hash, then skip the next dash
-                    let mut pos = 0;
-                    for (j, p) in parts.iter().enumerate() {
-                        if j <= i {
-                            pos += p.len() + 1; // +1 for the dash
-                        } else {
-                            break;
-                        }
-                    }
-                    // Skip the dash after the hash
-                    if pos < jail_name.len() && jail_name.chars().nth(pos) == Some('-') {
-                        pos += 1;
-                    }
-                    let agent_part = &jail_name[pos..];
-                    
-                    // Simplify common agent names for display
-                    match agent_part {
-                        "cursor-agent" => return "cursor",
-                        "claude" => return "claude",
-                        "copilot" => return "copilot", 
-                        "gemini" => return "gemini",
-                        _ => return agent_part, // Return as-is for other agents
-                    }
-                }
-            }
-        }
-    }
-    
-    // Fallback: just take the last part
-    jail_name.split('-').next_back().unwrap_or("unknown")
-}
-
-/// Prompt user to select a jail from a list
-fn select_jail(jails: &[String]) -> error::Result<String> {
-    use std::io::{self, Write};
-
-    println!("Multiple jails found for this directory:");
-    for (i, jail) in jails.iter().enumerate() {
-        // Extract agent name from jail name
-        let agent_name = extract_agent_name(jail);
-        println!("  {}. {} (agent: {})", i + 1, jail, agent_name);
-    }
-
-    print!("Select a jail (1-{}): ", jails.len());
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| JailError::Config(format!("Failed to read input: {}", e)))?;
-
-    let selection: usize = input
-        .trim()
-        .parse()
-        .map_err(|_| JailError::Config("Invalid selection".to_string()))?;
-
-    if selection < 1 || selection > jails.len() {
-        return Err(JailError::Config("Selection out of range".to_string()));
-    }
-
-    Ok(jails[selection - 1].clone())
-}
-
-/// Parameters for AI agent commands
-struct AgentCommandParams {
-    backend: Option<String>,
-    image: String,
-    mount: Vec<String>,
-    env: Vec<String>,
-    no_network: bool,
-    memory: Option<u64>,
-    cpu: Option<u32>,
-    no_workspace: bool,
-    workspace_path: String,
-    claude_dir: bool,
-    copilot_dir: bool,
-    cursor_dir: bool,
-    gemini_dir: bool,
-    agent_configs: bool,
-    git_gpg: bool,
-    force_rebuild: bool,
-    args: Vec<String>,
-}
-
-/// Helper function to run AI agent commands (claude, copilot, cursor-agent)
-async fn run_ai_agent_command(
-    agent_command: &str,
-    params: AgentCommandParams,
-) -> error::Result<()> {
-    let cwd = std::env::current_dir()?;
-    let base_name = auto_detect_jail_name()?;
-    let agent_suffix = cli::Commands::sanitize_jail_name(agent_command);
-    let jail_name = format!("{}-{}", base_name, agent_suffix);
-
-    info!("Using jail: {} for agent: {}", jail_name, agent_command);
-
-    // Create jail if it doesn't exist
-    let temp_config = JailConfig {
-        name: jail_name.clone(),
-        ..Default::default()
-    };
-    let temp_jail = jail::JailManager::new(temp_config);
-
-    if !temp_jail.exists().await? {
-        info!("Creating new jail: {}", jail_name);
-
-        let backend_type = if let Some(backend_str) = params.backend {
-            Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+        let jail_name = if matching_jails.is_empty() {
+            return Err(error::JailError::Config(
+                "No jails found for this directory. Create one first.".to_string(),
+            ));
+        } else if matching_jails.len() == 1 {
+            // Only one jail exists, use it
+            matching_jails[0].clone()
         } else {
-            config::BackendType::detect()
+            // Multiple jails exist, ask user to choose
+            agent_commands::select_jail(&matching_jails)?
         };
 
-        let mut builder = JailBuilder::new(&jail_name)
-            .backend(backend_type)
-            .base_image(params.image)
-            .network(!params.no_network, true);
-
-        // Set timezone from host
-        if let Some(tz) = get_host_timezone() {
-            builder = builder.env("TZ", tz);
-        }
-
-        // Inherit TERM from host
-        if let Ok(term) = std::env::var("TERM") {
-            builder = builder.env("TERM", term);
-        }
-
-        // Set default editor to vim
-        builder = builder.env("EDITOR", "vim");
-
-        // Auto-mount workspace (git root if available, otherwise current directory)
-        if !params.no_workspace {
-            let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-            info!(
-                "Auto-mounting {} to {}",
-                workspace_dir.display(),
-                params.workspace_path
-            );
-            builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
-        }
-
-        // Auto-mount minimal auth files (agent-specific)
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-        let home_path = std::path::PathBuf::from(&home);
-
-        // Mount minimal auth files for Claude agent (unless full .claude directory is mounted)
-        if agent_command == "claude" && !params.claude_dir && !params.agent_configs {
-            let claude_creds = home_path.join(".claude").join(".credentials.json");
-            if claude_creds.exists() {
-                info!(
-                    "Auto-mounting {} to /home/agent/.claude/.credentials.json",
-                    claude_creds.display()
-                );
-                builder = builder.bind_mount(
-                    claude_creds,
-                    "/home/agent/.claude/.credentials.json",
-                    false,
-                );
-            }
-        }
-
-        // Opt-in: Mount entire ~/.claude directory
-        if params.claude_dir || params.agent_configs {
-            let claude_config = home_path.join(".claude");
-            if claude_config.exists() {
-                info!(
-                    "Mounting {} to /home/agent/.claude",
-                    claude_config.display()
-                );
-                builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
-            }
-        }
-
-        // Opt-in: Mount ~/.config/.copilot for GitHub Copilot
-        if params.copilot_dir || params.agent_configs {
-            let copilot_config = home_path.join(".config").join(".copilot");
-            if copilot_config.exists() {
-                info!(
-                    "Mounting {} to /home/agent/.config/.copilot",
-                    copilot_config.display()
-                );
-                builder = builder.bind_mount(copilot_config, "/home/agent/.config/.copilot", false);
-            }
-        }
-
-        // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
-        if params.cursor_dir || params.agent_configs {
-            // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
-            let cursor_config = home_path.join(".cursor");
-            if cursor_config.exists() {
-                info!(
-                    "Mounting {} to /home/agent/.cursor",
-                    cursor_config.display()
-                );
-                builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
-            }
-
-            // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
-            let cursor_config_dir = home_path.join(".config").join("cursor");
-            if cursor_config_dir.exists() {
-                info!(
-                    "Mounting {} to /home/agent/.config/cursor",
-                    cursor_config_dir.display()
-                );
-                builder = builder.bind_mount(
-                    cursor_config_dir,
-                    "/home/agent/.config/cursor",
-                    false,
-                );
-            }
-        }
-
-        // Opt-in: Mount ~/.config/gemini for Gemini CLI
-        if params.gemini_dir || params.agent_configs {
-            let gemini_config = home_path.join(".config").join("gemini");
-            if gemini_config.exists() {
-                info!(
-                    "Mounting {} to /home/agent/.config/gemini",
-                    gemini_config.display()
-                );
-                builder = builder.bind_mount(gemini_config, "/home/agent/.config/gemini", false);
-            }
-        }
-
-        // Opt-in: GPG configuration
-        if params.git_gpg {
-            // Prepare and mount GPG configuration directory
-            let gpg_dir = home_path.join(".gnupg");
-            if gpg_dir.exists() {
-                match prepare_gpg_config(&gpg_dir) {
-                    Ok((temp_gpg_dir, sockets)) => {
-                        info!(
-                            "Mounting prepared GPG config {} to /home/agent/.gnupg",
-                            temp_gpg_dir.display()
-                        );
-                        builder = builder.bind_mount(&temp_gpg_dir, "/home/agent/.gnupg", false);
-
-                        // Mount GPG agent sockets for YubiKey and smartcard support
-                        let mut ssh_auth_sock_target: Option<String> = None;
-                        for socket_path in sockets {
-                            if let Some(socket_name) = socket_path.file_name() {
-                                let socket_name_str = socket_name.to_string_lossy();
-                                let target = format!("/home/agent/.gnupg/{}", socket_name_str);
-                                info!(
-                                    "Mounting GPG socket {} to {}",
-                                    socket_path.display(),
-                                    target
-                                );
-                                builder = builder.bind_mount(&socket_path, target.clone(), false);
-                                
-                                // Track SSH auth socket for environment variable
-                                if socket_name_str == "S.gpg-agent.ssh" {
-                                    ssh_auth_sock_target = Some(target);
-                                }
-                            }
-                        }
-                        
-                        // Set SSH_AUTH_SOCK if we mounted the SSH socket
-                        if let Some(sock_path) = ssh_auth_sock_target {
-                            info!("Setting SSH_AUTH_SOCK to {}", sock_path);
-                            builder = builder.env("SSH_AUTH_SOCK", sock_path);
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to prepare GPG config: {}", e);
-                    }
-                }
-            }
-
-            // Handle SSH allowed signers file mounting for SSH-based GPG signing
-            match handle_ssh_allowed_signers_mounting(&cwd, &builder) {
-                Ok((updated_builder, _mounted)) => {
-                    builder = updated_builder;
-                }
-                Err(e) => {
-                    warn!("Failed to handle SSH allowed signers file mounting: {}", e);
-                }
-            }
-        }
-
-        // Parse mounts
-        for mount_str in params.mount {
-            let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
-            builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
-        }
-
-        // Parse environment variables
-        for env_str in params.env {
-            let (key, value) = Commands::parse_env(&env_str).map_err(error::JailError::Config)?;
-            builder = builder.env(key, value);
-        }
-
-        // Set resource limits
-        if let Some(mem) = params.memory {
-            builder = builder.memory_limit(mem);
-        }
-        if let Some(cpu_quota) = params.cpu {
-            builder = builder.cpu_quota(cpu_quota);
-        }
-
-        // Set force rebuild flag
-        builder = builder.force_rebuild(params.force_rebuild);
-
-        let jail = builder.build();
-        jail.create().await?;
-
-        // Create .claude.json file inside the container for Claude agent
-        if agent_command == "claude" {
-            if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
-                warn!("Failed to create .claude.json in container: {}", e);
-            }
-        }
-
-        // Create .gitconfig file inside the container if git_gpg is enabled
-        if params.git_gpg {
-            if let Err(e) = create_gitconfig_in_container(&cwd, &jail).await {
-                warn!("Failed to create .gitconfig in container: {}", e);
-            }
-        }
+        info!("Auto-detected jail: {}", jail_name);
+        Ok(jail_name)
     }
-
-    // Execute AI agent command
-    let jail = JailBuilder::new(&jail_name)
-        .backend(config::BackendType::detect())
-        .build();
-    let mut command = vec![agent_command.to_string()];
-    command.extend(params.args);
-
-    let output = jail.exec(&command, true).await?;
-    if !output.is_empty() {
-        print!("{}", output);
-    }
-
-    Ok(())
 }
 
-/// Upgrade a single jail with the specified image
 async fn upgrade_single_jail(
     jail_name: &str,
     image: Option<String>,
@@ -1878,8 +711,7 @@ async fn upgrade_single_jail(
     // Check if jail exists
     if !temp_jail.exists().await? {
         return Err(error::JailError::NotFound(format!(
-            "Jail '{}' does not exist",
-            jail_name
+            "Jail '{jail_name}' does not exist"
         )));
     }
 
@@ -1893,9 +725,9 @@ async fn upgrade_single_jail(
     // Ask for confirmation unless force is specified
     if !force {
         use std::io::{self, BufRead, Write};
-        println!("Jail '{}' will be upgraded:", jail_name);
+        println!("Jail '{jail_name}' will be upgraded:");
         println!("  Current image: {}", old_config.base_image);
-        println!("  New image:     {}", new_image);
+        println!("  New image:     {new_image}");
         println!("\nThis will:");
         println!("  1. Save the current configuration");
         println!("  2. Remove the existing jail");
@@ -1954,10 +786,7 @@ async fn upgrade_single_jail(
         warn!("Failed to create .claude.json in container: {}", e);
     }
 
-    println!(
-        "✓ Jail '{}' successfully upgraded to image '{}'",
-        jail_name, new_image
-    );
+    println!("✓ Jail '{jail_name}' successfully upgraded to image '{new_image}'");
     info!("Upgrade completed successfully");
 
     Ok(())
@@ -1999,12 +828,15 @@ async fn upgrade_all_jails(image: Option<String>, force: bool) -> error::Result<
     // Ask for confirmation unless force is specified
     if !force {
         use std::io::{self, BufRead, Write};
-        println!("The following {} jail(s) will be upgraded:", all_jails.len());
+        println!(
+            "The following {} jail(s) will be upgraded:",
+            all_jails.len()
+        );
         for (jail_name, backend_type) in &all_jails {
-            println!("  - {} (backend: {:?})", jail_name, backend_type);
+            println!("  - {jail_name} (backend: {backend_type:?})");
         }
         if let Some(ref img) = image {
-            println!("\nAll jails will be upgraded to image: {}", img);
+            println!("\nAll jails will be upgraded to image: {img}");
         } else {
             println!("\nEach jail will be upgraded to its current image (refreshed)");
         }
@@ -2036,10 +868,7 @@ async fn upgrade_all_jails(image: Option<String>, force: bool) -> error::Result<
         }
     }
 
-    println!(
-        "\n✓ Upgrade complete: {} succeeded, {} failed",
-        success_count, error_count
-    );
+    println!("\n✓ Upgrade complete: {success_count} succeeded, {error_count} failed");
     info!("Upgrade-all operation completed");
 
     Ok(())
@@ -2133,339 +962,4 @@ mod tests {
         let result = upgrade_all_jails(None, true).await;
         assert!(result.is_ok());
     }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_get_user_uid() {
-        // Test that we can get the user's UID
-        let uid = get_user_uid();
-        assert!(uid.is_ok());
-        let uid_val = uid.unwrap();
-        assert!(uid_val > 0, "UID should be greater than 0");
-    }
-
-    #[test]
-    fn test_get_git_config() {
-        // Test that we can read git config values
-        // This test will try to read from local/global/system config
-        let cwd = std::env::current_dir().unwrap();
-
-        // Try to get any git config value - user.name is commonly set
-        // If no git config exists, this test will pass (returns None)
-        let result = get_git_config("user.name", &cwd);
-
-        // The test passes whether or not git config exists
-        // We're just testing that the function doesn't panic
-        if let Some(name) = result {
-            // If we found a name, it should not be empty
-            assert!(!name.is_empty(), "Git config value should not be empty");
-        }
-    }
-
-    #[test]
-    fn test_get_git_config_hierarchy() {
-        // Test that get_git_config respects config hierarchy
-        // local > global > system
-        let cwd = std::env::current_dir().unwrap();
-
-        // Test with a non-existent key
-        let result = get_git_config("nonexistent.key.that.should.not.exist", &cwd);
-        assert!(result.is_none(), "Non-existent git config key should return None");
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_git_config_local_overrides_global() {
-        // Scenario 1: Local overrides global
-        // Setup: Create temporary git repo with local config that differs from global
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path();
-
-        // Initialize git repo
-        let init = std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(repo_path)
-            .output();
-        
-        if init.is_err() {
-            eprintln!("git not available, skipping test");
-            return;
-        }
-
-        // Set local config
-        let set_local = std::process::Command::new("git")
-            .args(["config", "--local", "test.priority", "local-value"])
-            .current_dir(repo_path)
-            .output();
-
-        if set_local.is_err() {
-            eprintln!("Failed to set local git config, skipping test");
-            return;
-        }
-
-        // Save current global value (if any) to restore later
-        let old_global = std::process::Command::new("git")
-            .args(["config", "--global", "test.priority"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            });
-
-        // Set global config to different value
-        let _ = std::process::Command::new("git")
-            .args(["config", "--global", "test.priority", "global-value"])
-            .output();
-
-        // Test that local wins
-        let result = get_git_config("test.priority", repo_path);
-        
-        // Cleanup: restore old global value or unset
-        if let Some(old_value) = old_global {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "test.priority", &old_value])
-                .output();
-        } else {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "--unset", "test.priority"])
-                .output();
-        }
-
-        assert_eq!(result, Some("local-value".to_string()), 
-                   "Local config should override global config");
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_git_config_only_global_exists() {
-        // Scenario 2: Only global exists
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path();
-
-        // Initialize git repo
-        let init = std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(repo_path)
-            .output();
-        
-        if init.is_err() {
-            eprintln!("git not available, skipping test");
-            return;
-        }
-
-        // Save current global value (if any) to restore later
-        let old_global = std::process::Command::new("git")
-            .args(["config", "--global", "test.globalonly"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            });
-
-        // Set global config only
-        let _ = std::process::Command::new("git")
-            .args(["config", "--global", "test.globalonly", "global-value"])
-            .output();
-
-        // Test that global is found
-        let result = get_git_config("test.globalonly", repo_path);
-
-        // Cleanup
-        if let Some(old_value) = old_global {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "test.globalonly", &old_value])
-                .output();
-        } else {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "--unset", "test.globalonly"])
-                .output();
-        }
-
-        assert_eq!(result, Some("global-value".to_string()),
-                   "Should find global config when local doesn't exist");
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_git_config_multiple_values_same_scope() {
-        // Scenario 3: Multiple values in same scope - last value wins
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path();
-
-        // Initialize git repo
-        let init = std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(repo_path)
-            .output();
-        
-        if init.is_err() {
-            eprintln!("git not available, skipping test");
-            return;
-        }
-
-        // Set multiple values for same key (using --add)
-        let _ = std::process::Command::new("git")
-            .args(["config", "--local", "test.multi", "first-value"])
-            .current_dir(repo_path)
-            .output();
-
-        let _ = std::process::Command::new("git")
-            .args(["config", "--local", "--add", "test.multi", "second-value"])
-            .current_dir(repo_path)
-            .output();
-
-        let _ = std::process::Command::new("git")
-            .args(["config", "--local", "--add", "test.multi", "last-value"])
-            .current_dir(repo_path)
-            .output();
-
-        // Test that last value wins
-        let result = get_git_config("test.multi", repo_path);
-
-        assert_eq!(result, Some("last-value".to_string()),
-                   "Should return last value when multiple values exist in same scope");
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_git_config_multiple_values_across_scopes() {
-        // Scenario 4: Multiple values across scopes - highest priority scope wins
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path();
-
-        // Initialize git repo
-        let init = std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(repo_path)
-            .output();
-        
-        if init.is_err() {
-            eprintln!("git not available, skipping test");
-            return;
-        }
-
-        // Save current global value
-        let old_global = std::process::Command::new("git")
-            .args(["config", "--global", "test.crossscope"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            });
-
-        // Set global config
-        let _ = std::process::Command::new("git")
-            .args(["config", "--global", "test.crossscope", "global-value"])
-            .output();
-
-        // Set local config to different value
-        let _ = std::process::Command::new("git")
-            .args(["config", "--local", "test.crossscope", "local-wins"])
-            .current_dir(repo_path)
-            .output();
-
-        // Test that local wins over global
-        let result = get_git_config("test.crossscope", repo_path);
-
-        // Cleanup
-        if let Some(old_value) = old_global {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "test.crossscope", &old_value])
-                .output();
-        } else {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "--unset", "test.crossscope"])
-                .output();
-        }
-
-        assert_eq!(result, Some("local-wins".to_string()),
-                   "Local config should win when values exist in multiple scopes");
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_git_config_outside_repository() {
-        // Scenario 5: Outside git repository - should still read global config
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let non_repo_path = temp_dir.path();
-        // Don't initialize git repo here
-
-        // Save current global value
-        let old_global = std::process::Command::new("git")
-            .args(["config", "--global", "test.nonrepo"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            });
-
-        // Set global config
-        let _ = std::process::Command::new("git")
-            .args(["config", "--global", "test.nonrepo", "global-from-nonrepo"])
-            .output();
-
-        // Test that global is found even outside a git repo
-        let result = get_git_config("test.nonrepo", non_repo_path);
-
-        // Cleanup
-        if let Some(old_value) = old_global {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "test.nonrepo", &old_value])
-                .output();
-        } else {
-            let _ = std::process::Command::new("git")
-                .args(["config", "--global", "--unset", "test.nonrepo"])
-                .output();
-        }
-
-        assert_eq!(result, Some("global-from-nonrepo".to_string()),
-                   "Should find global config even when not in a git repository");
-    }
-
-    #[test]
-    fn test_ssh_gpg_config_keys() {
-        // Test that SSH GPG configuration keys are included in the config keys list
-        let cwd = std::env::current_dir().unwrap();
-        let _config_map = get_all_git_config_values(&cwd);
-        
-        // Test that we can read the SSH GPG config key if it exists
-        // This test will pass whether or not the key exists
-        let result = get_git_config("gpg.ssh.allowedsignersfile", &cwd);
-        
-        // The test passes whether or not the SSH GPG config exists
-        // We're just testing that the function doesn't panic and handles the key
-        if let Some(path) = result {
-            // If we found a path, it should not be empty
-            assert!(!path.is_empty(), "SSH allowed signers file path should not be empty");
-        }
-    }
-
-    // Note: test_extract_agent_name test removed due to complexity of agent name parsing
-    // The function works correctly in practice but the test cases are complex to verify
 }
