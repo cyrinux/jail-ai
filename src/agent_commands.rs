@@ -65,11 +65,23 @@ pub fn get_git_root() -> Option<PathBuf> {
     None
 }
 
+/// Map agent command names to normalized agent identifiers
+/// (e.g., "cursor-agent" -> "cursor")
+fn normalize_agent_name(agent_command: &str) -> &str {
+    match agent_command {
+        "cursor-agent" => "cursor",
+        _ => agent_command,
+    }
+}
+
 /// Helper function to run AI agent commands (claude, copilot, cursor-agent, gemini)
 pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParams) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let base_name = auto_detect_jail_name()?;
-    let agent_suffix = Commands::sanitize_jail_name(agent_command);
+    
+    // Normalize agent name for jail naming and image building
+    let normalized_agent = normalize_agent_name(agent_command);
+    let agent_suffix = Commands::sanitize_jail_name(normalized_agent);
     let jail_name = format!("{base_name}-{agent_suffix}");
 
     info!("Using jail: {} for agent: {}", jail_name, agent_command);
@@ -92,10 +104,21 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     if !temp_jail.exists().await? {
         info!("Creating new jail: {}", jail_name);
 
+        // Only use custom image if explicitly provided (not default)
+        // This allows the layered image system to auto-detect and build agent-specific images
+        let use_custom_image = params.image != crate::cli::DEFAULT_IMAGE;
+        
         let mut builder = JailBuilder::new(&jail_name)
             .backend(backend_type)
-            .base_image(params.image)
             .network(!params.no_network, true);
+        
+        // Set image: use custom if provided, otherwise let layered system auto-detect
+        if use_custom_image {
+            builder = builder.base_image(params.image);
+        } else {
+            // Use default image name, which triggers layered image auto-detection
+            builder = builder.base_image(crate::image::DEFAULT_IMAGE_NAME);
+        }
 
         // Setup default environment variables
         builder = setup_default_environment(builder);
