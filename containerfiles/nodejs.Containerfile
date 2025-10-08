@@ -6,10 +6,10 @@ LABEL description="jail-ai Node.js development environment"
 
 USER root
 
-# Install Node.js and npm (LTS version from Alpine packages)
-RUN apk add --no-cache \
-    nodejs \
-    npm
+# Install Node.js LTS from NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install yarn and pnpm globally
 RUN npm install -g yarn pnpm
