@@ -5,8 +5,10 @@ mod config;
 mod error;
 mod git_gpg;
 mod image;
+mod image_layers;
 mod jail;
 mod jail_setup;
+mod project_detection;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -502,7 +504,8 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     // Auto-detect: find all matching jails for this directory
                     let cwd = std::env::current_dir()?;
                     let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
-                    let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
+                    let matching_jails =
+                        agent_commands::find_jails_for_directory(&workspace_dir).await?;
 
                     if matching_jails.is_empty() {
                         return Err(error::JailError::Config(

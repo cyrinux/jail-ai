@@ -99,28 +99,74 @@ impl JailBackend for PodmanBackend {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
-        // Ensure image is available (build if default image, pull if custom)
-        if config.base_image == image::DEFAULT_IMAGE_NAME {
-            // For default image, use our automatic build system
-            image::ensure_image_available(&config.base_image, config.force_rebuild).await?;
-        } else {
-            // For custom images, check if they exist and pull if needed
-            let image_exists = self.image_exists(&config.base_image).await?;
-            if !image_exists {
-                debug!("Image {} not found locally, pulling...", config.base_image);
-                let mut pull_cmd = Command::new("podman");
-                pull_cmd.arg("pull").arg(&config.base_image);
+        // Determine which image to use
+        let actual_image =
+            if config.base_image == image::DEFAULT_IMAGE_NAME && config.use_layered_images {
+                // Use layered image system with auto-detection
+                info!("Using layered image system with auto-detection");
 
-                run_command(&mut pull_cmd)
-                    .await
-                    .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
+                // Try to find workspace path from bind mounts
+                let workspace_path = config
+                    .bind_mounts
+                    .iter()
+                    .find(|m| {
+                        m.target
+                            .to_str()
+                            .map(|s| s.contains("workspace"))
+                            .unwrap_or(false)
+                    })
+                    .map(|m| m.source.clone())
+                    .unwrap_or_else(|| {
+                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    });
+
+                // Try to detect agent from jail name (format: jail-{project}-{hash}-{agent})
+                let agent_name = config
+                    .name
+                    .rsplit('-')
+                    .next()
+                    .and_then(|suffix| match suffix {
+                        "claude" | "copilot" | "cursor" | "gemini" | "codex" => Some(suffix),
+                        _ => None,
+                    });
+
+                debug!(
+                    "Workspace path: {:?}, Agent: {:?}",
+                    workspace_path, agent_name
+                );
+
+                // Build the appropriate layered image
+                crate::image_layers::ensure_layered_image_available(
+                    &workspace_path,
+                    agent_name,
+                    config.force_rebuild,
+                )
+                .await?
+            } else if config.base_image == image::DEFAULT_IMAGE_NAME {
+                // For default image without layered system, use legacy build system
+                image::ensure_image_available(&config.base_image, config.force_rebuild).await?;
+                config.base_image.clone()
             } else {
-                debug!("Using local image: {}", config.base_image);
-            }
-        }
+                // For custom images, check if they exist and pull if needed
+                let image_exists = self.image_exists(&config.base_image).await?;
+                if !image_exists {
+                    debug!("Image {} not found locally, pulling...", config.base_image);
+                    let mut pull_cmd = Command::new("podman");
+                    pull_cmd.arg("pull").arg(&config.base_image);
 
-        // Create and start the container
-        let args = self.build_run_args(config);
+                    run_command(&mut pull_cmd)
+                        .await
+                        .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
+                } else {
+                    debug!("Using local image: {}", config.base_image);
+                }
+                config.base_image.clone()
+            };
+
+        // Create and start the container with the determined image
+        let mut modified_config = config.clone();
+        modified_config.base_image = actual_image.clone();
+        let args = self.build_run_args(&modified_config);
         let mut cmd = Command::new("podman");
         cmd.args(&args);
 
@@ -358,6 +404,7 @@ impl JailBackend for PodmanBackend {
                 cpu_quota,
             },
             force_rebuild: false,
+            use_layered_images: true,
         })
     }
 }
@@ -384,6 +431,7 @@ mod tests {
                 cpu_quota: Some(50),
             },
             force_rebuild: false,
+            use_layered_images: true,
         };
 
         let args = backend.build_run_args(&config);

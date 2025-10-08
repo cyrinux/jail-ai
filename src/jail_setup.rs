@@ -128,11 +128,7 @@ pub fn mount_agent_configs(
 
     // Opt-in: Mount entire ~/.claude directory
     if flags.claude_dir || flags.agent_configs {
-        builder = mount_config_if_exists(
-            builder,
-            home_path.join(".claude"),
-            "/home/agent/.claude",
-        );
+        builder = mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
     } else if agent == "claude" {
         // If not mounting full .claude directory, mount minimal auth files for Claude agent only
         let claude_creds = home_path.join(".claude").join(".credentials.json");
@@ -158,11 +154,7 @@ pub fn mount_agent_configs(
     // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
     if flags.cursor_dir || flags.agent_configs {
         // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
-        builder = mount_config_if_exists(
-            builder,
-            home_path.join(".cursor"),
-            "/home/agent/.cursor",
-        );
+        builder = mount_config_if_exists(builder, home_path.join(".cursor"), "/home/agent/.cursor");
 
         // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
         builder = mount_config_if_exists(
