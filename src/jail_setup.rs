@@ -99,6 +99,7 @@ pub struct AgentConfigFlags {
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
+    pub openai_dir: bool,
     pub agent_configs: bool,
 }
 
@@ -178,6 +179,18 @@ pub fn mount_agent_configs(
                 gemini_config.display()
             );
             builder = builder.bind_mount(gemini_config, "/home/agent/.config/gemini", false);
+        }
+    }
+
+    // Opt-in: Mount ~/.config/openai for OpenAI CLI
+    if flags.openai_dir || flags.agent_configs {
+        let openai_config = home_path.join(".config").join("openai");
+        if openai_config.exists() {
+            info!(
+                "Mounting {} to /home/agent/.config/openai",
+                openai_config.display()
+            );
+            builder = builder.bind_mount(openai_config, "/home/agent/.config/openai", false);
         }
     }
 

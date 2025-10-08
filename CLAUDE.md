@@ -59,7 +59,10 @@ cargo run -- create my-agent --cursor-dir
 # Create jail with ~/.config/gemini directory for Gemini CLI
 cargo run -- create my-agent --gemini-dir
 
-# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir)
+# Create jail with ~/.config/openai directory for OpenAI CLI
+cargo run -- create my-agent --openai-dir
+
+# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
 cargo run -- create my-agent --agent-configs
 
 # Create jail with git and GPG configuration mapping
@@ -107,11 +110,11 @@ make dev-jail
 ## Key Features
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
-- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, and Gemini CLI pre-installed
+- **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and OpenAI CLI pre-installed
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
-- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, or `--agent-configs` for all
+- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, `--openai-dir` for `~/.config/openai`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Podman Backend**: Uses podman for OCI container management
 - **Resource Limits**: Memory and CPU quota restrictions
@@ -137,6 +140,7 @@ The `localhost/jail-ai-env:latest` image includes:
   - **GitHub Copilot CLI** (`copilot`) - GitHub's AI pair programmer
   - **Cursor Agent** (`cursor-agent`) - Cursor's terminal AI agent
   - **Gemini CLI** (`gemini`) - Google's AI terminal assistant
+  - **OpenAI CLI** (`openai`) - OpenAI's official CLI for GPT models
 
 ### AI Agent Authentication
 
@@ -148,6 +152,7 @@ The AI coding agents require authentication.
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 - `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
+- `jail-ai openai` → No auth mounted (use `--openai-dir` to mount `~/.config/openai`)
 
 **Opt-in mounting** (use flags to enable):
 
@@ -155,7 +160,8 @@ The AI coding agents require authentication.
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
 - `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
-- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`)
+- `--openai-dir`: Mount `~/.config/openai` → `/home/agent/.config/openai` directory (OpenAI CLI authentication and settings)
+- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--openai-dir`)
 
 Example aliases for different security levels:
 
@@ -171,6 +177,9 @@ alias jail-cursor='jail-ai cursor --cursor-dir'
 
 # Gemini: needs explicit config for auth
 alias jail-gemini='jail-ai gemini --gemini-dir'
+
+# OpenAI: needs explicit config for auth
+alias jail-openai='jail-ai openai --openai-dir'
 
 # Claude with full config + git/GPG
 alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'
