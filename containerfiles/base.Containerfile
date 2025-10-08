@@ -1,4 +1,4 @@
-FROM docker.io/library/alpine:3.20
+FROM docker.io/library/debian:bookworm-slim
 
 LABEL maintainer="jail-ai"
 LABEL description="jail-ai base environment with common tools"
@@ -8,12 +8,12 @@ ARG PUID=1000
 ARG PGID=1000
 
 # System-wide paths
-ENV LANG=C.UTF-8 \
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
 # Install base tools and dependencies
-# Alpine uses apk instead of apt-get
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core utilities
     bash \
     zsh \
@@ -28,12 +28,12 @@ RUN apk add --no-cache \
     file \
     less \
     # Build essentials
-    build-base \
-    pkgconf \
-    openssl-dev \
+    build-essential \
+    pkg-config \
+    libssl-dev \
     # Search and text processing
     ripgrep \
-    fd \
+    fd-find \
     jq \
     fzf \
     # Archive tools
@@ -50,13 +50,22 @@ RUN apk add --no-cache \
     screen \
     sudo \
     # Shell enhancements
-    ncurses-terminfo-base \
+    fonts-powerline \
+    # Terminal info
+    ncurses-term \
     # GPG and signing tools
     gnupg \
-    pinentry
+    gpg-agent \
+    pinentry-curses \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
-RUN apk add --no-cache github-cli
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Powerlevel10k to system location
 RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /usr/share/powerlevel10k
@@ -78,8 +87,8 @@ RUN mkdir -p /etc/skel \
     && echo 'alias rg="rg --color=auto"' >> /etc/skel/.zshrc \
     && echo '' >> /etc/skel/.zshrc \
     && echo '# FZF integration' >> /etc/skel/.zshrc \
-    && echo 'source /usr/share/fzf/key-bindings.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
-    && echo 'source /usr/share/fzf/completion.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
+    && echo 'source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
     && echo '' >> /etc/skel/.zshrc \
     && echo '# History settings' >> /etc/skel/.zshrc \
     && echo 'HISTFILE=~/.zsh_history' >> /etc/skel/.zshrc \
@@ -105,9 +114,25 @@ RUN echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"' >>
     && echo 'alias rg="rg --color=auto"' >> /etc/skel/.bashrc
 
 # Create agent user with configurable UID/GID
-RUN addgroup -g ${PGID} agent 2>/dev/null || true \
-    && adduser -D -s /bin/zsh -u ${PUID} -G agent agent \
-    && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
+RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
+        groupadd -g ${PGID} agent; \
+    else \
+        GROUP_NAME=$(getent group ${PGID} | cut -d: -f1); \
+        if [ "$GROUP_NAME" != "agent" ]; then \
+            groupmod -n agent $GROUP_NAME; \
+        fi; \
+    fi \
+    && if ! getent passwd ${PUID} > /dev/null 2>&1; then \
+        useradd -m -s /bin/zsh -u ${PUID} -g ${PGID} agent; \
+    else \
+        USER_NAME=$(getent passwd ${PUID} | cut -d: -f1); \
+        if [ "$USER_NAME" != "agent" ]; then \
+            usermod -l agent -d /home/agent -m -g ${PGID} -s /bin/zsh $USER_NAME; \
+        fi; \
+    fi \
+    && usermod -aG sudo agent \
+    && mkdir -p /etc/sudoers.d \
+    && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
 
 # Create workspace and empty config directories for mounting
