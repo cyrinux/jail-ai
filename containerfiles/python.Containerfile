@@ -6,11 +6,13 @@ LABEL description="jail-ai Python development environment"
 
 USER root
 
-# Install Python and related tools
-RUN apk add --no-cache \
+# Install Python and development tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
+    python3-pip \
+    python3-venv \
     python3-dev \
-    py3-pip \
+    && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # Install common Python development tools
@@ -20,9 +22,6 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     mypy \
     pytest \
     poetry
-
-# Add Poetry to PATH
-ENV PATH="/root/.local/bin:${PATH}"
 
 USER agent
 WORKDIR /workspace

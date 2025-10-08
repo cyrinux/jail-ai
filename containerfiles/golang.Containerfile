@@ -6,22 +6,14 @@ LABEL description="jail-ai Go development environment"
 
 USER root
 
-# Install Go
+# Install Go to /usr/local
 ARG GO_VERSION=1.23.4
-ENV PATH="/usr/local/go/bin:${PATH}"
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -sSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -C /usr/local -xz \
+    && ln -s /usr/local/go/bin/go /usr/local/bin/go \
+    && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
 
-RUN ARCH=$(uname -m) && \
-    case "$ARCH" in \
-        x86_64) GOARCH=amd64 ;; \
-        aarch64) GOARCH=arm64 ;; \
-        armv7l) GOARCH=armv6l ;; \
-        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
-    esac && \
-    wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" && \
-    tar -C /usr/local -xzf "go${GO_VERSION}.linux-${GOARCH}.tar.gz" && \
-    rm "go${GO_VERSION}.linux-${GOARCH}.tar.gz" && \
-    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
-    ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+ENV PATH=/usr/local/go/bin:$PATH
 
 USER agent
 WORKDIR /workspace

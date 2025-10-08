@@ -6,13 +6,12 @@ LABEL description="jail-ai Java development environment"
 
 USER root
 
-# Install Java (OpenJDK)
-RUN apk add --no-cache \
-    openjdk21 \
+# Install OpenJDK and build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-jdk \
     maven \
-    gradle
-
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+    gradle \
+    && rm -rf /var/lib/apt/lists/*
 
 USER agent
 WORKDIR /workspace
