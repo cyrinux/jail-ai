@@ -177,6 +177,40 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
 
     // Execute AI agent command (use the same backend type determined earlier)
     let jail = JailBuilder::new(&jail_name).backend(backend_type).build();
+    
+    // Auto-authenticate OpenAI CLI if needed
+    if agent_command == "openai" && params.openai_dir {
+        // Check if authentication is needed by trying to run a simple command
+        let check_cmd = vec!["openai".to_string(), "--help".to_string()];
+        let check_result = jail.exec(&check_cmd, false).await;
+        
+        // If the command fails or returns auth-related errors, try to authenticate
+        let needs_auth = match check_result {
+            Err(_) => true,
+            Ok(output) => {
+                // Check if the output indicates authentication is needed
+                output.contains("auth login") || 
+                output.contains("not authenticated") ||
+                output.contains("No API key")
+            }
+        };
+        
+        if needs_auth || params.args.is_empty() {
+            info!("OpenAI CLI authentication required, starting login process...");
+            let auth_cmd = vec!["openai".to_string(), "auth".to_string(), "login".to_string()];
+            let auth_output = jail.exec(&auth_cmd, true).await?;
+            if !auth_output.is_empty() {
+                print!("{auth_output}");
+            }
+            
+            // If no additional args were provided, we're done (user just wanted to authenticate)
+            if params.args.is_empty() {
+                info!("OpenAI CLI authentication completed");
+                return Ok(());
+            }
+        }
+    }
+    
     let mut command = vec![agent_command.to_string()];
     command.extend(params.args);
 
