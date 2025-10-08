@@ -1,9 +1,81 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 /// Default image name
 pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
+
+/// Common options for AI agent commands
+#[derive(Args, Debug)]
+pub struct AgentCommandOptions {
+    /// Backend type (only 'podman' is supported, kept for compatibility)
+    #[arg(short, long)]
+    pub backend: Option<String>,
+
+    /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
+    #[arg(short, long, default_value = DEFAULT_IMAGE)]
+    pub image: String,
+
+    /// Bind mount (format: source:target[:ro])
+    #[arg(short = 'm', long)]
+    pub mount: Vec<String>,
+
+    /// Environment variable (format: KEY=VALUE)
+    #[arg(short = 'e', long)]
+    pub env: Vec<String>,
+
+    /// Disable network access
+    #[arg(long)]
+    pub no_network: bool,
+
+    /// Memory limit in MB
+    #[arg(long)]
+    pub memory: Option<u64>,
+
+    /// CPU quota percentage (0-100)
+    #[arg(long)]
+    pub cpu: Option<u32>,
+
+    /// Skip auto-mounting current working directory to /workspace
+    #[arg(long)]
+    pub no_workspace: bool,
+
+    /// Custom workspace path inside jail (default: /workspace)
+    #[arg(long, default_value = "/workspace")]
+    pub workspace_path: String,
+
+    /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
+    #[arg(long)]
+    pub claude_dir: bool,
+
+    /// Mount entire ~/.config directory for GitHub Copilot
+    #[arg(long)]
+    pub copilot_dir: bool,
+
+    /// Mount entire ~/.cursor directory for Cursor Agent
+    #[arg(long)]
+    pub cursor_dir: bool,
+
+    /// Mount entire ~/.config/gemini directory for Gemini CLI
+    #[arg(long)]
+    pub gemini_dir: bool,
+
+    /// Mount entire ~/.config/codex directory for Codex CLI
+    #[arg(long)]
+    pub codex_dir: bool,
+
+    /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
+    #[arg(long)]
+    pub agent_configs: bool,
+
+    /// Enable git and GPG configuration mapping
+    #[arg(long)]
+    pub git_gpg: bool,
+
+    /// Force rebuild of the default image, even if it already exists
+    #[arg(long)]
+    pub force_rebuild: bool,
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "jail-ai")]
@@ -133,73 +205,8 @@ pub enum Commands {
 
     /// Quick start Claude Code in a jail for current directory
     Claude {
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short = 'e', long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.config directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Force rebuild of the default image, even if it already exists
-        #[arg(long)]
-        force_rebuild: bool,
+        #[command(flatten)]
+        common: AgentCommandOptions,
 
         /// Additional arguments to pass to claude
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -208,73 +215,8 @@ pub enum Commands {
 
     /// Quick start GitHub Copilot CLI in a jail for current directory
     Copilot {
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short = 'e', long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.config directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Force rebuild of the default image, even if it already exists
-        #[arg(long)]
-        force_rebuild: bool,
+        #[command(flatten)]
+        common: AgentCommandOptions,
 
         /// Additional arguments to pass to copilot
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -283,73 +225,8 @@ pub enum Commands {
 
     /// Quick start Cursor Agent in a jail for current directory
     Cursor {
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short = 'e', long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.config directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Force rebuild of the default image, even if it already exists
-        #[arg(long)]
-        force_rebuild: bool,
+        #[command(flatten)]
+        common: AgentCommandOptions,
 
         /// Additional arguments to pass to cursor-agent
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -358,73 +235,8 @@ pub enum Commands {
 
     /// Quick start Gemini CLI in a jail for current directory
     Gemini {
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short = 'e', long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.config directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Force rebuild of the default image, even if it already exists
-        #[arg(long)]
-        force_rebuild: bool,
+        #[command(flatten)]
+        common: AgentCommandOptions,
 
         /// Additional arguments to pass to gemini
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -433,73 +245,8 @@ pub enum Commands {
 
     /// Quick start Codex CLI in a jail for current directory
     Codex {
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short = 'e', long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.config directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Force rebuild of the default image, even if it already exists
-        #[arg(long)]
-        force_rebuild: bool,
+        #[command(flatten)]
+        common: AgentCommandOptions,
 
         /// Additional arguments to pass to codex
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]

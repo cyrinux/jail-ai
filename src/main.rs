@@ -303,234 +303,24 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Configuration saved to: {}", output.display());
             }
 
-            Commands::Claude {
-                backend,
-                image,
-                mount,
-                env,
-                no_network,
-                memory,
-                cpu,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                codex_dir,
-                agent_configs,
-                git_gpg,
-                force_rebuild,
-                args,
-            } => {
-                agent_commands::run_ai_agent_command(
-                    "claude",
-                    agent_commands::AgentCommandParams {
-                        backend,
-                        image,
-                        mount,
-                        env,
-                        no_network,
-                        memory,
-                        cpu,
-                        no_workspace,
-                        workspace_path,
-                        claude_dir,
-                        copilot_dir,
-                        cursor_dir,
-                        gemini_dir,
-                        codex_dir,
-                        agent_configs,
-                        git_gpg,
-                        force_rebuild,
-                        args,
-                    },
-                )
-                .await?;
+            Commands::Claude { common, args } => {
+                run_agent_command("claude", common, args).await?;
             }
 
-            Commands::Copilot {
-                backend,
-                image,
-                mount,
-                env,
-                no_network,
-                memory,
-                cpu,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                codex_dir,
-                agent_configs,
-                git_gpg,
-                force_rebuild,
-                args,
-            } => {
-                agent_commands::run_ai_agent_command(
-                    "copilot",
-                    agent_commands::AgentCommandParams {
-                        backend,
-                        image,
-                        mount,
-                        env,
-                        no_network,
-                        memory,
-                        cpu,
-                        no_workspace,
-                        workspace_path,
-                        claude_dir,
-                        copilot_dir,
-                        cursor_dir,
-                        gemini_dir,
-                        codex_dir,
-                        agent_configs,
-                        git_gpg,
-                        force_rebuild,
-                        args,
-                    },
-                )
-                .await?;
+            Commands::Copilot { common, args } => {
+                run_agent_command("copilot", common, args).await?;
             }
 
-            Commands::Cursor {
-                backend,
-                image,
-                mount,
-                env,
-                no_network,
-                memory,
-                cpu,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir: _,
-                codex_dir: _,
-                agent_configs,
-                git_gpg,
-                force_rebuild,
-                args,
-            } => {
-                agent_commands::run_ai_agent_command(
-                    "cursor-agent",
-                    agent_commands::AgentCommandParams {
-                        backend,
-                        image,
-                        mount,
-                        env,
-                        no_network,
-                        memory,
-                        cpu,
-                        no_workspace,
-                        workspace_path,
-                        claude_dir,
-                        copilot_dir,
-                        cursor_dir,
-                        gemini_dir: false,
-                        codex_dir: false,
-                        agent_configs,
-                        git_gpg,
-                        force_rebuild,
-                        args,
-                    },
-                )
-                .await?;
+            Commands::Cursor { common, args } => {
+                run_agent_command("cursor-agent", common, args).await?;
             }
 
-            Commands::Gemini {
-                backend,
-                image,
-                mount,
-                env,
-                no_network,
-                memory,
-                cpu,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                codex_dir,
-                agent_configs,
-                git_gpg,
-                force_rebuild,
-                args,
-            } => {
-                agent_commands::run_ai_agent_command(
-                    "gemini",
-                    agent_commands::AgentCommandParams {
-                        backend,
-                        image,
-                        mount,
-                        env,
-                        no_network,
-                        memory,
-                        cpu,
-                        no_workspace,
-                        workspace_path,
-                        claude_dir,
-                        copilot_dir,
-                        cursor_dir,
-                        gemini_dir,
-                        codex_dir,
-                        agent_configs,
-                        git_gpg,
-                        force_rebuild,
-                        args,
-                    },
-                )
-                .await?;
+            Commands::Gemini { common, args } => {
+                run_agent_command("gemini", common, args).await?;
             }
 
-            Commands::Codex {
-                backend,
-                image,
-                mount,
-                env,
-                no_network,
-                memory,
-                cpu,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                codex_dir,
-                agent_configs,
-                git_gpg,
-                force_rebuild,
-                args,
-            } => {
-                agent_commands::run_ai_agent_command(
-                    "codex",
-                    agent_commands::AgentCommandParams {
-                        backend,
-                        image,
-                        mount,
-                        env,
-                        no_network,
-                        memory,
-                        cpu,
-                        no_workspace,
-                        workspace_path,
-                        claude_dir,
-                        copilot_dir,
-                        cursor_dir,
-                        gemini_dir,
-                        codex_dir,
-                        agent_configs,
-                        git_gpg,
-                        force_rebuild,
-                        args,
-                    },
-                )
-                .await?;
+            Commands::Codex { common, args } => {
+                run_agent_command("codex", common, args).await?;
             }
 
             Commands::List { current, backend } => {
@@ -741,6 +531,39 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
     }
 
     Ok(())
+}
+
+/// Helper function to run an AI agent command
+/// This consolidates the common logic for all agent commands
+async fn run_agent_command(
+    agent_name: &str,
+    common: cli::AgentCommandOptions,
+    args: Vec<String>,
+) -> error::Result<()> {
+    agent_commands::run_ai_agent_command(
+        agent_name,
+        agent_commands::AgentCommandParams {
+            backend: common.backend,
+            image: common.image,
+            mount: common.mount,
+            env: common.env,
+            no_network: common.no_network,
+            memory: common.memory,
+            cpu: common.cpu,
+            no_workspace: common.no_workspace,
+            workspace_path: common.workspace_path,
+            claude_dir: common.claude_dir,
+            copilot_dir: common.copilot_dir,
+            cursor_dir: common.cursor_dir,
+            gemini_dir: common.gemini_dir,
+            codex_dir: common.codex_dir,
+            agent_configs: common.agent_configs,
+            git_gpg: common.git_gpg,
+            force_rebuild: common.force_rebuild,
+            args,
+        },
+    )
+    .await
 }
 
 /// Helper function to create a jail with default configuration
