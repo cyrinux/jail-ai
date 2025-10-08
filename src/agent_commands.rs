@@ -24,6 +24,7 @@ pub struct AgentCommandParams {
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
+    pub openai_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub force_rebuild: bool,
@@ -123,6 +124,7 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
                 copilot_dir: params.copilot_dir,
                 cursor_dir: params.cursor_dir,
                 gemini_dir: params.gemini_dir,
+                openai_dir: params.openai_dir,
                 agent_configs: params.agent_configs,
             },
         );
@@ -249,6 +251,7 @@ pub fn extract_agent_name(jail_name: &str) -> &str {
                         "claude" => return "claude",
                         "copilot" => return "copilot",
                         "gemini" => return "gemini",
+                        "openai" => return "openai",
                         _ => return agent_part, // Return as-is for other agents
                     }
                 }
