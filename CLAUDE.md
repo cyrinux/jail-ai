@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`jail-ai` is a Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor, Gemini) using systemd-nspawn or podman backends. It provides isolation, resource limits, and workspace management for secure AI agent execution.
+`jail-ai` is a Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor, Gemini) using podman. It provides isolation, resource limits, and workspace management for secure AI agent execution.
 
 ## Commands
 
@@ -98,7 +98,7 @@ make dev-jail
 
 ## Architecture
 
-- **backend/**: Trait-based abstraction with systemd-nspawn and podman implementations
+- **backend/**: Trait-based abstraction with podman implementation
 - **cli.rs**: CLI interface using clap
 - **config.rs**: Jail configuration with serialization support
 - **jail.rs**: High-level jail manager with builder pattern
@@ -113,7 +113,7 @@ make dev-jail
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
 - **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
-- **Dual Backend Support**: systemd-nspawn (Linux containers) and podman (OCI containers)
+- **Podman Backend**: Uses podman for OCI container management
 - **Resource Limits**: Memory and CPU quota restrictions
 - **Network Isolation**: Configurable network access (disabled, private, or shared)
 - **Bind Mounts**: Support for read-only and read-write mounts

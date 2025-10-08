@@ -28,8 +28,6 @@ RUN apt-get update && apt-get install -y \
     vim \
     nano \
     tree \
-    nix \
-    direnv \
     file \
     less \
     # Build essentials

@@ -41,7 +41,7 @@ fn calculate_string_hash(content: &str) -> String {
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
 
-    format!("{:x}", result)
+    format!("{result:x}")
 }
 
 /// Show diff between two text contents with context
@@ -78,11 +78,11 @@ fn show_diff(old_content: &str, new_content: &str) {
                     ChangeTag::Equal => "",
                 };
 
-                print!("{}{}{}", color, prefix, change);
+                print!("{color}{prefix}{change}");
                 if !change.value().ends_with('\n') {
                     println!();
                 }
-                print!("{}", RESET);
+                print!("{RESET}");
             }
         }
     }
@@ -95,7 +95,7 @@ fn show_diff(old_content: &str, new_content: &str) {
 fn prompt_user(message: &str) -> bool {
     use std::io::{self, Write};
 
-    print!("{} [y/N]: ", message);
+    print!("{message} [y/N]: ");
     io::stdout().flush().unwrap();
 
     let mut input = String::new();
@@ -114,7 +114,7 @@ async fn ensure_containerfile_exists() -> Result<PathBuf> {
         info!("Creating config directory: {}", config_dir.display());
         tokio::fs::create_dir_all(&config_dir)
             .await
-            .map_err(|e| JailError::Backend(format!("Failed to create config directory: {}", e)))?;
+            .map_err(|e| JailError::Backend(format!("Failed to create config directory: {e}")))?;
     }
 
     // Calculate embedded Containerfile hash
@@ -125,12 +125,17 @@ async fn ensure_containerfile_exists() -> Result<PathBuf> {
         let user_hash = calculate_file_hash(&containerfile_path).await?;
 
         if user_hash != embedded_hash {
-            debug!("User Containerfile hash ({}) differs from embedded hash ({})", user_hash, embedded_hash);
+            debug!(
+                "User Containerfile hash ({}) differs from embedded hash ({})",
+                user_hash, embedded_hash
+            );
 
             // Read user's Containerfile for diff display
             let user_content = tokio::fs::read_to_string(&containerfile_path)
                 .await
-                .map_err(|e| JailError::Backend(format!("Failed to read user Containerfile: {}", e)))?;
+                .map_err(|e| {
+                    JailError::Backend(format!("Failed to read user Containerfile: {e}"))
+                })?;
 
             // Show diff between user's and embedded Containerfile
             show_diff(&user_content, EMBEDDED_CONTAINERFILE);
@@ -140,20 +145,24 @@ async fn ensure_containerfile_exists() -> Result<PathBuf> {
                 info!("Replacing user Containerfile with updated version");
                 tokio::fs::remove_file(&containerfile_path)
                     .await
-                    .map_err(|e| JailError::Backend(format!("Failed to remove old Containerfile: {}", e)))?;
+                    .map_err(|e| {
+                        JailError::Backend(format!("Failed to remove old Containerfile: {e}"))
+                    })?;
 
                 // Also remove the hash cache to trigger rebuild
                 let hash_path = get_containerfile_hash_path();
                 if hash_path.exists() {
-                    tokio::fs::remove_file(&hash_path)
-                        .await
-                        .map_err(|e| JailError::Backend(format!("Failed to remove hash cache: {}", e)))?;
+                    tokio::fs::remove_file(&hash_path).await.map_err(|e| {
+                        JailError::Backend(format!("Failed to remove hash cache: {e}"))
+                    })?;
                 }
 
                 // Write new Containerfile
                 tokio::fs::write(&containerfile_path, EMBEDDED_CONTAINERFILE)
                     .await
-                    .map_err(|e| JailError::Backend(format!("Failed to write Containerfile: {}", e)))?;
+                    .map_err(|e| {
+                        JailError::Backend(format!("Failed to write Containerfile: {e}"))
+                    })?;
 
                 info!("Containerfile updated at {}", containerfile_path.display());
             } else {
@@ -170,7 +179,7 @@ async fn ensure_containerfile_exists() -> Result<PathBuf> {
         );
         tokio::fs::write(&containerfile_path, EMBEDDED_CONTAINERFILE)
             .await
-            .map_err(|e| JailError::Backend(format!("Failed to write Containerfile: {}", e)))?;
+            .map_err(|e| JailError::Backend(format!("Failed to write Containerfile: {e}")))?;
 
         info!(
             "Default Containerfile written. You can customize it at {}",
@@ -187,13 +196,13 @@ async fn calculate_file_hash(path: &Path) -> Result<String> {
 
     let content = tokio::fs::read(path)
         .await
-        .map_err(|e| JailError::Backend(format!("Failed to read file for hashing: {}", e)))?;
+        .map_err(|e| JailError::Backend(format!("Failed to read file for hashing: {e}")))?;
 
     let mut hasher = Sha256::new();
     hasher.update(&content);
     let result = hasher.finalize();
 
-    Ok(format!("{:x}", result))
+    Ok(format!("{result:x}"))
 }
 
 /// Check if the Containerfile has changed since last build
@@ -236,7 +245,7 @@ async fn store_containerfile_hash(containerfile_path: &Path) -> Result<()> {
 
     tokio::fs::write(&hash_path, hash.as_bytes())
         .await
-        .map_err(|e| JailError::Backend(format!("Failed to store Containerfile hash: {}", e)))?;
+        .map_err(|e| JailError::Backend(format!("Failed to store Containerfile hash: {e}")))?;
 
     debug!("Stored Containerfile hash: {}", hash);
     Ok(())
@@ -283,12 +292,11 @@ async fn build_image_from_containerfile(containerfile_path: &Path, image_name: &
         .stderr(Stdio::inherit())
         .status()
         .await
-        .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?;
+        .map_err(|e| JailError::Backend(format!("Failed to execute build command: {e}")))?;
 
     if !status.success() {
         return Err(JailError::Backend(format!(
-            "Failed to build image, build command exited with status: {}",
-            status
+            "Failed to build image, build command exited with status: {status}"
         )));
     }
 
@@ -307,8 +315,7 @@ pub async fn ensure_image_available(image_name: &str, force_rebuild: bool) -> Re
         // Still check if it exists and provide helpful error
         if !image_exists(image_name).await? {
             return Err(JailError::Backend(format!(
-                "Image '{}' not found. Please pull or build it manually, or use the default image.",
-                image_name
+                "Image '{image_name}' not found. Please pull or build it manually, or use the default image."
             )));
         }
         return Ok(());
