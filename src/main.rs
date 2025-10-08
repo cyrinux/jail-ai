@@ -640,6 +640,47 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     upgrade_single_jail(&jail_name, image, force).await?;
                 }
             }
+
+            Commands::Join { name, backend } => {
+                // Determine backend type
+                let backend_type = if let Some(backend_str) = backend {
+                    Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+                } else {
+                    config::BackendType::detect()
+                };
+
+                let jail_name = if let Some(name) = name {
+                    // Use provided name
+                    name
+                } else {
+                    // Auto-detect: find all matching jails for this directory
+                    let cwd = std::env::current_dir()?;
+                    let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
+                    let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
+
+                    if matching_jails.is_empty() {
+                        return Err(error::JailError::Config(
+                            "No jails found for this directory. Create one first with 'jail-ai create' or use an AI agent command like 'jail-ai claude'.".to_string(),
+                        ));
+                    } else if matching_jails.len() == 1 {
+                        // Only one jail exists, use it
+                        let jail_name = matching_jails[0].clone();
+                        info!("Found single jail for this directory: '{}'", jail_name);
+                        jail_name
+                    } else {
+                        // Multiple jails exist, ask user to choose
+                        agent_commands::select_jail(&matching_jails)?
+                    }
+                };
+
+                // Exec into jail with interactive shell
+                info!("Joining jail '{}'...", jail_name);
+                let jail = JailBuilder::new(jail_name.clone())
+                    .backend(backend_type)
+                    .build();
+
+                jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+            }
         },
     }
 

@@ -454,6 +454,16 @@ pub enum Commands {
         #[arg(long)]
         all: bool,
     },
+
+    /// Join an existing jail with an interactive shell
+    Join {
+        /// Name of the jail (auto-detected from current directory if not provided)
+        name: Option<String>,
+
+        /// Backend type (only 'podman' is supported, kept for compatibility)
+        #[arg(short, long)]
+        backend: Option<String>,
+    },
 }
 
 impl Commands {
