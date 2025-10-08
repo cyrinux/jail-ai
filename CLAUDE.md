@@ -161,6 +161,8 @@ The AI coding agents require authentication.
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
 - `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
 - `--openai-dir`: Mount `~/.config/openai` → `/home/agent/.config/openai` directory (OpenAI CLI authentication and settings)
+  - **Auto-authentication**: When using `jail-ai openai --openai-dir` without any arguments or if authentication is required, it will automatically run `openai auth login` interactively
+  - This eliminates the need to manually authenticate - just run `jail-ai openai --openai-dir` and follow the prompts
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--openai-dir`)
 
 Example aliases for different security levels:
