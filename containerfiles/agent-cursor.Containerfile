@@ -7,15 +7,11 @@ LABEL description="jail-ai with Cursor Agent CLI"
 USER root
 
 # Install Cursor Agent CLI with default installation (works natively with Debian/glibc)
-RUN curl -fsSL https://cursor.com/install | bash
-
-# Add cursor to PATH (default install location is ~/.local/bin)
-ENV PATH="/root/.local/bin:${PATH}"
+# Install to /root, then symlink to system location for all users
+RUN curl -fsSL https://cursor.com/install | bash \
+    && ln -sf /root/.local/bin/cursor-agent /usr/local/bin/cursor-agent
 
 USER agent
-
-# Ensure agent user also has cursor in PATH
-ENV PATH="/home/agent/.local/bin:${PATH}"
 
 WORKDIR /workspace
 
