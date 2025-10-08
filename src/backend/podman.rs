@@ -127,6 +127,19 @@ impl JailBackend for PodmanBackend {
                     .next()
                     .and_then(|suffix| match suffix {
                         "claude" | "copilot" | "cursor" | "gemini" | "codex" => Some(suffix),
+                        "agent" => {
+                            // Handle legacy jail names with format: ...-cursor-agent
+                            // Look at the second-to-last segment
+                            let parts: Vec<&str> = config.name.rsplitn(3, '-').collect();
+                            if parts.len() >= 2 {
+                                match parts[1] {
+                                    "cursor" => Some("cursor"),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        }
                         _ => None,
                     });
 
