@@ -24,7 +24,7 @@ pub struct AgentCommandParams {
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
-    pub openai_dir: bool,
+    pub codex_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub force_rebuild: bool,
@@ -124,7 +124,7 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
                 copilot_dir: params.copilot_dir,
                 cursor_dir: params.cursor_dir,
                 gemini_dir: params.gemini_dir,
-                openai_dir: params.openai_dir,
+                codex_dir: params.codex_dir,
                 agent_configs: params.agent_configs,
             },
         );
@@ -178,10 +178,10 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     // Execute AI agent command (use the same backend type determined earlier)
     let jail = JailBuilder::new(&jail_name).backend(backend_type).build();
     
-    // Auto-authenticate OpenAI CLI if needed
-    if agent_command == "openai" && params.openai_dir {
+    // Auto-authenticate Codex CLI if needed
+    if agent_command == "codex" && params.codex_dir {
         // Check if authentication is needed by trying to run a simple command
-        let check_cmd = vec!["openai".to_string(), "--help".to_string()];
+        let check_cmd = vec!["codex".to_string(), "--help".to_string()];
         let check_result = jail.exec(&check_cmd, false).await;
         
         // If the command fails or returns auth-related errors, try to authenticate
@@ -196,8 +196,8 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         };
         
         if needs_auth || params.args.is_empty() {
-            info!("OpenAI CLI authentication required, starting login process...");
-            let auth_cmd = vec!["openai".to_string(), "auth".to_string(), "login".to_string()];
+            info!("Codex CLI authentication required, starting login process...");
+            let auth_cmd = vec!["codex".to_string(), "auth".to_string(), "login".to_string()];
             let auth_output = jail.exec(&auth_cmd, true).await?;
             if !auth_output.is_empty() {
                 print!("{auth_output}");
@@ -205,7 +205,7 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
             
             // If no additional args were provided, we're done (user just wanted to authenticate)
             if params.args.is_empty() {
-                info!("OpenAI CLI authentication completed");
+                info!("Codex CLI authentication completed");
                 return Ok(());
             }
         }
@@ -285,7 +285,7 @@ pub fn extract_agent_name(jail_name: &str) -> &str {
                         "claude" => return "claude",
                         "copilot" => return "copilot",
                         "gemini" => return "gemini",
-                        "openai" => return "openai",
+                        "codex" => return "codex",
                         _ => return agent_part, // Return as-is for other agents
                     }
                 }

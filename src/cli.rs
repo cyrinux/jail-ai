@@ -84,11 +84,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -185,11 +185,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -260,11 +260,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -335,11 +335,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -410,11 +410,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -431,8 +431,8 @@ pub enum Commands {
         args: Vec<String>,
     },
 
-    /// Quick start OpenAI CLI in a jail for current directory
-    Openai {
+    /// Quick start Codex CLI in a jail for current directory
+    Codex {
         /// Backend type (only 'podman' is supported, kept for compatibility)
         #[arg(short, long)]
         backend: Option<String>,
@@ -485,11 +485,11 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
-        /// Mount entire ~/.config/openai directory for OpenAI CLI
+        /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
-        openai_dir: bool,
+        codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --openai-dir)
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -501,7 +501,7 @@ pub enum Commands {
         #[arg(long)]
         force_rebuild: bool,
 
-        /// Additional arguments to pass to openai
+        /// Additional arguments to pass to codex
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
