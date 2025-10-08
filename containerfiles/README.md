@@ -23,7 +23,8 @@ The image system is organized into **layers** that build on top of each other:
 │  ├─ Go (go toolchain)                   │
 │  ├─ Python (pip, black, pytest)         │
 │  ├─ Node.js (npm, yarn, pnpm)           │
-│  └─ Java (JDK, Maven, Gradle)           │
+│  ├─ Java (JDK, Maven, Gradle)           │
+│  └─ Nix (Nix package manager, flakes)   │
 └─────────────────────────────────────────┘
                     │
                     ▼
@@ -67,6 +68,11 @@ Each language layer builds on top of the base layer:
   - Image name: `localhost/jail-ai-java:latest`
   - Adds: OpenJDK 21, Maven, Gradle
 
+- **`nix.Containerfile`** - Nix development environment with flakes support
+  - Image name: `localhost/jail-ai-nix:latest`
+  - Adds: Nix package manager with flakes enabled
+  - Automatically loads `flake.nix` if present in workspace
+
 ### Agent Layers
 Agent layers require Node.js, so they build on top of the nodejs layer:
 
@@ -101,6 +107,7 @@ When you create a jail, jail-ai automatically detects your project type and buil
 | `package.json` | Node.js | `base` → `nodejs` |
 | `requirements.txt`, `pyproject.toml` | Python | `base` → `python` |
 | `pom.xml`, `build.gradle` | Java | `base` → `java` |
+| `flake.nix` | Nix | `base` → `nix` |
 | Multiple files | Multi-language | `base` → all detected layers |
 | No specific files | Generic | `base` only |
 
@@ -198,6 +205,7 @@ cargo run -- create --image localhost/my-custom-image:latest
 | `python` | ~280MB | base + Python |
 | `nodejs` | ~250MB | base + Node.js |
 | `java` | ~400MB | base + JDK |
+| `nix` | ~350MB | base + Nix |
 | `agent-claude` | ~300MB | nodejs + Claude |
 
 Compare to monolithic: **~1.2GB** with all languages + all agents!
