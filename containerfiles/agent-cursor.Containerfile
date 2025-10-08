@@ -19,7 +19,7 @@ RUN curl -fsSL https://cursor.com/install | bash \
             CURSOR_VERSION_DIR=$(dirname "$CURSOR_BIN") && \
             if [ -f "$CURSOR_VERSION_DIR/node" ]; then \
                 rm "$CURSOR_VERSION_DIR/node" && \
-                ln -s "$(which node)" "$CURSOR_VERSION_DIR/node"; \
+                ln -s /usr/bin/node "$CURSOR_VERSION_DIR/node"; \
             fi; \
         fi; \
     fi
