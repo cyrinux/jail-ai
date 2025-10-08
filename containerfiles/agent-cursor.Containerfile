@@ -4,15 +4,22 @@ FROM ${BASE_IMAGE}
 LABEL maintainer="jail-ai"
 LABEL description="jail-ai with Cursor Agent CLI"
 
+USER root
+
+# Install Cursor Agent CLI to system location
+# Cursor installer creates versioned dir in ~/.local/share/cursor-agent and symlink in ~/.local/bin
+# Move entire installation to /usr/local to avoid /root pollution
+RUN curl -fsSL https://cursor.com/install | bash \
+    && if [ -d /root/.local/share/cursor-agent ]; then \
+        mkdir -p /usr/local/share && \
+        mv /root/.local/share/cursor-agent /usr/local/share/cursor-agent && \
+        CURSOR_BIN=$(find /usr/local/share/cursor-agent/versions -name cursor-agent -type f | head -n1) && \
+        if [ -n "$CURSOR_BIN" ]; then \
+            ln -s "$CURSOR_BIN" /usr/local/bin/cursor-agent; \
+        fi; \
+    fi
+
 USER agent
-
-# Install Cursor Agent CLI with default installation (works natively with Debian/glibc)
-# Install as agent user so it's in the agent's home directory
-RUN curl -fsSL https://cursor.com/install | bash
-
-# Add cursor to PATH
-ENV PATH="/home/agent/.local/bin:${PATH}"
-
 WORKDIR /workspace
 
 CMD ["/bin/zsh"]
