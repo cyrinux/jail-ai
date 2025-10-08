@@ -29,10 +29,18 @@ impl PodmanBackend {
             "-d".to_string(),
             "--name".to_string(),
             config.name.clone(),
+        ];
+        
+        // If force_rebuild is true, replace existing container
+        if config.force_rebuild {
+            args.push("--replace".to_string());
+        }
+        
+        args.extend(vec![
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
             "--userns=keep-id".to_string(),
             "--restart=always".to_string(),
-        ];
+        ]);
 
         // Persistent volume for /home/agent to preserve data across upgrades
         let home_volume = format!("{}-home", config.name);
@@ -95,7 +103,8 @@ impl JailBackend for PodmanBackend {
     async fn create(&self, config: &JailConfig) -> Result<()> {
         info!("Creating podman jail: {}", config.name);
 
-        if self.exists(&config.name).await? {
+        // If force_rebuild is true, we'll use --replace flag instead of checking existence
+        if !config.force_rebuild && self.exists(&config.name).await? {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
