@@ -12,6 +12,7 @@ const RUST_IMAGE_NAME: &str = "localhost/jail-ai-rust:latest";
 const PYTHON_IMAGE_NAME: &str = "localhost/jail-ai-python:latest";
 const NODEJS_IMAGE_NAME: &str = "localhost/jail-ai-nodejs:latest";
 const JAVA_IMAGE_NAME: &str = "localhost/jail-ai-java:latest";
+const NIX_IMAGE_NAME: &str = "localhost/jail-ai-nix:latest";
 
 /// Containerfiles embedded from the repository
 const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base.Containerfile");
@@ -20,6 +21,7 @@ const RUST_CONTAINERFILE: &str = include_str!("../containerfiles/rust.Containerf
 const PYTHON_CONTAINERFILE: &str = include_str!("../containerfiles/python.Containerfile");
 const NODEJS_CONTAINERFILE: &str = include_str!("../containerfiles/nodejs.Containerfile");
 const JAVA_CONTAINERFILE: &str = include_str!("../containerfiles/java.Containerfile");
+const NIX_CONTAINERFILE: &str = include_str!("../containerfiles/nix.Containerfile");
 const AGENT_CLAUDE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-claude.Containerfile");
 const AGENT_COPILOT_CONTAINERFILE: &str =
@@ -53,6 +55,7 @@ fn get_language_image_name(project_type: &ProjectType) -> &'static str {
         ProjectType::Python => PYTHON_IMAGE_NAME,
         ProjectType::NodeJS => NODEJS_IMAGE_NAME,
         ProjectType::Java => JAVA_IMAGE_NAME,
+        ProjectType::Nix => NIX_IMAGE_NAME,
         ProjectType::Multi(_) | ProjectType::Generic => BASE_IMAGE_NAME,
     }
 }
@@ -76,6 +79,7 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "python" => Some(PYTHON_CONTAINERFILE),
         "nodejs" => Some(NODEJS_CONTAINERFILE),
         "java" => Some(JAVA_CONTAINERFILE),
+        "nix" => Some(NIX_CONTAINERFILE),
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
         "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
@@ -105,6 +109,7 @@ async fn build_shared_layer(layer_name: &str, base_image: Option<&str>) -> Resul
         "python" => PYTHON_IMAGE_NAME.to_string(),
         "nodejs" => NODEJS_IMAGE_NAME.to_string(),
         "java" => JAVA_IMAGE_NAME.to_string(),
+        "nix" => NIX_IMAGE_NAME.to_string(),
         _ => {
             return Err(JailError::Backend(format!(
                 "Unknown shared layer: {}",
@@ -319,6 +324,7 @@ mod tests {
             NODEJS_IMAGE_NAME
         );
         assert_eq!(get_language_image_name(&ProjectType::Java), JAVA_IMAGE_NAME);
+        assert_eq!(get_language_image_name(&ProjectType::Nix), NIX_IMAGE_NAME);
         assert_eq!(
             get_language_image_name(&ProjectType::Generic),
             BASE_IMAGE_NAME
@@ -377,6 +383,7 @@ mod tests {
         assert!(get_containerfile_content("python").is_some());
         assert!(get_containerfile_content("nodejs").is_some());
         assert!(get_containerfile_content("java").is_some());
+        assert!(get_containerfile_content("nix").is_some());
         assert!(get_containerfile_content("agent-claude").is_some());
         assert!(get_containerfile_content("unknown").is_none());
     }

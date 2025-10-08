@@ -109,8 +109,9 @@ make dev-jail
 
 ## Key Features
 
-- **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, and essential dev tools
+- **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
+- **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
@@ -130,11 +131,12 @@ The `localhost/jail-ai-env:latest` image includes:
   - **fzf** - Fuzzy finder for command history and file search
   - **Powerlevel10k** - Beautiful and fast zsh theme with git integration
 - **Search**: ripgrep, fd-find
-- **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3
+- **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3, Nix (with flakes support)
 - **Build tools**: gcc, make, pkg-config
 - **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest
 - **Rust tools**: clippy, rustfmt
+- **Nix tools**: Nix package manager with flakes enabled
 - **AI Coding Agents**:
   - **Claude Code** (`claude`) - Anthropic's CLI coding assistant
   - **GitHub Copilot CLI** (`copilot`) - GitHub's AI pair programmer

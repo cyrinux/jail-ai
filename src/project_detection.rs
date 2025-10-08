@@ -9,6 +9,7 @@ pub enum ProjectType {
     Python,
     NodeJS,
     Java,
+    Nix,
     /// Multiple project types detected
     Multi(Vec<ProjectType>),
     /// No specific project type detected
@@ -24,6 +25,7 @@ impl ProjectType {
             ProjectType::Python => "python",
             ProjectType::NodeJS => "nodejs",
             ProjectType::Java => "java",
+            ProjectType::Nix => "nix",
             ProjectType::Multi(_) => "multi",
             ProjectType::Generic => "base",
         }
@@ -86,6 +88,12 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
     {
         debug!("Detected Java project");
         detected_types.push(ProjectType::Java);
+    }
+
+    // Check for Nix project
+    if path.join("flake.nix").exists() {
+        debug!("Detected Nix project (flake.nix)");
+        detected_types.push(ProjectType::Nix);
     }
 
     match detected_types.len() {
@@ -187,6 +195,16 @@ mod tests {
         } else {
             panic!("Expected Multi project type");
         }
+    }
+
+    #[test]
+    fn test_detect_nix_project() {
+        let temp_dir = TempDir::new().unwrap();
+        let flake_nix = temp_dir.path().join("flake.nix");
+        File::create(flake_nix).unwrap();
+
+        let project_type = detect_project_type(temp_dir.path());
+        assert_eq!(project_type, ProjectType::Nix);
     }
 
     #[test]

@@ -165,9 +165,11 @@ impl JailBackend for PodmanBackend {
                 )
                 .await?
             } else if config.base_image == image::DEFAULT_IMAGE_NAME {
-                // For default image without layered system, use legacy build system
-                image::ensure_image_available(&config.base_image, config.force_rebuild).await?;
-                config.base_image.clone()
+                // Default image should use layered system
+                // If use_layered_images is false, it's likely a configuration error
+                return Err(JailError::Backend(
+                    "Default image requires layered images to be enabled. Please set use_layered_images to true.".to_string()
+                ));
             } else {
                 // For custom images, check if they exist and pull if needed
                 let image_exists = self.image_exists(&config.base_image).await?;
