@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=localhost/jail-ai-nodejs:latest
+ARG BASE_IMAGE=localhost/jail-ai-base:latest
 FROM ${BASE_IMAGE}
 
 LABEL maintainer="jail-ai"

@@ -235,17 +235,9 @@ pub async fn build_project_image(
 
     // Step 3: Build final project-specific image
     if let Some(agent) = agent_name {
-        // For agents: build nodejs (shared) → agent (project-specific)
+        // For agents: build base → agent (project-specific)
+        // Node.js is now in base, so agents inherit it directly
         info!("Building agent layer for project...");
-
-        // Ensure nodejs layer exists (agents need Node.js)
-        let nodejs_image = if force_rebuild || !image_exists(NODEJS_IMAGE_NAME).await? {
-            info!("Building nodejs layer...");
-            build_shared_layer("nodejs", Some(&base_image)).await?
-        } else {
-            debug!("Nodejs layer already exists");
-            NODEJS_IMAGE_NAME.to_string()
-        };
 
         // Build project-specific agent image
         let agent_layer = format!("agent-{}", agent);
@@ -256,7 +248,7 @@ pub async fn build_project_image(
                 "Building project-specific agent image: {}",
                 final_image_name
             );
-            build_image_from_containerfile(&agent_layer, Some(&nodejs_image), &final_image_name)
+            build_image_from_containerfile(&agent_layer, Some(&base_image), &final_image_name)
                 .await?;
         } else {
             debug!("Project-specific agent image already exists");
