@@ -7,13 +7,20 @@ LABEL description="jail-ai with Cursor Agent CLI"
 USER root
 
 # Install Cursor Agent CLI to system location
+# Note: Cursor bundles its own node binary (glibc), but we're on Alpine (musl)
+# Solution: Replace bundled node with symlink to system node
 RUN curl -fsSL https://cursor.com/install | bash \
     && if [ -d /root/.local/share/cursor-agent ]; then \
         mkdir -p /usr/local/share && \
         mv /root/.local/share/cursor-agent /usr/local/share/cursor-agent && \
         CURSOR_BIN=$(find /usr/local/share/cursor-agent/versions -name cursor-agent -type f | head -n1) && \
         if [ -n "$CURSOR_BIN" ]; then \
-            ln -s "$CURSOR_BIN" /usr/local/bin/cursor-agent; \
+            ln -s "$CURSOR_BIN" /usr/local/bin/cursor-agent && \
+            CURSOR_VERSION_DIR=$(dirname "$CURSOR_BIN") && \
+            if [ -f "$CURSOR_VERSION_DIR/node" ]; then \
+                rm "$CURSOR_VERSION_DIR/node" && \
+                ln -s "$(which node)" "$CURSOR_VERSION_DIR/node"; \
+            fi; \
         fi; \
     fi
 
