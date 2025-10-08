@@ -8,7 +8,7 @@ USER root
 
 # Install Cursor Agent CLI to system location
 # Note: Cursor bundles its own node binary (glibc), but we're on Alpine (musl)
-# Solution: Replace bundled node with symlink to system node
+# Solution: Replace bundled node with wrapper that filters incompatible flags
 RUN curl -fsSL https://cursor.com/install | bash \
     && if [ -d /root/.local/share/cursor-agent ]; then \
         mkdir -p /usr/local/share && \
@@ -18,8 +18,18 @@ RUN curl -fsSL https://cursor.com/install | bash \
             ln -s "$CURSOR_BIN" /usr/local/bin/cursor-agent && \
             CURSOR_VERSION_DIR=$(dirname "$CURSOR_BIN") && \
             if [ -f "$CURSOR_VERSION_DIR/node" ]; then \
-                rm "$CURSOR_VERSION_DIR/node" && \
-                ln -s "$(which node)" "$CURSOR_VERSION_DIR/node"; \
+                mv "$CURSOR_VERSION_DIR/node" "$CURSOR_VERSION_DIR/node-bundled" && \
+                echo '#!/bin/sh' > "$CURSOR_VERSION_DIR/node" && \
+                echo '# Wrapper to filter out Alpine-incompatible node flags' >> "$CURSOR_VERSION_DIR/node" && \
+                echo 'FILTERED_ARGS=""' >> "$CURSOR_VERSION_DIR/node" && \
+                echo 'for arg in "$@"; do' >> "$CURSOR_VERSION_DIR/node" && \
+                echo '  case "$arg" in' >> "$CURSOR_VERSION_DIR/node" && \
+                echo '    --use-system-ca) ;;' >> "$CURSOR_VERSION_DIR/node" && \
+                echo '    *) FILTERED_ARGS="$FILTERED_ARGS $arg" ;;' >> "$CURSOR_VERSION_DIR/node" && \
+                echo '  esac' >> "$CURSOR_VERSION_DIR/node" && \
+                echo 'done' >> "$CURSOR_VERSION_DIR/node" && \
+                echo 'exec /usr/bin/node $FILTERED_ARGS' >> "$CURSOR_VERSION_DIR/node" && \
+                chmod +x "$CURSOR_VERSION_DIR/node"; \
             fi; \
         fi; \
     fi
