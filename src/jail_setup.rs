@@ -103,6 +103,20 @@ pub struct AgentConfigFlags {
     pub agent_configs: bool,
 }
 
+/// Helper function to mount a config directory if it exists
+fn mount_config_if_exists(
+    builder: JailBuilder,
+    source_path: std::path::PathBuf,
+    target_path: &str,
+) -> JailBuilder {
+    if source_path.exists() {
+        info!("Mounting {} to {}", source_path.display(), target_path);
+        builder.bind_mount(source_path, target_path, false)
+    } else {
+        builder
+    }
+}
+
 /// Mount agent configuration directories based on flags
 pub fn mount_agent_configs(
     builder: JailBuilder,
@@ -114,14 +128,11 @@ pub fn mount_agent_configs(
 
     // Opt-in: Mount entire ~/.claude directory
     if flags.claude_dir || flags.agent_configs {
-        let claude_config = home_path.join(".claude");
-        if claude_config.exists() {
-            info!(
-                "Mounting {} to /home/agent/.claude",
-                claude_config.display()
-            );
-            builder = builder.bind_mount(claude_config, "/home/agent/.claude", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".claude"),
+            "/home/agent/.claude",
+        );
     } else if agent == "claude" {
         // If not mounting full .claude directory, mount minimal auth files for Claude agent only
         let claude_creds = home_path.join(".claude").join(".credentials.json");
@@ -137,61 +148,46 @@ pub fn mount_agent_configs(
 
     // Opt-in: Mount ~/.config/.copilot for GitHub Copilot
     if flags.copilot_dir || flags.agent_configs {
-        let copilot_config = home_path.join(".config").join(".copilot");
-        if copilot_config.exists() {
-            info!(
-                "Mounting {} to /home/agent/.config/.copilot",
-                copilot_config.display()
-            );
-            builder = builder.bind_mount(copilot_config, "/home/agent/.config/.copilot", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".config").join(".copilot"),
+            "/home/agent/.config/.copilot",
+        );
     }
 
     // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
     if flags.cursor_dir || flags.agent_configs {
         // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
-        let cursor_config = home_path.join(".cursor");
-        if cursor_config.exists() {
-            info!(
-                "Mounting {} to /home/agent/.cursor",
-                cursor_config.display()
-            );
-            builder = builder.bind_mount(cursor_config, "/home/agent/.cursor", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".cursor"),
+            "/home/agent/.cursor",
+        );
 
         // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
-        let cursor_config_dir = home_path.join(".config").join("cursor");
-        if cursor_config_dir.exists() {
-            info!(
-                "Mounting {} to /home/agent/.config/cursor",
-                cursor_config_dir.display()
-            );
-            builder = builder.bind_mount(cursor_config_dir, "/home/agent/.config/cursor", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".config").join("cursor"),
+            "/home/agent/.config/cursor",
+        );
     }
 
     // Opt-in: Mount ~/.config/gemini for Gemini CLI
     if flags.gemini_dir || flags.agent_configs {
-        let gemini_config = home_path.join(".config").join("gemini");
-        if gemini_config.exists() {
-            info!(
-                "Mounting {} to /home/agent/.config/gemini",
-                gemini_config.display()
-            );
-            builder = builder.bind_mount(gemini_config, "/home/agent/.config/gemini", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".config").join("gemini"),
+            "/home/agent/.config/gemini",
+        );
     }
 
     // Opt-in: Mount ~/.config/codex for Codex CLI
     if flags.codex_dir || flags.agent_configs {
-        let codex_config = home_path.join(".config").join("codex");
-        if codex_config.exists() {
-            info!(
-                "Mounting {} to /home/agent/.config/codex",
-                codex_config.display()
-            );
-            builder = builder.bind_mount(codex_config, "/home/agent/.config/codex", false);
-        }
+        builder = mount_config_if_exists(
+            builder,
+            home_path.join(".config").join("codex"),
+            "/home/agent/.config/codex",
+        );
     }
 
     builder
