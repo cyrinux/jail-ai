@@ -21,6 +21,37 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use agent_commands::get_git_root;
 use git_gpg::create_claude_json_in_container;
 
+/// Validate that a mount source is safe for jail execution
+/// Prevents mounting root filesystem (/) or entire home directory
+pub fn validate_mount_source(source: &std::path::Path) -> error::Result<()> {
+    let source = source.canonicalize()
+        .map_err(error::JailError::Io)?;
+    
+    // Check if source is the root filesystem
+    if source == std::path::PathBuf::from("/") {
+        return Err(error::JailError::UnsafeMount(
+            "Cannot mount root filesystem (/) into container".to_string()
+        ));
+    }
+    
+    // Get the user's home directory
+    let home_dir = std::env::var("HOME")
+        .map_err(|_| error::JailError::Config("HOME environment variable not set".to_string()))?;
+    let home_path = std::path::PathBuf::from(&home_dir).canonicalize()
+        .map_err(error::JailError::Io)?;
+    
+    // Check if source is the entire home directory
+    if source == home_path {
+        return Err(error::JailError::UnsafeMount(
+            format!("Cannot mount entire home directory ({}) into container", home_path.display())
+        ));
+    }
+    
+    // Allow all other directories, including home subdirectories
+    // Users should be able to mount any specific directory they want
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -153,6 +184,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     if !no_workspace {
                         let workspace_dir =
                             get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
+                        
+                        // Validate workspace directory is safe
+                        agent_commands::validate_workspace_directory(&workspace_dir)?;
+                        
                         info!(
                             "Auto-mounting {} to {}",
                             workspace_dir.display(),
@@ -223,13 +258,6 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 };
 
                 jail.create().await?;
-
-                // Create .claude.json file inside the container
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                let home_path = std::path::PathBuf::from(&home);
-                if let Err(e) = git_gpg::create_claude_json_in_container(&home_path, &jail).await {
-                    warn!("Failed to create .claude.json in container: {}", e);
-                }
 
                 // Create .gitconfig file inside the container if git_gpg is enabled
                 if git_gpg {
@@ -564,6 +592,10 @@ async fn create_default_jail(
 
     // Auto-mount workspace (git root if available, otherwise provided workspace)
     let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
+    
+    // Validate workspace directory is safe
+    agent_commands::validate_workspace_directory(&workspace_dir)?;
+    
     info!("Auto-mounting {} to /workspace", workspace_dir.display());
     builder = builder.bind_mount(workspace_dir, "/workspace", false);
 
@@ -682,11 +714,13 @@ async fn upgrade_single_jail(
     let new_jail = builder.build();
     new_jail.create().await?;
 
-    // Create .claude.json file inside the container if needed
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let home_path = std::path::PathBuf::from(&home);
-    if let Err(e) = create_claude_json_in_container(&home_path, &new_jail).await {
-        warn!("Failed to create .claude.json in container: {}", e);
+    // Create .claude.json file inside the container if needed (only for Claude agent)
+    if jail_name.ends_with("-claude") {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+        let home_path = std::path::PathBuf::from(&home);
+        if let Err(e) = create_claude_json_in_container(&home_path, &new_jail).await {
+            warn!("Failed to create .claude.json in container: {}", e);
+        }
     }
 
     println!("✓ Jail '{jail_name}' successfully upgraded to image '{new_image}'");

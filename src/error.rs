@@ -22,6 +22,12 @@ pub enum JailError {
 
     #[error("Command execution failed: {0}")]
     ExecutionFailed(String),
+
+    #[error("Unsafe workspace directory: {0}")]
+    UnsafeWorkspace(String),
+
+    #[error("Unsafe mount source: {0}")]
+    UnsafeMount(String),
 }
 
 pub type Result<T> = std::result::Result<T, JailError>;

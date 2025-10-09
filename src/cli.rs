@@ -351,10 +351,16 @@ impl Commands {
         }
 
         let readonly = parts.get(2).is_some_and(|&s| s == "ro");
+        let source = PathBuf::from(parts[0]);
+        let target = PathBuf::from(parts[1]);
+
+        // Validate mount source is safe
+        crate::validate_mount_source(&source)
+            .map_err(|e| e.to_string())?;
 
         Ok(crate::config::BindMount {
-            source: PathBuf::from(parts[0]),
-            target: PathBuf::from(parts[1]),
+            source,
+            target,
             readonly,
         })
     }
@@ -455,15 +461,28 @@ mod tests {
 
     #[test]
     fn test_parse_mount() {
-        let mount = Commands::parse_mount("/src:/dst:ro").unwrap();
-        assert_eq!(mount.source, PathBuf::from("/src"));
+        // Test with a path that exists
+        let mount = Commands::parse_mount("/tmp:/dst:ro").unwrap();
+        assert_eq!(mount.source, PathBuf::from("/tmp"));
         assert_eq!(mount.target, PathBuf::from("/dst"));
         assert!(mount.readonly);
 
-        let mount = Commands::parse_mount("/src:/dst").unwrap();
+        let mount = Commands::parse_mount("/tmp:/dst").unwrap();
         assert!(!mount.readonly);
 
         assert!(Commands::parse_mount("invalid").is_err());
+        
+        // Test unsafe mount validation
+        assert!(Commands::parse_mount("/:/dst").is_err());
+        // Test with actual home directory path (should fail)
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/agent".to_string());
+        assert!(Commands::parse_mount(&format!("{}:/dst", home)).is_err());
+        // Test with home subdirectory (should pass if directory exists)
+        // Use .config which should exist in most cases
+        let home_config = format!("{}/.config:/dst", home);
+        if std::path::Path::new(&home_config.split(':').next().unwrap()).exists() {
+            assert!(Commands::parse_mount(&home_config).is_ok());
+        }
     }
 
     #[test]

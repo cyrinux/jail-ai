@@ -70,6 +70,75 @@ pub fn get_git_root() -> Option<PathBuf> {
     None
 }
 
+/// Validate that a workspace directory is safe for jail execution
+/// Prevents execution in home directory root and system directories
+pub fn validate_workspace_directory(workspace_dir: &Path) -> Result<()> {
+    let workspace_dir = workspace_dir.canonicalize()
+        .map_err(error::JailError::Io)?;
+    
+    // Get the user's home directory
+    let home_dir = std::env::var("HOME")
+        .map_err(|_| error::JailError::Config("HOME environment variable not set".to_string()))?;
+    let home_path = PathBuf::from(&home_dir).canonicalize()
+        .map_err(error::JailError::Io)?;
+    
+    // Check if workspace is the home directory root
+    if workspace_dir == home_path {
+        return Err(error::JailError::UnsafeWorkspace(
+            format!("Cannot run jail-ai in home directory root: {}", workspace_dir.display())
+        ));
+    }
+    
+    // Check if workspace is a system directory
+    let system_dirs = [
+        "/",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/local",
+        "/etc",
+        "/var",
+        "/lib",
+        "/lib64",
+        "/opt",
+        "/root",
+        "/sys",
+        "/proc",
+        "/dev",
+    ];
+    
+    for system_dir in &system_dirs {
+        if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
+            if workspace_dir == system_path {
+                return Err(error::JailError::UnsafeWorkspace(
+                    format!("Cannot run jail-ai in system directory: {}", workspace_dir.display())
+                ));
+            }
+        }
+    }
+    
+    // Check if workspace is inside a system directory (but not root)
+    for system_dir in &system_dirs {
+        if *system_dir == "/" {
+            // Skip root directory check as everything is under root
+            continue;
+        }
+        
+        if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
+            if workspace_dir.starts_with(&system_path) && workspace_dir != system_path {
+                return Err(error::JailError::UnsafeWorkspace(
+                    format!("Cannot run jail-ai in system subdirectory: {}", workspace_dir.display())
+                ));
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+
 /// Map agent command names to normalized agent identifiers
 /// (e.g., "cursor-agent" -> "cursor")
 fn normalize_agent_name(agent_command: &str) -> &str {
@@ -143,6 +212,10 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         // Auto-mount workspace (git root if available, otherwise current directory)
         if !params.no_workspace {
             let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+            
+            // Validate workspace directory is safe
+            validate_workspace_directory(&workspace_dir)?;
+            
             info!(
                 "Auto-mounting {} to {}",
                 workspace_dir.display(),
