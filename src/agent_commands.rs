@@ -329,9 +329,25 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
             }
         }
     }
+    info!("about to run");
 
-    let mut command = vec![agent_command.to_string()];
-    command.extend(params.args);
+    // Check if the jail uses the Nix wrapper by testing if it exists in the agent's home directory
+    // If it does, wrap the command with nix-wrapper to ensure flake environment is loaded
+    // Use a simple file check that's fast and won't hang
+    let wrapper_check = jail.exec(&["sh".to_string(), "-c".to_string(), "[ -x /home/agent/nix-wrapper ] && echo yes || echo no".to_string()], false).await;
+    let uses_nix_wrapper = wrapper_check.map(|output| output.trim() == "yes").unwrap_or(false);
+
+    let command = if uses_nix_wrapper {
+        // Wrap command with nix-wrapper to load flake environment
+        let mut cmd = vec!["/home/agent/nix-wrapper".to_string(), agent_command.to_string()];
+        cmd.extend(params.args);
+        cmd
+    } else {
+        // No Nix wrapper available, execute command directly
+        let mut cmd = vec![agent_command.to_string()];
+        cmd.extend(params.args);
+        cmd
+    };
 
     let output = jail.exec(&command, true).await?;
     if !output.is_empty() {
