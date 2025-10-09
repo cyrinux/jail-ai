@@ -101,7 +101,6 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
 
     // Check for C/C++ project
     if path.join("CMakeLists.txt").exists()
-        || path.join("Makefile").exists()
         || path.join("configure.ac").exists()
         || path.join("meson.build").exists()
     {
