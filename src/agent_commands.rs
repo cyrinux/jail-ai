@@ -29,6 +29,7 @@ pub struct AgentCommandParams {
     pub git_gpg: bool,
     pub force_rebuild: bool,
     pub force_layers: Vec<String>,
+    pub shell: bool,
     pub verbose: bool,
     pub args: Vec<String>,
 }
@@ -208,6 +209,16 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
 
     // Execute AI agent command (use the same backend type determined earlier)
     let jail = JailBuilder::new(&jail_name).backend(backend_type).verbose(params.verbose).build();
+
+    // If --shell flag is set, start an interactive shell instead of running the agent
+    if params.shell {
+        info!("Starting interactive shell in jail '{}'...", jail_name);
+        let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+        if !output.is_empty() {
+            print!("{output}");
+        }
+        return Ok(());
+    }
 
     // Auto-authenticate Codex CLI if needed
     if agent_command == "codex" && params.codex_dir {

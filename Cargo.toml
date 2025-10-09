@@ -1,20 +1,29 @@
 [package]
 name = "jail-ai"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2021"
+authors = ["Cyril Levis <git@levis.name>"]
+license = "MIT OR Apache-2.0"
+description = "A Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor, Gemini) using podman with isolation, resource limits, and workspace management"
+readme = "README.md"
+homepage = "https://github.com/cyrinux/jail-ai"
+repository = "https://github.com/cyrinux/jail-ai"
+documentation = "https://docs.rs/jail-ai"
+keywords = ["podman", "sandbox", "container", "ai-agent", "isolation"]
+categories = ["command-line-utilities", "development-tools", "virtualization"]
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-thiserror = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1.40", features = ["full"] }
-tempfile = "3.12"
+clap = { version = "4.5.48", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.143"
+anyhow = "1.0.99"
+thiserror = "1.0.69"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tokio = { version = "1.47", features = ["full"] }
+tempfile = "3.20"
 async-trait = "0.1"
-sha2 = "0.10"
+sha2 = "0.10.9"
 hex = "0.4"
 similar = "2.6"
-indicatif = "0.17"
+indicatif = "0.17.11"

@@ -85,6 +85,18 @@ cargo run -- exec my-agent --interactive -- bash
 
 # Quick development jail
 make dev-jail
+
+# AI Agent commands with parameters (use -- to separate jail-ai params from agent params)
+cargo run -- claude -- chat "help me debug this code"
+cargo run -- claude -- --help
+cargo run -- claude -- --version
+cargo run -- copilot --copilot-dir -- suggest "write tests"
+cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
+cargo run -- codex --codex-dir -- generate "create a REST API"
+
+# Start interactive shell in agent jail (without running the agent)
+cargo run -- claude --shell
+cargo run -- copilot --copilot-dir --shell
 ```
 
 ### Version Management

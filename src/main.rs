@@ -497,7 +497,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 }
             }
 
-            Commands::Join { name, backend } => {
+            Commands::Shell { name, backend } => {
                 // Determine backend type
                 let backend_type = if let Some(backend_str) = backend {
                     Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
@@ -531,7 +531,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 };
 
                 // Exec into jail with interactive shell
-                info!("Joining jail '{}'...", jail_name);
+                info!("Starting interactive shell in jail '{}'...", jail_name);
                 let jail = JailBuilder::new(jail_name.clone())
                     .backend(backend_type)
                     .verbose(verbose)
@@ -574,6 +574,7 @@ async fn run_agent_command(
             git_gpg: common.git_gpg,
             force_rebuild: common.force_rebuild,
             force_layers: common.layers,
+            shell: common.shell,
             verbose,
             args,
         },

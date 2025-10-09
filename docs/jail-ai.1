@@ -1,0 +1,555 @@
+.TH JAIL-AI 1 "2025-10-09" "jail-ai 0.31.0" "User Commands"
+.SH NAME
+jail-ai \- AI Agent Jail Manager for sandboxing AI agents using podman
+.SH SYNOPSIS
+.B jail-ai
+[\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-q\fR|\fB\-\-quiet\fR] \fICOMMAND\fR [\fIOPTIONS\fR]
+.br
+.B jail-ai create
+[\fINAME\fR] [\fIOPTIONS\fR]
+.br
+.B jail-ai remove
+[\fINAME\fR] [\fB\-f\fR|\fB\-\-force\fR] [\fB\-v\fR|\fB\-\-volume\fR]
+.br
+.B jail-ai status
+[\fINAME\fR]
+.br
+.B jail-ai save
+[\fINAME\fR] \fB\-o\fR|\fB\-\-output\fR \fIFILE\fR
+.br
+.B jail-ai claude
+[\fIOPTIONS\fR] [\fB\-\-\fR \fIARGS\fR...]
+.br
+.B jail-ai copilot
+[\fIOPTIONS\fR] [\fB\-\-\fR \fIARGS\fR...]
+.br
+.B jail-ai cursor
+[\fIOPTIONS\fR] [\fB\-\-\fR \fIARGS\fR...]
+.br
+.B jail-ai gemini
+[\fIOPTIONS\fR] [\fB\-\-\fR \fIARGS\fR...]
+.br
+.B jail-ai codex
+[\fIOPTIONS\fR] [\fB\-\-\fR \fIARGS\fR...]
+.br
+.B jail-ai list
+[\fB\-c\fR|\fB\-\-current\fR]
+.br
+.B jail-ai clean-all
+[\fB\-f\fR|\fB\-\-force\fR] [\fB\-v\fR|\fB\-\-volume\fR]
+.br
+.B jail-ai upgrade
+[\fINAME\fR] [\fB\-\-all\fR] [\fIOPTIONS\fR]
+.br
+.B jail-ai shell
+[\fINAME\fR]
+.SH DESCRIPTION
+.B jail-ai
+is a Rust-based jail wrapper for sandboxing AI agents (Claude, Copilot, Cursor, Gemini) using podman. It provides isolation, resource limits, and workspace management for secure AI agent execution.
+.PP
+The tool automatically builds and manages custom container images with development tools, handles workspace mounting, manages authentication credentials, and provides granular control over resource limits and network access.
+.PP
+When no command is specified, jail-ai enters an interactive shell in the default jail for the current directory.
+.SH COMMANDS
+.TP
+.B create [NAME] [OPTIONS]
+Create a new jail with the specified name. If no name is provided, generates a unique name based on the current directory path. The jail will have the current working directory auto-mounted to /workspace unless \fB\-\-no\-workspace\fR is specified.
+.TP
+.B remove [NAME] [OPTIONS]
+Remove (stop and delete) a jail. If no name is provided, operates on the jail associated with the current directory. Use \fB\-f\fR to skip confirmation prompts and \fB\-v\fR to also remove persistent volumes.
+.TP
+.B status [NAME]
+Show the status of a jail including its running state, resource usage, and configuration. If no name is provided, shows status for the current directory's jail.
+.TP
+.B save [NAME] \-o FILE
+Save the jail configuration to a JSON file. This can be used to recreate the jail later with identical settings.
+.TP
+.B claude [OPTIONS] [\-\- ARGS...]
+Quick start Claude Code in a jail for the current directory. Automatically mounts ~/.claude/.credentials.json for authentication. Use \fB\-\-claude\-dir\fR to mount the entire ~/.claude directory. Any arguments after \fB\-\-\fR are passed directly to the claude command.
+.TP
+.B copilot [OPTIONS] [\-\- ARGS...]
+Quick start GitHub Copilot CLI in a jail for the current directory. Use \fB\-\-copilot\-dir\fR to mount ~/.config/.copilot for authentication. Any arguments after \fB\-\-\fR are passed directly to the copilot command.
+.TP
+.B cursor [OPTIONS] [\-\- ARGS...]
+Quick start Cursor Agent in a jail for the current directory. Use \fB\-\-cursor\-dir\fR to mount ~/.cursor and ~/.config/cursor for authentication and settings. Any arguments after \fB\-\-\fR are passed directly to the cursor-agent command.
+.TP
+.B gemini [OPTIONS] [\-\- ARGS...]
+Quick start Gemini CLI in a jail for the current directory. Use \fB\-\-gemini\-dir\fR to mount ~/.config/gemini for authentication. Any arguments after \fB\-\-\fR are passed directly to the gemini command.
+.TP
+.B codex [OPTIONS] [\-\- ARGS...]
+Quick start Codex CLI in a jail for the current directory. Use \fB\-\-codex\-dir\fR to mount ~/.config/codex for authentication. When \fB\-\-codex\-dir\fR is specified without arguments and authentication is required, automatically runs 'codex auth login' interactively. Any arguments after \fB\-\-\fR are passed directly to the codex command.
+.TP
+.B list [\-c|\-\-current]
+List all jails managed by jail-ai. Use \fB\-c\fR to show only jails associated with the current directory.
+.TP
+.B clean-all [\-f|\-\-force] [\-v|\-\-volume]
+Stop and remove all jail-ai containers. Use \fB\-f\fR to skip confirmation and \fB\-v\fR to also remove persistent volumes.
+.TP
+.B upgrade [NAME] [OPTIONS]
+Upgrade a jail by recreating it with the latest image version. Use \fB\-\-all\fR to upgrade all jails. Use \fB\-i\fR to specify a different image. The jail's configuration and mounts are preserved.
+.TP
+.B shell [NAME]
+Start an interactive shell in an existing jail. If no name is provided, starts a shell in the jail associated with the current directory. This is useful for inspecting or debugging a running jail.
+.SH GLOBAL OPTIONS
+.TP
+.BR \-v ", " \-\-verbose
+Enable verbose logging with DEBUG level output. Shows detailed information about operations and backend commands.
+.TP
+.BR \-q ", " \-\-quiet
+Quiet mode - suppress INFO logs, only show warnings and errors. Conflicts with \fB\-\-verbose\fR.
+.SH COMMON OPTIONS
+The following options are available for the \fBcreate\fR, \fBclaude\fR, \fBcopilot\fR, \fBcursor\fR, \fBgemini\fR, and \fBcodex\fR commands:
+.TP
+.BR \-b ", " \-\-backend " \fIBACKEND\fR"
+Backend type (only 'podman' is supported, kept for compatibility). Default: podman
+.TP
+.BR \-i ", " \-\-image " \fIIMAGE\fR"
+Base container image to use. Default: localhost/jail-ai-env:latest
+.br
+The default image is automatically built if not present, using embedded Containerfiles.
+.TP
+.BR \-m ", " \-\-mount " \fISOURCE\fR:\fITARGET\fR[:\fBro\fR]"
+Add a bind mount. Can be specified multiple times. Append ':ro' for read-only mounts.
+.br
+Example: \-m /host/data:/data:ro
+.TP
+.BR \-e ", " \-\-env " \fIKEY\fR=\fIVALUE\fR"
+Set environment variable in the jail. Can be specified multiple times.
+.br
+Example: \-e DEBUG=1
+.TP
+.B \-\-no\-network
+Disable network access for the jail. The container will not have any network connectivity.
+.TP
+.B \-\-memory " \fIMB\fR"
+Memory limit in megabytes. Example: \-\-memory 2048 (for 2GB limit)
+.TP
+.B \-\-cpu " \fIPERCENT\fR"
+CPU quota percentage (0-100). Example: \-\-cpu 50 (for 50% of one CPU core)
+.TP
+.B \-\-no\-workspace
+Skip auto-mounting the current working directory to /workspace in the jail.
+.TP
+.B \-\-workspace\-path " \fIPATH\fR"
+Custom workspace path inside jail. Default: /workspace
+.br
+Example: \-\-workspace\-path /app
+.TP
+.B \-\-claude\-dir
+Mount entire ~/.claude directory (includes settings, commands, history).
+.br
+Default behavior for 'claude' command: only mounts ~/.claude/.credentials.json
+.TP
+.B \-\-copilot\-dir
+Mount ~/.config/.copilot directory for GitHub Copilot authentication and configuration.
+.br
+Default behavior: no authentication mounted (requires this flag for copilot to work)
+.TP
+.B \-\-cursor\-dir
+Mount ~/.cursor and ~/.config/cursor directories for Cursor Agent authentication, settings, and configuration.
+.br
+Default behavior: no authentication mounted (requires this flag for cursor to work)
+.TP
+.B \-\-gemini\-dir
+Mount ~/.config/gemini directory for Gemini CLI authentication and settings.
+.br
+Default behavior: no authentication mounted (requires this flag for gemini to work)
+.TP
+.B \-\-codex\-dir
+Mount ~/.config/codex directory for Codex CLI authentication and settings.
+.br
+When specified without arguments and authentication is required, automatically runs 'codex auth login' interactively.
+.br
+Default behavior: no authentication mounted (requires this flag for codex to work)
+.TP
+.B \-\-agent\-configs
+Mount all agent config directories. Combines \fB\-\-claude\-dir\fR, \fB\-\-copilot\-dir\fR, \fB\-\-cursor\-dir\fR, \fB\-\-gemini\-dir\fR, and \fB\-\-codex\-dir\fR.
+.br
+Useful when working with multiple AI agents in the same jail.
+.TP
+.B \-\-git\-gpg
+Enable git and GPG configuration mapping. Mounts ~/.gnupg directory, all GPG agent sockets (/run/user/<UID>/gnupg/*), and creates or mounts git configuration with user identity and signing settings. If gpg.format=ssh is configured, also mounts the SSH allowed signers file.
+.br
+This is opt-in (disabled by default) for security.
+.TP
+.B \-\-force\-rebuild
+Force rebuild of the default image, even if it already exists. Useful after modifying ~/.config/jail-ai/Containerfile.
+.TP
+.B \-\-layers " \fILAYER\fR[,\fILAYER\fR...]"
+Force specific image layers (comma-separated). Available layers: base, rust, python, nodejs, golang, java, php, cpp, csharp, nix, kubernetes, terraform, and agent-specific layers (agent-claude, agent-copilot, agent-cursor, agent-gemini, agent-codex).
+.br
+Example: \-\-layers base,rust,python
+.TP
+.B \-\-shell
+Start an interactive shell instead of running the agent command. This allows you to use the jail environment without executing the AI agent.
+.br
+Example: jail-ai claude \-\-shell
+.SH EXAMPLES
+.SS Basic Usage
+.PP
+Create a jail with auto-mounted workspace (uses default image, auto-builds if needed):
+.RS
+.nf
+jail-ai create my-agent
+.fi
+.RE
+.PP
+Create a jail with specific image:
+.RS
+.nf
+jail-ai create my-agent --image alpine:latest
+.fi
+.RE
+.PP
+Create a jail without workspace mount:
+.RS
+.nf
+jail-ai create my-agent --no-workspace
+.fi
+.RE
+.PP
+Execute command in jail (non-interactive):
+.RS
+.nf
+jail-ai exec my-agent -- ls -la /workspace
+.fi
+.RE
+.PP
+Start an interactive shell in a jail:
+.RS
+.nf
+jail-ai shell my-agent
+.fi
+.RE
+.SS AI Agent Usage
+.PP
+Quick start Claude Code (minimal auth - only API keys):
+.RS
+.nf
+jail-ai claude
+.fi
+.RE
+.PP
+Start Claude with full config directory and git/GPG support:
+.RS
+.nf
+jail-ai claude --claude-dir --git-gpg
+.fi
+.RE
+.PP
+Start GitHub Copilot with authentication:
+.RS
+.nf
+jail-ai copilot --copilot-dir
+.fi
+.RE
+.PP
+Start Cursor Agent with authentication:
+.RS
+.nf
+jail-ai cursor --cursor-dir
+.fi
+.RE
+.PP
+Start Gemini CLI with authentication:
+.RS
+.nf
+jail-ai gemini --gemini-dir
+.fi
+.RE
+.PP
+Start Codex CLI with automatic authentication:
+.RS
+.nf
+jail-ai codex --codex-dir
+.fi
+.RE
+.PP
+Pass arguments to the AI agent (including flags with hyphens):
+.RS
+.nf
+jail-ai claude -- chat "help me debug this code"
+jail-ai claude -- --help
+jail-ai claude -- --version
+jail-ai copilot -- suggest "write tests"
+jail-ai gemini -- --model gemini-pro "explain this code"
+.fi
+.RE
+.PP
+Start an interactive shell in an agent jail (without running the agent):
+.RS
+.nf
+jail-ai claude --shell
+jail-ai copilot --copilot-dir --shell
+.fi
+.RE
+.SS Configuration Mounting
+.PP
+Start jail with all agent configs and git/GPG support:
+.RS
+.nf
+jail-ai create my-agent --agent-configs --git-gpg
+.fi
+.RE
+.PP
+Start Claude with custom workspace path:
+.RS
+.nf
+jail-ai claude --workspace-path /app
+.fi
+.RE
+.SS Resource Limits
+.PP
+Create jail with memory and CPU limits:
+.RS
+.nf
+jail-ai create my-agent --memory 2048 --cpu 50
+.fi
+.RE
+.PP
+Create jail without network access:
+.RS
+.nf
+jail-ai create my-agent --no-network
+.fi
+.RE
+.SS Custom Mounts and Environment
+.PP
+Create jail with custom bind mounts:
+.RS
+.nf
+jail-ai create my-agent \\
+  --mount /host/data:/data:ro \\
+  --mount /host/config:/config
+.fi
+.RE
+.PP
+Create jail with custom environment variables:
+.RS
+.nf
+jail-ai create my-agent \\
+  --env DEBUG=1 \\
+  --env API_KEY=secret
+.fi
+.RE
+.SS Image Management
+.PP
+Force rebuild the default image:
+.RS
+.nf
+jail-ai create my-agent --force-rebuild
+.fi
+.RE
+.PP
+Create jail with specific language layers:
+.RS
+.nf
+jail-ai create my-agent --layers base,rust,python,nodejs
+.fi
+.RE
+.PP
+Upgrade all jails to latest image:
+.RS
+.nf
+jail-ai upgrade --all
+.fi
+.RE
+.PP
+Upgrade specific jail to new image:
+.RS
+.nf
+jail-ai upgrade my-agent --image localhost/jail-ai-env:v2
+.fi
+.RE
+.SS Management Commands
+.PP
+List all jails:
+.RS
+.nf
+jail-ai list
+.fi
+.RE
+.PP
+List jails for current directory:
+.RS
+.nf
+jail-ai list --current
+.fi
+.RE
+.PP
+Check jail status:
+.RS
+.nf
+jail-ai status my-agent
+.fi
+.RE
+.PP
+Save jail configuration to file:
+.RS
+.nf
+jail-ai save my-agent --output config.json
+.fi
+.RE
+.PP
+Remove a jail:
+.RS
+.nf
+jail-ai remove my-agent
+.fi
+.RE
+.PP
+Remove jail with volumes (force):
+.RS
+.nf
+jail-ai remove my-agent --force --volume
+.fi
+.RE
+.PP
+Clean up all jails:
+.RS
+.nf
+jail-ai clean-all --force
+.fi
+.RE
+.SH FILES
+.TP
+.I ~/.config/jail-ai/Containerfile
+Custom image configuration. On first use, jail-ai copies the embedded Containerfile to this location. Edit this file to customize the container image. Changes are detected automatically and the image is rebuilt on next jail creation.
+.TP
+.I ~/.claude/.credentials.json
+Claude authentication credentials. Automatically mounted for the 'claude' command (minimal auth - API keys only). Use \fB\-\-claude\-dir\fR to mount the entire ~/.claude directory.
+.TP
+.I ~/.claude/
+Claude Code configuration directory (settings, commands, history). Mounted when \fB\-\-claude\-dir\fR is specified.
+.TP
+.I ~/.config/.copilot/
+GitHub Copilot CLI configuration directory. Mounted when \fB\-\-copilot\-dir\fR is specified.
+.TP
+.I ~/.cursor/
+Cursor Agent data directory. Mounted when \fB\-\-cursor\-dir\fR is specified.
+.TP
+.I ~/.config/cursor/
+Cursor Agent configuration directory. Mounted when \fB\-\-cursor\-dir\fR is specified.
+.TP
+.I ~/.config/gemini/
+Gemini CLI configuration directory. Mounted when \fB\-\-gemini\-dir\fR is specified.
+.TP
+.I ~/.config/codex/
+Codex CLI configuration directory. Mounted when \fB\-\-codex\-dir\fR is specified.
+.TP
+.I ~/.gnupg/
+GPG configuration directory. Mounted when \fB\-\-git\-gpg\fR is specified, enabling GPG signing inside the jail.
+.TP
+.I /run/user/<UID>/gnupg/
+GPG agent socket directory. All sockets (S.gpg-agent, S.gpg-agent.ssh, S.gpg-agent.extra, S.gpg-agent.browser) are mounted when \fB\-\-git\-gpg\fR is specified.
+.TP
+.I .git/config
+Local git configuration. If present, mounted to /home/agent/.gitconfig when \fB\-\-git\-gpg\fR is specified. Otherwise, git configuration is extracted from the project or global config.
+.TP
+.I ~/.ssh/allowed_signers
+SSH allowed signers file for GPG SSH signing. Mounted when \fB\-\-git\-gpg\fR is specified and gpg.format=ssh is configured.
+.SH ENVIRONMENT
+jail-ai automatically configures the following environment variables in the jail:
+.TP
+.B TERM
+Inherited from the host environment for proper terminal emulation.
+.TP
+.B TZ
+Timezone inherited from the host environment.
+.TP
+.B EDITOR
+Set to 'vim' by default.
+.TP
+.B SSH_AUTH_SOCK
+Configured when the GPG SSH agent socket is available and \fB\-\-git\-gpg\fR is specified. Points to /run/user/<UID>/gnupg/S.gpg-agent.ssh for SSH authentication via GPG.
+.SH IMAGE TOOLS
+The default jail-ai-env image includes the following tools and languages:
+.SS Shell and Shell Enhancements
+.IP \(bu 2
+zsh (default shell with Powerlevel10k theme)
+.IP \(bu 2
+bash
+.IP \(bu 2
+fzf - Fuzzy finder for command history (Ctrl+R), file search (Ctrl+T), and directory change (Alt+C)
+.IP \(bu 2
+Powerlevel10k - Beautiful and fast zsh theme with git integration
+.SS Search and Navigation Tools
+.IP \(bu 2
+ripgrep (rg) - Fast text search
+.IP \(bu 2
+fd-find - Fast file search
+.SS Programming Languages
+.IP \(bu 2
+Rust (cargo, clippy, rustfmt)
+.IP \(bu 2
+Go (go toolchain)
+.IP \(bu 2
+Node.js (npm, yarn, pnpm)
+.IP \(bu 2
+Python 3 (pip, black, pylint, mypy, pytest)
+.IP \(bu 2
+Java (OpenJDK, Maven, Gradle)
+.IP \(bu 2
+Nix (with flakes support, automatic detection)
+.IP \(bu 2
+PHP (8.2, Composer, PHPUnit, PHPStan, PHP-CS-Fixer)
+.IP \(bu 2
+C/C++ (GCC, Clang, CMake, vcpkg, GDB, Valgrind)
+.IP \(bu 2
+C# (.NET SDK 8.0, dotnet-format, EF Core tools)
+.SS Build Tools
+.IP \(bu 2
+gcc, make, cmake, pkg-config
+.SS Utilities
+.IP \(bu 2
+git, vim, nano, helix
+.IP \(bu 2
+jq, tree, tmux, htop
+.IP \(bu 2
+gh (GitHub CLI)
+.SS AI Coding Agents
+.IP \(bu 2
+Claude Code (claude) - Anthropic's CLI coding assistant
+.IP \(bu 2
+GitHub Copilot CLI (copilot) - GitHub's AI pair programmer
+.IP \(bu 2
+Cursor Agent (cursor-agent) - Cursor's terminal AI agent
+.IP \(bu 2
+Gemini CLI (gemini) - Google's AI terminal assistant
+.IP \(bu 2
+Codex CLI (codex) - OpenAI's Codex CLI for code generation
+.SH NOTES
+.SS Backend Support
+Currently, only podman is supported as the backend. The \fB\-\-backend\fR option is kept for compatibility but has no effect.
+.SS Automatic Image Building
+The default image (localhost/jail-ai-env:latest) is automatically built if not present when creating a jail or running an AI agent command. The Containerfile is embedded in the binary and copied to ~/.config/jail-ai/Containerfile on first use.
+.SS Jail Naming
+Jail names are automatically generated from the current directory path using a hash for uniqueness. Names are sanitized to match podman requirements ([a-zA-Z0-9][a-zA-Z0-9_.-]*).
+.SS Security Considerations
+.IP \(bu 2
+Authentication mounting is minimal by default: Claude only auto-mounts API credentials (~/.claude/.credentials.json), other agents require explicit flags.
+.IP \(bu 2
+Git and GPG configuration mounting is opt-in (use \fB\-\-git\-gpg\fR) for security.
+.IP \(bu 2
+Use \fB\-\-no\-network\fR for maximum isolation when network access is not needed.
+.IP \(bu 2
+Resource limits (\fB\-\-memory\fR, \fB\-\-cpu\fR) help prevent runaway processes.
+.IP \(bu 2
+Read-only mounts (\-m source:target:ro) prevent accidental modifications.
+.SS Nix Flakes Support
+When a flake.nix file is detected in the workspace, jail-ai automatically loads the Nix development environment using 'nix develop' when entering the jail.
+.SH AUTHORS
+Cyril Levis <git@levis.name>
+.SH COPYRIGHT
+Copyright © 2025 Cyril Levis
+.br
+License: MIT OR Apache-2.0
+.SH SEE ALSO
+.BR podman (1),
+.BR podman-run (1),
+.BR podman-exec (1),
+.BR systemd-nspawn (1)
+.PP
+Project homepage: https://github.com/cyrinux/jail-ai
+.br
+Documentation: https://docs.rs/jail-ai

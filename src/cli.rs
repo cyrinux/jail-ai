@@ -79,6 +79,10 @@ pub struct AgentCommandOptions {
     /// Force specific layers (comma-separated, e.g., "base,rust,python")
     #[arg(long, value_delimiter = ',')]
     pub layers: Vec<String>,
+
+    /// Start an interactive shell instead of running the agent command
+    #[arg(long)]
+    pub shell: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -212,51 +216,61 @@ pub enum Commands {
     },
 
     /// Quick start Claude Code in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai claude --claude-dir -- --help
     Claude {
         #[command(flatten)]
         common: AgentCommandOptions,
 
-        /// Additional arguments to pass to claude
+        /// Additional arguments to pass to claude (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Quick start GitHub Copilot CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai copilot --copilot-dir -- suggest "write tests"
     Copilot {
         #[command(flatten)]
         common: AgentCommandOptions,
 
-        /// Additional arguments to pass to copilot
+        /// Additional arguments to pass to copilot (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Quick start Cursor Agent in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai cursor --cursor-dir -- --help
     Cursor {
         #[command(flatten)]
         common: AgentCommandOptions,
 
-        /// Additional arguments to pass to cursor-agent
+        /// Additional arguments to pass to cursor-agent (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Quick start Gemini CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai gemini --gemini-dir -- --model gemini-pro "query"
     Gemini {
         #[command(flatten)]
         common: AgentCommandOptions,
 
-        /// Additional arguments to pass to gemini
+        /// Additional arguments to pass to gemini (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Quick start Codex CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai codex --codex-dir -- generate "create API"
     Codex {
         #[command(flatten)]
         common: AgentCommandOptions,
 
-        /// Additional arguments to pass to codex
+        /// Additional arguments to pass to codex (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -305,8 +319,8 @@ pub enum Commands {
         all: bool,
     },
 
-    /// Join an existing jail with an interactive shell
-    Join {
+    /// Start an interactive shell in an existing jail
+    Shell {
         /// Name of the jail (auto-detected from current directory if not provided)
         name: Option<String>,
 
@@ -354,7 +368,7 @@ impl Commands {
         Ok((parts[0].to_string(), parts[1].to_string()))
     }
 
-    /// Sanitize a jail name to match podman/systemd-nspawn requirements
+    /// Sanitize a jail name to match podman requirements
     /// Names must match [a-zA-Z0-9][a-zA-Z0-9_.-]*
     pub fn sanitize_jail_name(name: &str) -> String {
         // Strip leading non-alphanumeric characters (dots, hyphens, etc.)
