@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     tree \
     file \
+    buildah \
     less \
     kitty-terminfo \
     # Build essentials
