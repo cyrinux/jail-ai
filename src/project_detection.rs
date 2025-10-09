@@ -10,6 +10,9 @@ pub enum ProjectType {
     NodeJS,
     Java,
     Nix,
+    Php,
+    Cpp,
+    CSharp,
     /// Multiple project types detected
     Multi(Vec<ProjectType>),
     /// No specific project type detected
@@ -26,6 +29,9 @@ impl ProjectType {
             ProjectType::NodeJS => "nodejs",
             ProjectType::Java => "java",
             ProjectType::Nix => "nix",
+            ProjectType::Php => "php",
+            ProjectType::Cpp => "cpp",
+            ProjectType::CSharp => "csharp",
             ProjectType::Multi(_) => "multi",
             ProjectType::Generic => "base",
         }
@@ -78,6 +84,48 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
     if path.join("flake.nix").exists() {
         debug!("Detected Nix project (flake.nix)");
         detected_types.push(ProjectType::Nix);
+    }
+
+    // Check for PHP project
+    if path.join("composer.json").exists()
+        || path.join("composer.lock").exists()
+        || path.join("index.php").exists()
+    {
+        debug!("Detected PHP project");
+        detected_types.push(ProjectType::Php);
+    }
+
+    // Check for C/C++ project
+    if path.join("CMakeLists.txt").exists()
+        || path.join("Makefile").exists()
+        || path.join("configure.ac").exists()
+        || path.join("meson.build").exists()
+    {
+        debug!("Detected C/C++ project");
+        detected_types.push(ProjectType::Cpp);
+    }
+
+    // Check for C# project
+    if path.join(".csproj").exists()
+        || path.join(".sln").exists()
+        || path
+            .read_dir()
+            .ok()
+            .and_then(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .find(|e| {
+                        e.path()
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext == "csproj" || ext == "sln")
+                            .unwrap_or(false)
+                    })
+            })
+            .is_some()
+    {
+        debug!("Detected C# project");
+        detected_types.push(ProjectType::CSharp);
     }
 
     match detected_types.len() {

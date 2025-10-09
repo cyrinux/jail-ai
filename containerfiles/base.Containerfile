@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tar \
     gzip \
     unzip \
+    zip \
     # Network tools
     ca-certificates \
     # Process management

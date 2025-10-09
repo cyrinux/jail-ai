@@ -114,6 +114,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.config.verbose = verbose;
+        self
+    }
+
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }

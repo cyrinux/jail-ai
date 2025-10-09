@@ -1,5 +1,6 @@
 use crate::error::{JailError, Result};
 use crate::project_detection::{detect_project_type, ProjectType};
+use indicatif::{ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use tokio::process::Command;
@@ -13,6 +14,9 @@ const PYTHON_IMAGE_NAME: &str = "localhost/jail-ai-python:latest";
 const NODEJS_IMAGE_NAME: &str = "localhost/jail-ai-nodejs:latest";
 const JAVA_IMAGE_NAME: &str = "localhost/jail-ai-java:latest";
 const NIX_IMAGE_NAME: &str = "localhost/jail-ai-nix:latest";
+const PHP_IMAGE_NAME: &str = "localhost/jail-ai-php:latest";
+const CPP_IMAGE_NAME: &str = "localhost/jail-ai-cpp:latest";
+const CSHARP_IMAGE_NAME: &str = "localhost/jail-ai-csharp:latest";
 
 /// Containerfiles embedded from the repository
 const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base.Containerfile");
@@ -22,6 +26,9 @@ const PYTHON_CONTAINERFILE: &str = include_str!("../containerfiles/python.Contai
 const NODEJS_CONTAINERFILE: &str = include_str!("../containerfiles/nodejs.Containerfile");
 const JAVA_CONTAINERFILE: &str = include_str!("../containerfiles/java.Containerfile");
 const NIX_CONTAINERFILE: &str = include_str!("../containerfiles/nix.Containerfile");
+const PHP_CONTAINERFILE: &str = include_str!("../containerfiles/php.Containerfile");
+const CPP_CONTAINERFILE: &str = include_str!("../containerfiles/cpp.Containerfile");
+const CSHARP_CONTAINERFILE: &str = include_str!("../containerfiles/csharp.Containerfile");
 const AGENT_CLAUDE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-claude.Containerfile");
 const AGENT_COPILOT_CONTAINERFILE: &str =
@@ -56,6 +63,9 @@ fn get_language_image_name(project_type: &ProjectType) -> &'static str {
         ProjectType::NodeJS => NODEJS_IMAGE_NAME,
         ProjectType::Java => JAVA_IMAGE_NAME,
         ProjectType::Nix => NIX_IMAGE_NAME,
+        ProjectType::Php => PHP_IMAGE_NAME,
+        ProjectType::Cpp => CPP_IMAGE_NAME,
+        ProjectType::CSharp => CSHARP_IMAGE_NAME,
         ProjectType::Multi(_) | ProjectType::Generic => BASE_IMAGE_NAME,
     }
 }
@@ -80,6 +90,9 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "nodejs" => Some(NODEJS_CONTAINERFILE),
         "java" => Some(JAVA_CONTAINERFILE),
         "nix" => Some(NIX_CONTAINERFILE),
+        "php" => Some(PHP_CONTAINERFILE),
+        "cpp" => Some(CPP_CONTAINERFILE),
+        "csharp" => Some(CSHARP_CONTAINERFILE),
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
         "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
@@ -101,7 +114,7 @@ pub async fn image_exists(image_name: &str) -> Result<bool> {
 }
 
 /// Build a shared layer image (with :latest tag)
-async fn build_shared_layer(layer_name: &str, base_image: Option<&str>) -> Result<String> {
+async fn build_shared_layer(layer_name: &str, base_image: Option<&str>, verbose: bool) -> Result<String> {
     let image_name = match layer_name {
         "base" => BASE_IMAGE_NAME.to_string(),
         "golang" => GOLANG_IMAGE_NAME.to_string(),
@@ -110,6 +123,9 @@ async fn build_shared_layer(layer_name: &str, base_image: Option<&str>) -> Resul
         "nodejs" => NODEJS_IMAGE_NAME.to_string(),
         "java" => JAVA_IMAGE_NAME.to_string(),
         "nix" => NIX_IMAGE_NAME.to_string(),
+        "php" => PHP_IMAGE_NAME.to_string(),
+        "cpp" => CPP_IMAGE_NAME.to_string(),
+        "csharp" => CSHARP_IMAGE_NAME.to_string(),
         _ => {
             return Err(JailError::Backend(format!(
                 "Unknown shared layer: {}",
@@ -124,7 +140,7 @@ async fn build_shared_layer(layer_name: &str, base_image: Option<&str>) -> Resul
         return Ok(image_name);
     }
 
-    build_image_from_containerfile(layer_name, base_image, &image_name).await
+    build_image_from_containerfile(layer_name, base_image, &image_name, verbose).await
 }
 
 /// Internal function to build an image from a Containerfile
@@ -132,8 +148,24 @@ async fn build_image_from_containerfile(
     layer_name: &str,
     base_image: Option<&str>,
     image_tag: &str,
+    verbose: bool,
 ) -> Result<String> {
-    info!("Building image: {} -> {}", layer_name, image_tag);
+    // Create spinner if not in verbose mode
+    let spinner = if !verbose {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        pb.set_message(format!("Building {} layer...", layer_name));
+        pb.enable_steady_tick(std::time::Duration::from_millis(80));
+        Some(pb)
+    } else {
+        info!("Building image: {} -> {}", layer_name, image_tag);
+        None
+    };
 
     let containerfile_content = get_containerfile_content(layer_name).ok_or_else(|| {
         JailError::Backend(format!(
@@ -166,13 +198,27 @@ async fn build_image_from_containerfile(
     debug!("Running build command: {:?}", cmd);
 
     use std::process::Stdio;
-    let status = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await
-        .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?;
+    let status = if verbose {
+        // In verbose mode, show all output
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .await
+            .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?
+    } else {
+        // In non-verbose mode, hide output
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?
+    };
+
+    if let Some(pb) = spinner {
+        pb.finish_with_message(format!("✓ Built {} layer", layer_name));
+    }
 
     if !status.success() {
         return Err(JailError::Backend(format!(
@@ -190,6 +236,7 @@ pub async fn build_project_image(
     workspace_path: &Path,
     agent_name: Option<&str>,
     force_rebuild: bool,
+    verbose: bool,
 ) -> Result<String> {
     // Generate project-specific identifier
     let project_hash = generate_project_hash(workspace_path);
@@ -201,8 +248,10 @@ pub async fn build_project_image(
 
     // Step 1: Build base layer (shared :latest)
     let base_image = if force_rebuild || !image_exists(BASE_IMAGE_NAME).await? {
-        info!("Building base layer...");
-        build_shared_layer("base", None).await?
+        if verbose {
+            info!("Building base layer...");
+        }
+        build_shared_layer("base", None, verbose).await?
     } else {
         debug!("Base layer already exists");
         BASE_IMAGE_NAME.to_string()
@@ -217,7 +266,7 @@ pub async fn build_project_image(
                 let layer_name = lang_type.language_layer();
                 let lang_image_name = get_language_image_name(lang_type);
                 current_image = if force_rebuild || !image_exists(lang_image_name).await? {
-                    build_shared_layer(layer_name, Some(&current_image)).await?
+                    build_shared_layer(layer_name, Some(&current_image), verbose).await?
                 } else {
                     lang_image_name.to_string()
                 };
@@ -228,7 +277,7 @@ pub async fn build_project_image(
             let layer_name = project_type.language_layer();
             let lang_image_name = get_language_image_name(&project_type);
             if force_rebuild || !image_exists(lang_image_name).await? {
-                build_shared_layer(layer_name, Some(&base_image)).await?
+                build_shared_layer(layer_name, Some(&base_image), verbose).await?
             } else {
                 debug!("Language layer {} already exists", lang_image_name);
                 lang_image_name.to_string()
@@ -250,11 +299,13 @@ pub async fn build_project_image(
         let final_image_name = get_agent_project_image_name(agent, &project_hash);
 
         if force_rebuild || !image_exists(&final_image_name).await? {
-            info!(
-                "Building project-specific agent image: {}",
-                final_image_name
-            );
-            build_image_from_containerfile(&agent_layer, Some(&language_image), &final_image_name)
+            if verbose {
+                info!(
+                    "Building project-specific agent image: {}",
+                    final_image_name
+                );
+            }
+            build_image_from_containerfile(&agent_layer, Some(&language_image), &final_image_name, verbose)
                 .await?;
         } else {
             debug!("Project-specific agent image already exists");
@@ -301,8 +352,9 @@ pub async fn ensure_layered_image_available(
     workspace_path: &Path,
     agent_name: Option<&str>,
     force_rebuild: bool,
+    verbose: bool,
 ) -> Result<String> {
-    build_project_image(workspace_path, agent_name, force_rebuild).await
+    build_project_image(workspace_path, agent_name, force_rebuild, verbose).await
 }
 
 #[cfg(test)]
@@ -326,6 +378,12 @@ mod tests {
         );
         assert_eq!(get_language_image_name(&ProjectType::Java), JAVA_IMAGE_NAME);
         assert_eq!(get_language_image_name(&ProjectType::Nix), NIX_IMAGE_NAME);
+        assert_eq!(get_language_image_name(&ProjectType::Php), PHP_IMAGE_NAME);
+        assert_eq!(get_language_image_name(&ProjectType::Cpp), CPP_IMAGE_NAME);
+        assert_eq!(
+            get_language_image_name(&ProjectType::CSharp),
+            CSHARP_IMAGE_NAME
+        );
         assert_eq!(
             get_language_image_name(&ProjectType::Generic),
             BASE_IMAGE_NAME
@@ -385,6 +443,9 @@ mod tests {
         assert!(get_containerfile_content("nodejs").is_some());
         assert!(get_containerfile_content("java").is_some());
         assert!(get_containerfile_content("nix").is_some());
+        assert!(get_containerfile_content("php").is_some());
+        assert!(get_containerfile_content("cpp").is_some());
+        assert!(get_containerfile_content("csharp").is_some());
         assert!(get_containerfile_content("agent-claude").is_some());
         assert!(get_containerfile_content("unknown").is_none());
     }

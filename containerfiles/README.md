@@ -73,6 +73,18 @@ Each language layer builds on top of the base layer:
   - Adds: Nix package manager with flakes enabled
   - Automatically loads `flake.nix` if present in workspace
 
+- **`php.Containerfile`** - PHP development environment
+  - Image name: `localhost/jail-ai-php:latest`
+  - Adds: PHP 8.2, Composer, PHPUnit, PHP_CodeSniffer, PHPStan, PHP-CS-Fixer
+
+- **`cpp.Containerfile`** - C/C++ development environment
+  - Image name: `localhost/jail-ai-cpp:latest`
+  - Adds: GCC, G++, Clang, CMake, Ninja, GDB, Valgrind, vcpkg
+
+- **`csharp.Containerfile`** - C# / .NET development environment
+  - Image name: `localhost/jail-ai-csharp:latest`
+  - Adds: .NET SDK 8.0, dotnet-format, Entity Framework Core tools
+
 ### Agent Layers
 Agent layers require Node.js, so they build on top of the nodejs layer:
 
@@ -108,6 +120,9 @@ When you create a jail, jail-ai automatically detects your project type and buil
 | `requirements.txt`, `pyproject.toml` | Python | `base` → `python` |
 | `pom.xml`, `build.gradle` | Java | `base` → `java` |
 | `flake.nix` | Nix | `base` → `nix` |
+| `composer.json`, `composer.lock` | PHP | `base` → `php` |
+| `CMakeLists.txt`, `Makefile` | C/C++ | `base` → `cpp` |
+| `*.csproj`, `*.sln` | C# | `base` → `csharp` |
 | Multiple files | Multi-language | `base` → all detected layers |
 | No specific files | Generic | `base` only |
 
@@ -206,6 +221,9 @@ cargo run -- create --image localhost/my-custom-image:latest
 | `nodejs` | ~250MB | base + Node.js |
 | `java` | ~400MB | base + JDK |
 | `nix` | ~350MB | base + Nix |
+| `php` | ~280MB | base + PHP |
+| `cpp` | ~320MB | base + C/C++ |
+| `csharp` | ~380MB | base + .NET SDK |
 | `agent-claude` | ~300MB | nodejs + Claude |
 
 Compare to monolithic: **~1.2GB** with all languages + all agents!

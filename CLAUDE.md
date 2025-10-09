@@ -124,15 +124,24 @@ make dev-jail
 
 ## Custom Image Tools
 
-The `localhost/jail-ai-env:latest` image includes:
+The layered image system automatically detects your project type and builds appropriate images with the following tools:
 
 - **Shell**: zsh (default with Powerlevel10k theme), bash
 - **Shell Enhancements**:
   - **fzf** - Fuzzy finder for command history and file search
   - **Powerlevel10k** - Beautiful and fast zsh theme with git integration
 - **Search**: ripgrep, fd-find
-- **Languages**: Rust (cargo, clippy, rustfmt), Go, Node.js, Python 3, Nix (with flakes support)
-- **Build tools**: gcc, make, pkg-config
+- **Languages**: 
+  - Rust (cargo, clippy, rustfmt)
+  - Go (go toolchain)
+  - Node.js (npm, yarn, pnpm)
+  - Python 3 (pip, black, pylint, mypy, pytest)
+  - Java (OpenJDK, Maven, Gradle)
+  - Nix (with flakes support)
+  - PHP (8.2, Composer, PHPUnit, PHPStan, PHP-CS-Fixer)
+  - C/C++ (GCC, Clang, CMake, vcpkg, GDB, Valgrind)
+  - C# (.NET SDK 8.0, dotnet-format, EF Core tools)
+- **Build tools**: gcc, make, cmake, pkg-config
 - **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest
 - **Rust tools**: clippy, rustfmt

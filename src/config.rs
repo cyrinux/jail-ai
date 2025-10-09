@@ -32,6 +32,10 @@ pub struct JailConfig {
     /// Use layered images (auto-detect project type and build on-demand)
     #[serde(default = "default_true")]
     pub use_layered_images: bool,
+
+    /// Show verbose output (e.g., image build logs)
+    #[serde(default)]
+    pub verbose: bool,
 }
 
 fn default_true() -> bool {
@@ -106,6 +110,7 @@ impl Default for JailConfig {
             },
             force_rebuild: false,
             use_layered_images: true,
+            verbose: false,
         }
     }
 }
