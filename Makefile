@@ -1,8 +1,10 @@
-.PHONY: help build-image push-image test-image clean build run test clippy fmt
+.PHONY: help build-image push-image test-image clean build run test clippy fmt install-man uninstall-man view-man
 
 IMAGE_NAME ?= localhost/jail-ai-env
 IMAGE_TAG ?= latest
 IMAGE_FULL = $(IMAGE_NAME):$(IMAGE_TAG)
+PREFIX ?= /usr/local
+DESTDIR ?=
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -72,3 +74,21 @@ example-exec: ## Example: Execute a command in the jail
 
 example-remove: ## Example: Remove the jail
 	cargo run -- remove my-agent --force
+
+# Man page targets
+.PHONY: install-man uninstall-man view-man
+
+install-man: docs/jail-ai.1 ## Install man page system-wide
+	@echo "Installing man page to $(DESTDIR)$(PREFIX)/share/man/man1/"
+	mkdir -p $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m 644 docs/jail-ai.1 $(DESTDIR)$(PREFIX)/share/man/man1/
+	gzip -f $(DESTDIR)$(PREFIX)/share/man/man1/jail-ai.1
+	@echo "Man page installed successfully. Run 'man jail-ai' to view it."
+
+uninstall-man: ## Uninstall man page
+	@echo "Removing man page from $(DESTDIR)$(PREFIX)/share/man/man1/"
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/jail-ai.1.gz
+	@echo "Man page uninstalled successfully."
+
+view-man: docs/jail-ai.1 ## Preview the man page locally
+	man ./docs/jail-ai.1
