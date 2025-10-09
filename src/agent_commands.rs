@@ -32,6 +32,7 @@ pub struct AgentCommandParams {
     pub shell: bool,
     pub isolated: bool,
     pub verbose: bool,
+    pub auth: Option<String>,
     pub args: Vec<String>,
 }
 
@@ -239,35 +240,19 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         return Ok(());
     }
 
-    // Auto-authenticate Codex CLI if needed
-    if agent_command == "codex" && params.codex_dir {
-        // Check if authentication is needed by trying to run a simple command
-        let check_cmd = vec!["codex".to_string(), "--help".to_string()];
-        let check_result = jail.exec(&check_cmd, false).await;
-
-        // If the command fails or returns auth-related errors, try to authenticate
-        let needs_auth = match check_result {
-            Err(_) => true,
-            Ok(output) => {
-                // Check if the output indicates authentication is needed
-                output.contains("auth login")
-                    || output.contains("not authenticated")
-                    || output.contains("No API key")
-            }
-        };
-
-        if needs_auth || params.args.is_empty() {
-            info!("Codex CLI authentication required, starting login process...");
-            let auth_cmd = vec!["codex".to_string(), "auth".to_string(), "login".to_string()];
-            let auth_output = jail.exec(&auth_cmd, true).await?;
+    // Handle Codex CLI authentication if --auth key is provided
+    if agent_command == "codex --dangerously-bypass-approvals-and-sandbox" {
+        if let Some(api_key) = &params.auth {
+            info!("Codex CLI authentication with provided API key...");
+            // Use echo to pipe the API key to codex login --with-api-key
+            let auth_cmd = vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("echo '{}' | codex login --with-api-key", api_key),
+            ];
+            let auth_output = jail.exec(&auth_cmd, false).await?;
             if !auth_output.is_empty() {
                 print!("{auth_output}");
-            }
-
-            // If no additional args were provided, we're done (user just wanted to authenticate)
-            if params.args.is_empty() {
-                info!("Codex CLI authentication completed");
-                return Ok(());
             }
         }
     }

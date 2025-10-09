@@ -64,8 +64,11 @@ jail-ai cursor --cursor-dir -- analyze
 # Gemini CLI with full config
 jail-ai gemini --gemini-dir -- --model gemini-pro "explain this"
 
-# Codex CLI with full config (auto-authenticates)
-jail-ai codex --codex-dir -- generate "create a REST API"
+# Codex CLI with API key authentication
+jail-ai codex --codex-dir --auth sk-your-key -- generate "create a REST API"
+
+# Codex CLI with manual authentication (interactive shell)
+jail-ai codex --codex-dir --shell
 
 # Start interactive shell in Claude jail (without running Claude)
 jail-ai claude --shell
@@ -141,7 +144,7 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `--copilot-dir`: Mount `~/.config/.copilot` directory
 - `--cursor-dir`: Mount `~/.cursor` and `~/.config/cursor` directories
 - `--gemini-dir`: Mount `~/.config/gemini` directory
-- `--codex-dir`: Mount `~/.config/codex` directory (auto-authenticates)
+- `--codex-dir`: Mount `~/.codex` directory (use `--auth <key>` for authentication)
 - `--agent-configs`: Mount all of the above
 
 ### Git and GPG Configuration

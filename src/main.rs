@@ -538,6 +538,7 @@ async fn run_agent_command(
             shell: common.shell,
             isolated: common.isolated,
             verbose,
+            auth: common.auth,
             args,
         },
     )

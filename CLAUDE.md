@@ -92,7 +92,11 @@ cargo run -- claude -- --help
 cargo run -- claude -- --version
 cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
-cargo run -- codex --codex-dir -- generate "create a REST API"
+# Codex CLI with API key authentication
+cargo run -- codex --codex-dir --auth sk-your-key -- generate "create a REST API"
+
+# Codex CLI with manual authentication (interactive shell)
+cargo run -- codex --codex-dir --shell
 
 # Start interactive shell in agent jail (without running the agent)
 cargo run -- claude --shell
@@ -182,7 +186,7 @@ The AI coding agents require authentication.
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 - `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
-- `jail-ai codex` → No auth mounted (use `--codex-dir` to mount `~/.config/codex`)
+- `jail-ai codex` → No auth mounted (use `--codex-dir` to mount `~/.codex`)
 
 **Opt-in mounting** (use flags to enable):
 
@@ -190,9 +194,9 @@ The AI coding agents require authentication.
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
 - `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
-- `--codex-dir`: Mount `~/.config/codex` → `/home/agent/.config/codex` directory (Codex CLI authentication and settings)
-  - **Auto-authentication**: When using `jail-ai codex --codex-dir` without any arguments or if authentication is required, it will automatically run `codex auth login` interactively
-  - This eliminates the need to manually authenticate - just run `jail-ai codex --codex-dir` and follow the prompts
+- `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
+  - **Authentication**: Use `--auth <key>` to provide an API key for authentication
+  - **Manual authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`)
 
 Example aliases for different security levels:

@@ -77,7 +77,7 @@ Quick start Cursor Agent in a jail for the current directory. Use \fB\-\-cursor\
 Quick start Gemini CLI in a jail for the current directory. Use \fB\-\-gemini\-dir\fR to mount ~/.config/gemini for authentication. Any arguments after \fB\-\-\fR are passed directly to the gemini command.
 .TP
 .B codex [OPTIONS] [\-\- ARGS...]
-Quick start Codex CLI in a jail for the current directory. Use \fB\-\-codex\-dir\fR to mount ~/.config/codex for authentication. When \fB\-\-codex\-dir\fR is specified without arguments and authentication is required, automatically runs 'codex auth login' interactively. Any arguments after \fB\-\-\fR are passed directly to the codex command.
+Quick start Codex CLI in a jail for the current directory. Use \fB\-\-codex\-dir\fR to mount ~/.codex for authentication. Use \fB\-\-auth <key>\fR to provide an API key for authentication, or use \fB\-\-shell\fR to manually authenticate. Any arguments after \fB\-\-\fR are passed directly to the codex command.
 .TP
 .B list [\-c|\-\-current]
 List all jails managed by jail-ai. Use \fB\-c\fR to show only jails associated with the current directory.
@@ -156,9 +156,9 @@ Mount ~/.config/gemini directory for Gemini CLI authentication and settings.
 Default behavior: no authentication mounted (requires this flag for gemini to work)
 .TP
 .B \-\-codex\-dir
-Mount ~/.config/codex directory for Codex CLI authentication and settings.
+Mount ~/.codex directory for Codex CLI authentication and settings.
 .br
-When specified without arguments and authentication is required, automatically runs 'codex auth login' interactively.
+Use \fB\-\-auth <key>\fR to provide an API key for authentication.
 .br
 Default behavior: no authentication mounted (requires this flag for codex to work)
 .TP
@@ -258,7 +258,7 @@ jail-ai gemini --gemini-dir
 .fi
 .RE
 .PP
-Start Codex CLI with automatic authentication:
+Start Codex CLI with API key authentication:
 .RS
 .nf
 jail-ai codex --codex-dir

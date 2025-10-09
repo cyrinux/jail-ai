@@ -173,12 +173,12 @@ pub fn mount_agent_configs(
         );
     }
 
-    // Opt-in: Mount ~/.config/codex for Codex CLI
+    // Opt-in: Mount ~/.codex for Codex CLI
     if flags.codex_dir || flags.agent_configs {
         builder = mount_config_if_exists(
             builder,
-            home_path.join(".config").join("codex"),
-            "/home/agent/.config/codex",
+            home_path.join(".codex"),
+            "/home/agent/.codex",
         );
     }
 

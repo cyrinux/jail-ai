@@ -87,6 +87,10 @@ pub struct AgentCommandOptions {
     /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
     #[arg(long)]
     pub isolated: bool,
+
+    /// API key for authentication (used with codex --auth)
+    #[arg(long)]
+    pub auth: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -542,5 +546,35 @@ mod tests {
 
         // Special characters should be sanitized to hyphens
         assert!(name.contains("my-project-2024"));
+    }
+
+    #[test]
+    fn test_auth_parameter_parsing() {
+        // Test that the --auth parameter is properly parsed
+        let args = vec!["jail-ai", "codex", "--auth", "sk-test123", "--codex-dir"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        
+        match cli.command {
+            Some(Commands::Codex { common, .. }) => {
+                assert_eq!(common.auth, Some("sk-test123".to_string()));
+                assert!(common.codex_dir);
+            }
+            _ => panic!("Expected Codex command"),
+        }
+    }
+
+    #[test]
+    fn test_auth_parameter_optional() {
+        // Test that the --auth parameter is optional
+        let args = vec!["jail-ai", "codex", "--codex-dir"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        
+        match cli.command {
+            Some(Commands::Codex { common, .. }) => {
+                assert_eq!(common.auth, None);
+                assert!(common.codex_dir);
+            }
+            _ => panic!("Expected Codex command"),
+        }
     }
 }
