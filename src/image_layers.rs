@@ -381,9 +381,43 @@ pub async fn build_project_image(
         info!("Project hash (isolated mode): {}", project_hash);
     }
 
-    // Detect project type
-    let project_type = detect_project_type(workspace_path);
-    info!("Detected project type: {:?}", project_type);
+    // Detect project type (skip autodetection if force_layers is specified)
+    let project_type = if !force_layers.is_empty() {
+        // Bypass autodetection: use only the specified layers
+        info!("Bypassing autodetection: using specified layers: {:?}", force_layers);
+        
+        // Build a synthetic ProjectType from specified layers
+        let mut lang_types = Vec::new();
+        for layer in force_layers {
+            match layer.as_str() {
+                "rust" => lang_types.push(ProjectType::Rust),
+                "golang" => lang_types.push(ProjectType::Golang),
+                "python" => lang_types.push(ProjectType::Python),
+                "nodejs" => lang_types.push(ProjectType::NodeJS),
+                "java" => lang_types.push(ProjectType::Java),
+                "nix" => lang_types.push(ProjectType::Nix),
+                "php" => lang_types.push(ProjectType::Php),
+                "cpp" => lang_types.push(ProjectType::Cpp),
+                "csharp" => lang_types.push(ProjectType::CSharp),
+                "terraform" => lang_types.push(ProjectType::Terraform),
+                "kubernetes" => lang_types.push(ProjectType::Kubernetes),
+                "base" => {}, // base is implicit
+                layer_name if layer_name.starts_with("agent-") => {}, // ignore agent layers
+                _ => debug!("Unknown layer '{}' in force_layers, ignoring", layer),
+            }
+        }
+        
+        match lang_types.len() {
+            0 => ProjectType::Generic,
+            1 => lang_types[0].clone(),
+            _ => ProjectType::Multi(lang_types),
+        }
+    } else {
+        // Auto-detect project type
+        let detected = detect_project_type(workspace_path);
+        info!("Detected project type: {:?}", detected);
+        detected
+    };
 
     // Step 1: Build base layer (shared :latest)
     let should_rebuild_base = force_rebuild

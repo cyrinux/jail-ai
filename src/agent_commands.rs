@@ -97,16 +97,28 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         BackendType::detect()
     };
 
-    // Create jail if it doesn't exist
+    // Check if we need to create/recreate the jail
+    // Force recreation if --force-rebuild or --layers is specified
     let temp_config = JailConfig {
         name: jail_name.clone(),
         backend: backend_type,
         ..Default::default()
     };
     let temp_jail = JailManager::new(temp_config);
+    let jail_exists = temp_jail.exists().await?;
+    let should_recreate = params.force_rebuild || !params.force_layers.is_empty();
 
-    if !temp_jail.exists().await? {
+    if !jail_exists {
         info!("Creating new jail: {}", jail_name);
+    } else if should_recreate {
+        info!("Jail exists but recreation requested (force_rebuild={}, force_layers={:?})", 
+              params.force_rebuild, params.force_layers);
+    }
+
+    if !jail_exists || should_recreate {
+        if jail_exists && should_recreate {
+            info!("Recreating jail '{}' due to --force-rebuild or --layers", jail_name);
+        }
 
         // Only use custom image if explicitly provided (not default)
         // This allows the layered image system to auto-detect and build agent-specific images

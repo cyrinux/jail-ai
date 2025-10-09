@@ -31,11 +31,6 @@ impl PodmanBackend {
             config.name.clone(),
         ];
 
-        // If force_rebuild is true, replace existing container
-        if config.force_rebuild {
-            args.push("--replace".to_string());
-        }
-
         args.extend(vec![
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
             "--userns=keep-id".to_string(),
@@ -102,8 +97,19 @@ impl JailBackend for PodmanBackend {
     async fn create(&self, config: &JailConfig) -> Result<()> {
         info!("Creating podman jail: {}", config.name);
 
-        // If force_rebuild is true, we'll use --replace flag instead of checking existence
-        if !config.force_rebuild && self.exists(&config.name).await? {
+        // If force_rebuild is true, stop and remove existing container first
+        if config.force_rebuild && self.exists(&config.name).await? {
+            info!("Force rebuild enabled: stopping and removing existing container '{}'", config.name);
+            
+            // Stop and remove the existing container (using -f flag to force)
+            let mut rm_cmd = Command::new("podman");
+            rm_cmd.arg("rm").arg("-f").arg(&config.name);
+            
+            if let Err(e) = run_command(&mut rm_cmd).await {
+                // Log warning but continue - the container might already be gone
+                debug!("Failed to remove existing container (may not exist): {}", e);
+            }
+        } else if !config.force_rebuild && self.exists(&config.name).await? {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
