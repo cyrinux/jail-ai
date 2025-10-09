@@ -35,10 +35,13 @@ RUN echo '' >> /home/agent/.zshrc && \
     echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.zshrc && \
     echo '' >> /home/agent/.zshrc && \
     echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.zshrc && \
-    echo 'if [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.zshrc && \
-    echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.zshrc && \
-    echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.zshrc && \
-    echo '  cd /workspace && exec nix develop' >> /home/agent/.zshrc && \
+    echo 'if [ -f /workspace/flake.nix ]; then' >> /home/agent/.zshrc && \
+    echo '  MARKER_FILE="/tmp/.jail-ai-nix-loaded"' >> /home/agent/.zshrc && \
+    echo '  if [ ! -f "$MARKER_FILE" ]; then' >> /home/agent/.zshrc && \
+    echo '    touch "$MARKER_FILE"' >> /home/agent/.zshrc && \
+    echo '    echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.zshrc && \
+    echo '    cd /workspace && exec nix develop' >> /home/agent/.zshrc && \
+    echo '  fi' >> /home/agent/.zshrc && \
     echo 'fi' >> /home/agent/.zshrc && \
     echo '' >> /home/agent/.bashrc && \
     echo '# Nix environment' >> /home/agent/.bashrc && \
@@ -49,10 +52,13 @@ RUN echo '' >> /home/agent/.zshrc && \
     echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.bashrc && \
     echo '' >> /home/agent/.bashrc && \
     echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.bashrc && \
-    echo 'if [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.bashrc && \
-    echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.bashrc && \
-    echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.bashrc && \
-    echo '  cd /workspace && exec nix develop' >> /home/agent/.bashrc && \
+    echo 'if [ -f /workspace/flake.nix ]; then' >> /home/agent/.bashrc && \
+    echo '  MARKER_FILE="/tmp/.jail-ai-nix-loaded"' >> /home/agent/.bashrc && \
+    echo '  if [ ! -f "$MARKER_FILE" ]; then' >> /home/agent/.bashrc && \
+    echo '    touch "$MARKER_FILE"' >> /home/agent/.bashrc && \
+    echo '    echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.bashrc && \
+    echo '    cd /workspace && exec nix develop' >> /home/agent/.bashrc && \
+    echo '  fi' >> /home/agent/.bashrc && \
     echo 'fi' >> /home/agent/.bashrc
 
 WORKDIR /workspace
