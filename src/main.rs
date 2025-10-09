@@ -82,7 +82,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
         None => {
             // Default behavior: auto-init and exec based on workspace (git root if available)
             let cwd = std::env::current_dir()?;
-            let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd.clone());
+            let workspace_dir = agent_commands::get_git_root().unwrap_or_else(|| cwd.clone());
 
             // Find all jails for this directory
             let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;

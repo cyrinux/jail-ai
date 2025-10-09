@@ -275,6 +275,63 @@ async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool>
     }
 }
 
+/// Check if any layers need rebuilding for a given workspace and agent
+/// Returns a list of outdated layer names
+pub async fn check_layers_need_rebuild(
+    workspace_path: &Path,
+    agent_name: Option<&str>,
+) -> Result<Vec<String>> {
+    let project_type = detect_project_type(workspace_path);
+    let mut outdated_layers = Vec::new();
+
+    // Check base layer
+    if image_needs_rebuild(BASE_IMAGE_NAME, "base").await? {
+        outdated_layers.push("base".to_string());
+    }
+
+    // Check language layers based on project type
+    match &project_type {
+        ProjectType::Generic => {
+            // Only base layer needed
+        }
+        ProjectType::Multi(types) => {
+            for lang_type in types {
+                let layer_name = lang_type.language_layer();
+                let image_name = get_language_image_name(lang_type);
+                if image_needs_rebuild(image_name, layer_name).await? {
+                    outdated_layers.push(layer_name.to_string());
+                }
+            }
+        }
+        _ => {
+            let layer_name = project_type.language_layer();
+            let image_name = get_language_image_name(&project_type);
+            if image_needs_rebuild(image_name, layer_name).await? {
+                outdated_layers.push(layer_name.to_string());
+            }
+        }
+    }
+
+    // Check agent layer if specified
+    if let Some(agent) = agent_name {
+        let agent_layer = format!("agent-{}", agent);
+        let agent_containerfile = get_containerfile_content(&agent_layer);
+        
+        if agent_containerfile.is_some() {
+            // We need to check the actual agent image that would be used
+            // For shared mode, we use layer-based tagging
+            let layer_tag = generate_layer_tag(&project_type, Some(agent));
+            let agent_image = get_agent_project_image_name(agent, &layer_tag);
+            
+            if image_needs_rebuild(&agent_image, &agent_layer).await? {
+                outdated_layers.push(agent_layer);
+            }
+        }
+    }
+
+    Ok(outdated_layers)
+}
+
 /// Build a shared layer image (with :latest tag)
 async fn build_shared_layer(
     layer_name: &str,

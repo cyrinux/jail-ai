@@ -173,11 +173,11 @@ async fn check_container_upgrade_needed(
     Ok((needs_upgrade, current_image, expected_image))
 }
 
-/// Prompt user to upgrade container
-fn prompt_upgrade() -> Result<bool> {
+/// Prompt user to force rebuild (for outdated layers or container)
+fn prompt_force_rebuild() -> Result<bool> {
     use std::io::{self, Write};
 
-    print!("\nWould you like to upgrade the container to use the newer image? (y/N): ");
+    print!("\nWould you like to rebuild now? (y/N): ");
     io::stdout()
         .flush()
         .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
@@ -192,7 +192,7 @@ fn prompt_upgrade() -> Result<bool> {
 }
 
 /// Helper function to run AI agent commands (claude, copilot, cursor-agent, gemini)
-pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParams) -> Result<()> {
+pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandParams) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let base_name = auto_detect_jail_name()?;
 
@@ -230,10 +230,26 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         );
     } else {
         // Jail exists and no forced recreation - check if upgrade is available
-        info!("Checking if container image needs upgrade...");
-
-        let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-        match check_container_upgrade_needed(
+        info!("Checking for updates...");
+        
+        let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
+        
+        // Check if any layers need rebuilding (e.g., after jail-ai binary upgrade)
+        let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
+            &workspace_dir,
+            Some(normalized_agent),
+        )
+        .await
+        {
+            Ok(layers) => layers,
+            Err(e) => {
+                warn!("Failed to check for outdated layers: {}", e);
+                Vec::new()
+            }
+        };
+        
+        // Check if container image is outdated
+        let container_outdated = match check_container_upgrade_needed(
             &jail_name,
             &workspace_dir,
             normalized_agent,
@@ -241,38 +257,71 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         )
         .await
         {
-            Ok((true, current_img, expected_img)) => {
-                println!("\n🔄 Container image update available!");
-                println!("  Current image:  {}", current_img);
-                println!("  Expected image: {}", expected_img);
-                println!("\nThis could be due to:");
-                println!("  • Updated base images or dependencies");
-                println!("  • New tools or features added");
-                println!("  • Security patches");
-
-                if prompt_upgrade()? {
-                    info!("User chose to upgrade container");
-                    should_recreate = true;
+            Ok((needs_upgrade, current_img, expected_img)) => {
+                if needs_upgrade {
+                    Some((current_img, expected_img))
                 } else {
-                    info!("User declined upgrade, continuing with existing container");
+                    None
                 }
-            }
-            Ok((false, _, _)) => {
-                info!("Container image is up to date");
             }
             Err(e) => {
                 warn!("Failed to check for container upgrade: {}", e);
-                info!("Continuing with existing container");
+                None
             }
+        };
+        
+        // Determine what needs upgrading and prompt accordingly
+        if !outdated_layers.is_empty() || container_outdated.is_some() {
+            println!("\n🔄 Update available for your jail environment!");
+            
+            if !outdated_layers.is_empty() {
+                println!("\n📦 Outdated layers detected:");
+                for layer in &outdated_layers {
+                    println!("  • {}", layer);
+                }
+                println!("\nThis typically happens after upgrading the jail-ai binary.");
+                println!("Layers contain updated tools, dependencies, or security patches.");
+            }
+            
+            if let Some((ref current_img, ref expected_img)) = container_outdated {
+                println!("\n🐳 Container image mismatch:");
+                println!("  Current:  {}", current_img);
+                println!("  Expected: {}", expected_img);
+            }
+            
+            println!("\n💡 Recommendation: Use --force-rebuild to:");
+            if !outdated_layers.is_empty() {
+                println!("  • Rebuild outdated layers with latest definitions");
+            }
+            if container_outdated.is_some() {
+                println!("  • Recreate container with the correct image");
+            }
+            println!("  • Ensure you have the latest tools and security patches");
+            println!("\nYour data in /home/agent will be preserved during the rebuild.");
+            
+            if prompt_force_rebuild()? {
+                info!("User chose to force rebuild");
+                should_recreate = true;
+                // Enable force_rebuild to ensure layers are rebuilt when recreating
+                params.force_rebuild = true;
+            } else {
+                info!("User declined rebuild, continuing with existing container");
+            }
+        } else {
+            info!("Container and layers are up to date");
         }
     }
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            info!(
-                "Recreating jail '{}' due to --force-rebuild or --layers",
-                jail_name
-            );
+            if params.force_rebuild || !params.force_layers.is_empty() {
+                info!(
+                    "Recreating jail '{}' due to --force-rebuild or --layers",
+                    jail_name
+                );
+            } else {
+                info!("Recreating jail '{}' due to detected updates", jail_name);
+            }
         }
 
         // Only use custom image if explicitly provided (not default)
@@ -296,7 +345,7 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
 
         // Auto-mount workspace (git root if available, otherwise current directory)
         if !params.no_workspace {
-            let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+            let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
 
             // Validate workspace directory is safe
             validate_workspace_directory(&workspace_dir)?;

@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     coreutils \
     curl \
     wget \
+    sl \
     git \
     tig \
     vim \

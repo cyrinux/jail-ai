@@ -112,41 +112,60 @@ cargo run -- claude --isolated  # Uses isolated image: localhost/jail-ai-agent-c
 
 ### Container Upgrade Detection
 
-When you re-enter an existing container, jail-ai automatically checks if a newer version of the underlying image is available. This happens when:
+When you re-enter an existing container, jail-ai automatically checks for updates in two areas:
 
-- Base images or dependencies have been updated
-- New tools or features have been added to the Containerfiles
-- Security patches have been applied
-- The `--force-rebuild` flag was used to rebuild layers
+1. **Outdated Layers** - Detects if layer images need rebuilding (e.g., after upgrading jail-ai binary)
+2. **Container Image Mismatch** - Detects if the container's image differs from what should be used
 
-If an upgrade is available, you'll see a prompt like:
+This ensures a smooth experience after upgrading your jail-ai binary or when Containerfiles are updated.
+
+**Example prompt when updates are detected:**
 
 ```
-🔄 Container image update available!
-  Current image:  localhost/jail-ai-agent-claude:base-rust-nodejs-abc123
-  Expected image: localhost/jail-ai-agent-claude:base-rust-nodejs-def456
+🔄 Update available for your jail environment!
 
-This could be due to:
-  • Updated base images or dependencies
-  • New tools or features added
-  • Security patches
+📦 Outdated layers detected:
+  • base
+  • rust
+  • agent-claude
 
-Would you like to upgrade the container to use the newer image? (y/N):
+This typically happens after upgrading the jail-ai binary.
+Layers contain updated tools, dependencies, or security patches.
+
+🐳 Container image mismatch:
+  Current:  localhost/jail-ai-agent-claude:base-rust-nodejs-abc123
+  Expected: localhost/jail-ai-agent-claude:base-rust-nodejs-def456
+
+💡 Recommendation: Use --force-rebuild to:
+  • Rebuild outdated layers with latest definitions
+  • Recreate container with the correct image
+  • Ensure you have the latest tools and security patches
+
+Your data in /home/agent will be preserved during the rebuild.
+
+Would you like to rebuild now? (y/N):
 ```
 
 **How it works:**
 
 - The check is automatic when entering an existing container (no `--force-rebuild` needed)
-- It compares the container's current image with what would be built based on the latest Containerfiles
-- If you choose to upgrade (type `y`), the container is recreated with the new image
+- Compares embedded Containerfile hashes to detect outdated layers
+- Compares the container's current image with what should be used
+- If you choose to rebuild (type `y`), it performs a full `--force-rebuild` automatically
 - If you decline (type `N` or just press Enter), the existing container continues to run
-- Your data in `/home/agent` is preserved via persistent volumes during upgrades
+- Your data in `/home/agent` is preserved via persistent volumes during rebuilds
 
-**To force an upgrade without prompting:**
+**To force a rebuild without prompting:**
 
 ```bash
 cargo run -- claude --force-rebuild
 ```
+
+**Common scenarios:**
+
+- **After upgrading jail-ai binary**: Embedded Containerfiles change, so layers are detected as outdated
+- **After `git pull` with Containerfile changes**: Layers with modified definitions are detected
+- **After rebuilding specific layers**: Container image tag changes, prompting recreation
 
 ### Version Management
 
@@ -173,7 +192,7 @@ cargo run -- claude --force-rebuild
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
 - **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace
-- **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks if the underlying image has been updated and prompts you to upgrade
+- **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks for outdated layers and container image mismatches, prompting you to rebuild. This ensures a smooth experience after upgrading the jail-ai binary.
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
