@@ -43,6 +43,30 @@ const AGENT_GEMINI_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-gemini.Containerfile");
 const AGENT_CODEX_CONTAINERFILE: &str = include_str!("../containerfiles/agent-codex.Containerfile");
 
+/// Get emoji for a layer type
+fn get_layer_emoji(layer_name: &str) -> &'static str {
+    match layer_name {
+        "base" => "🏗️",
+        "rust" => "🦀",
+        "golang" => "🐹",
+        "python" => "🐍",
+        "nodejs" => "🟢",
+        "java" => "☕",
+        "nix" => "❄️",
+        "php" => "🐘",
+        "cpp" => "🔧",
+        "csharp" => "🎯",
+        "terraform" => "🏗️",
+        "kubernetes" => "☸️",
+        "agent-claude" => "🤖",
+        "agent-copilot" => "🦾",
+        "agent-cursor" => "➡️",
+        "agent-gemini" => "🔮",
+        "agent-codex" => "💻",
+        _ => "📦",
+    }
+}
+
 /// Generate a project identifier hash from workspace path
 fn generate_project_hash(workspace_path: &Path) -> String {
     let abs_path = workspace_path
@@ -266,7 +290,8 @@ async fn build_image_from_containerfile(
                 .template("{spinner:.cyan} {msg}")
                 .unwrap(),
         );
-        pb.set_message(format!("Building {} layer...", layer_name));
+        let emoji = get_layer_emoji(layer_name);
+        pb.set_message(format!("{} Building {} layer...", emoji, layer_name));
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
         Some(pb)
     } else {
@@ -326,7 +351,8 @@ async fn build_image_from_containerfile(
     };
 
     if let Some(pb) = spinner {
-        pb.finish_with_message(format!("✓ Built {} layer", layer_name));
+        let emoji = get_layer_emoji(layer_name);
+        pb.finish_with_message(format!("✓ {} Built {} layer", emoji, layer_name));
     }
 
     if !status.success() {
