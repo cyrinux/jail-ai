@@ -162,6 +162,7 @@ impl JailBackend for PodmanBackend {
                     &workspace_path,
                     agent_name,
                     config.force_rebuild,
+                    config.verbose,
                 )
                 .await?
             } else if config.base_image == image::DEFAULT_IMAGE_NAME {
@@ -429,6 +430,7 @@ impl JailBackend for PodmanBackend {
             },
             force_rebuild: false,
             use_layered_images: true,
+            verbose: false,
         })
     }
 }
@@ -456,6 +458,7 @@ mod tests {
             },
             force_rebuild: false,
             use_layered_images: true,
+            verbose: false,
         };
 
         let args = backend.build_run_args(&config);

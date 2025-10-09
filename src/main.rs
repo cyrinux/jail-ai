@@ -39,13 +39,13 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    if let Err(e) = run(cli.command).await {
+    if let Err(e) = run(cli.command, cli.verbose).await {
         error!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
-async fn run(command: Option<Commands>) -> error::Result<()> {
+async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
     match command {
         None => {
             // Default behavior: auto-init and exec based on workspace (git root if available)
@@ -62,7 +62,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 let jail_name = format!("{base_name}-default");
 
                 info!("Creating jail '{}'...", jail_name);
-                let jail = create_default_jail(&jail_name, &workspace_dir).await?;
+                let jail = create_default_jail(&jail_name, &workspace_dir, verbose).await?;
                 jail.create().await?;
                 info!("Jail '{}' created successfully", jail_name);
 
@@ -81,6 +81,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             info!("Executing interactive shell in jail '{}'...", jail_name);
             let jail = JailBuilder::new(jail_name.clone())
                 .backend(config::BackendType::detect())
+                .verbose(verbose)
                 .build();
 
             jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
@@ -207,6 +208,9 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                     // Set force rebuild flag
                     builder = builder.force_rebuild(force_rebuild);
 
+                    // Set verbose flag
+                    builder = builder.verbose(verbose);
+
                     builder.build()
                 };
 
@@ -306,23 +310,23 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             }
 
             Commands::Claude { common, args } => {
-                run_agent_command("claude", common, args).await?;
+                run_agent_command("claude", common, args, verbose).await?;
             }
 
             Commands::Copilot { common, args } => {
-                run_agent_command("copilot", common, args).await?;
+                run_agent_command("copilot", common, args, verbose).await?;
             }
 
             Commands::Cursor { common, args } => {
-                run_agent_command("cursor-agent", common, args).await?;
+                run_agent_command("cursor-agent", common, args, verbose).await?;
             }
 
             Commands::Gemini { common, args } => {
-                run_agent_command("gemini", common, args).await?;
+                run_agent_command("gemini", common, args, verbose).await?;
             }
 
             Commands::Codex { common, args } => {
-                run_agent_command("codex", common, args).await?;
+                run_agent_command("codex", common, args, verbose).await?;
             }
 
             Commands::List { current, backend } => {
@@ -481,11 +485,11 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
             } => {
                 if all {
                     // Upgrade all jails
-                    upgrade_all_jails(image, force).await?;
+                    upgrade_all_jails(image, force, verbose).await?;
                 } else {
                     // Upgrade single jail
                     let jail_name = resolve_jail_name(name).await?;
-                    upgrade_single_jail(&jail_name, image, force).await?;
+                    upgrade_single_jail(&jail_name, image, force, verbose).await?;
                 }
             }
 
@@ -526,6 +530,7 @@ async fn run(command: Option<Commands>) -> error::Result<()> {
                 info!("Joining jail '{}'...", jail_name);
                 let jail = JailBuilder::new(jail_name.clone())
                     .backend(backend_type)
+                    .verbose(verbose)
                     .build();
 
                 jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
@@ -542,6 +547,7 @@ async fn run_agent_command(
     agent_name: &str,
     common: cli::AgentCommandOptions,
     args: Vec<String>,
+    verbose: bool,
 ) -> error::Result<()> {
     agent_commands::run_ai_agent_command(
         agent_name,
@@ -563,6 +569,7 @@ async fn run_agent_command(
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
             force_rebuild: common.force_rebuild,
+            verbose,
             args,
         },
     )
@@ -573,13 +580,15 @@ async fn run_agent_command(
 async fn create_default_jail(
     name: &str,
     workspace: &std::path::Path,
+    verbose: bool,
 ) -> error::Result<jail::JailManager> {
     let backend_type = config::BackendType::detect();
 
     let mut builder = JailBuilder::new(name)
         .backend(backend_type)
         .base_image(image::DEFAULT_IMAGE_NAME)
-        .network(true, true);
+        .network(true, true)
+        .verbose(verbose);
 
     // Setup default environment variables
     builder = jail_setup::setup_default_environment(builder);
@@ -623,6 +632,7 @@ async fn upgrade_single_jail(
     jail_name: &str,
     image: Option<String>,
     force: bool,
+    verbose: bool,
 ) -> error::Result<()> {
     // Create a temporary jail manager to inspect the existing configuration
     let temp_config = JailConfig {
@@ -679,7 +689,8 @@ async fn upgrade_single_jail(
     let mut builder = JailBuilder::new(jail_name)
         .backend(old_config.backend)
         .base_image(new_image.clone())
-        .network(old_config.network.enabled, old_config.network.private);
+        .network(old_config.network.enabled, old_config.network.private)
+        .verbose(verbose);
 
     // Restore environment variables
     for (key, value) in &old_config.environment {
@@ -716,7 +727,7 @@ async fn upgrade_single_jail(
 }
 
 /// Upgrade all jails with the specified image (or their current image if not specified)
-async fn upgrade_all_jails(image: Option<String>, force: bool) -> error::Result<()> {
+async fn upgrade_all_jails(image: Option<String>, force: bool, verbose: bool) -> error::Result<()> {
     // Determine which backends to upgrade
     let backends = config::BackendType::all_available();
     if backends.is_empty() {
@@ -780,7 +791,7 @@ async fn upgrade_all_jails(image: Option<String>, force: bool) -> error::Result<
 
     for (jail_name, _backend_type) in all_jails {
         info!("Upgrading jail: {}", jail_name);
-        match upgrade_single_jail(&jail_name, image.clone(), true).await {
+        match upgrade_single_jail(&jail_name, image.clone(), true, verbose).await {
             Ok(_) => {
                 success_count += 1;
             }
@@ -866,7 +877,7 @@ mod tests {
     #[tokio::test]
     async fn test_upgrade_single_jail_nonexistent() {
         // Test that upgrading a non-existent jail returns an error
-        let result = upgrade_single_jail("nonexistent-jail", None, true).await;
+        let result = upgrade_single_jail("nonexistent-jail", None, true, false).await;
         assert!(result.is_err());
         if let Err(e) = result {
             match e {
@@ -882,7 +893,7 @@ mod tests {
     async fn test_upgrade_all_jails_empty() {
         // Test that upgrading with no jails doesn't fail
         // This will succeed but do nothing if no jails exist
-        let result = upgrade_all_jails(None, true).await;
+        let result = upgrade_all_jails(None, true, false).await;
         assert!(result.is_ok());
     }
 }

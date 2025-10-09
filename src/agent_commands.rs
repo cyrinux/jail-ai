@@ -28,6 +28,7 @@ pub struct AgentCommandParams {
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub force_rebuild: bool,
+    pub verbose: bool,
     pub args: Vec<String>,
 }
 
@@ -180,6 +181,9 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         // Set force rebuild flag
         builder = builder.force_rebuild(params.force_rebuild);
 
+        // Set verbose flag
+        builder = builder.verbose(params.verbose);
+
         let jail = builder.build();
         jail.create().await?;
 
@@ -199,7 +203,7 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     }
 
     // Execute AI agent command (use the same backend type determined earlier)
-    let jail = JailBuilder::new(&jail_name).backend(backend_type).build();
+    let jail = JailBuilder::new(&jail_name).backend(backend_type).verbose(params.verbose).build();
 
     // Auto-authenticate Codex CLI if needed
     if agent_command == "codex" && params.codex_dir {
