@@ -273,7 +273,7 @@ at your option.
 
 - Repository: https://github.com/cyrinux/jail-ai
 - Author: Cyril Levis <git@levis.name>
-- Author: Max Baz
+- Author: Max Baz <max@baz.nu>
 
 ---
 
