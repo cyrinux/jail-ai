@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     buildah \
     less \
+    openssh-client \
     kitty-terminfo \
     # Build essentials
     build-essential \
