@@ -29,6 +29,10 @@ pub struct JailConfig {
     #[serde(default)]
     pub force_rebuild: bool,
 
+    /// Force specific layers (comma-separated, e.g., "base,rust,python")
+    #[serde(default)]
+    pub force_layers: Vec<String>,
+
     /// Use layered images (auto-detect project type and build on-demand)
     #[serde(default = "default_true")]
     pub use_layered_images: bool,
@@ -109,6 +113,7 @@ impl Default for JailConfig {
                 cpu_quota: None,
             },
             force_rebuild: false,
+            force_layers: Vec::new(),
             use_layered_images: true,
             verbose: false,
         }

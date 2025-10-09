@@ -28,6 +28,7 @@ pub struct AgentCommandParams {
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub force_rebuild: bool,
+    pub force_layers: Vec<String>,
     pub verbose: bool,
     pub args: Vec<String>,
 }
@@ -180,6 +181,9 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
 
         // Set force rebuild flag
         builder = builder.force_rebuild(params.force_rebuild);
+
+        // Set force layers
+        builder = builder.force_layers(params.force_layers);
 
         // Set verbose flag
         builder = builder.verbose(params.verbose);

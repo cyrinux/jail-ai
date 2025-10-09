@@ -75,6 +75,10 @@ pub struct AgentCommandOptions {
     /// Force rebuild of the default image, even if it already exists
     #[arg(long)]
     pub force_rebuild: bool,
+
+    /// Force specific layers (comma-separated, e.g., "base,rust,python")
+    #[arg(long, value_delimiter = ',')]
+    pub layers: Vec<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -171,6 +175,10 @@ pub enum Commands {
         /// Force rebuild of the default image, even if it already exists
         #[arg(long)]
         force_rebuild: bool,
+
+        /// Force specific layers (comma-separated, e.g., "base,rust,python")
+        #[arg(long, value_delimiter = ',')]
+        layers: Vec<String>,
     },
 
     /// Remove a jail

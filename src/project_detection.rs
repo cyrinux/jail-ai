@@ -13,6 +13,8 @@ pub enum ProjectType {
     Php,
     Cpp,
     CSharp,
+    Terraform,
+    Kubernetes,
     /// Multiple project types detected
     Multi(Vec<ProjectType>),
     /// No specific project type detected
@@ -32,6 +34,8 @@ impl ProjectType {
             ProjectType::Php => "php",
             ProjectType::Cpp => "cpp",
             ProjectType::CSharp => "csharp",
+            ProjectType::Terraform => "terraform",
+            ProjectType::Kubernetes => "kubernetes",
             ProjectType::Multi(_) => "multi",
             ProjectType::Generic => "base",
         }
@@ -126,6 +130,54 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
     {
         debug!("Detected C# project");
         detected_types.push(ProjectType::CSharp);
+    }
+
+    // Check for Terraform project
+    if path
+        .read_dir()
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .find(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext == "tf" || ext == "tfvars")
+                        .unwrap_or(false)
+                })
+        })
+        .is_some()
+        || path.join("terraform.tfstate").exists()
+        || path.join(".terraform").exists()
+        || path.join(".terraform.lock.hcl").exists()
+    {
+        debug!("Detected Terraform project");
+        detected_types.push(ProjectType::Terraform);
+    }
+
+    // Check for Kubernetes project
+    if path
+        .read_dir()
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .find(|e| {
+                    let filename = e.file_name();
+                    let filename_str = filename.to_string_lossy();
+                    filename_str.ends_with(".yaml") || filename_str.ends_with(".yml")
+                })
+        })
+        .is_some()
+        && (path.join("kustomization.yaml").exists()
+            || path.join("Chart.yaml").exists()
+            || path.join("values.yaml").exists()
+            || path.join("k8s").exists()
+            || path.join("kubernetes").exists())
+    {
+        debug!("Detected Kubernetes project");
+        detected_types.push(ProjectType::Kubernetes);
     }
 
     match detected_types.len() {
