@@ -1,60 +1,83 @@
 # Image Tagging Strategy
 
-## The Problem
+## Overview
 
-When managing multiple projects simultaneously, using `:latest` tags for all images causes conflicts:
+jail-ai uses a **hybrid tagging strategy** that balances image sharing for efficiency with project isolation when needed.
+
+## The Two Modes
+
+### 1. Layer-Based Tagging (Default)
+
+**Shared images** tagged by their layer composition for maximum reuse:
 
 ```
-Project A (~/rust-project-a) → localhost/jail-ai-rust:latest
-Project B (~/rust-project-b) → localhost/jail-ai-rust:latest
-❌ Both projects share the same image!
+Project A (~/rust-project-a) → localhost/jail-ai-agent-claude:base-rust-nodejs
+Project B (~/rust-project-b) → localhost/jail-ai-agent-claude:base-rust-nodejs
+✅ Both projects share the same image (instant startup!)
 ```
 
-This breaks isolation and causes issues with:
-- Project-specific dependencies
-- Different tool versions
-- Independent testing
-- Parallel development
+### 2. Isolated Tagging (Opt-in with `--isolated`)
 
-## The Solution: Hybrid Tagging
+**Project-specific images** tagged with workspace hash for complete isolation:
 
-We use **two-tier tagging**:
-1. **Shared base/language layers**: Tagged with `:latest` (reused across projects)
-2. **Final project-specific image**: Tagged with **workspace hash** (unique per project)
+```
+Project A (~/rust-project-a) → localhost/jail-ai-agent-claude:abc12345
+Project B (~/rust-project-b) → localhost/jail-ai-agent-claude:def67890
+✅ Each project has its own unique image
+```
+
+## The Hybrid Architecture
+
+All modes share the same foundation:
+1. **Shared base/language layers**: Tagged with `:latest` (reused across all projects)
+2. **Final image**: Tagged based on mode (layer-based by default, workspace hash with `--isolated`)
 
 ### Architecture
 
 ```
+DEFAULT MODE (layer-based):
+┌──────────────────────────────────────────────────────────┐
+│  Shared: localhost/jail-ai-agent-claude:base-rust-nodejs│  ← All Rust+Claude projects
+└──────────────────────────────────────────────────────────┘
+                        ▲
+                        │ builds from
+                        │
+┌──────────────────────────────────────────────────────────┐
+│  Shared: localhost/jail-ai-nodejs:latest                 │  ← Shared language layers
+│          localhost/jail-ai-rust:latest                   │
+│          localhost/jail-ai-base:latest                   │
+└──────────────────────────────────────────────────────────┘
+
+ISOLATED MODE (--isolated):
 ┌──────────────────────────────────────────────────────┐
 │  Project A: localhost/jail-ai-agent-claude:abc12345  │  ← Project-specific
-│              (workspace hash: abc12345)              │
+│  Project B: localhost/jail-ai-agent-claude:def67890  │
 └──────────────────────────────────────────────────────┘
                         ▲
                         │ builds from
                         │
 ┌──────────────────────────────────────────────────────┐
-│  Shared: localhost/jail-ai-nodejs:latest             │  ← Shared across projects
+│  Shared: localhost/jail-ai-nodejs:latest             │  ← Shared language layers
 │          localhost/jail-ai-rust:latest               │
 │          localhost/jail-ai-base:latest               │
 └──────────────────────────────────────────────────────┘
 ```
 
-### Example: Two Rust Projects with Claude
+### Example: Two Rust Projects with Claude (Default Mode)
 
 **Project A** (`~/rust-project-a`):
 ```bash
 $ cd ~/rust-project-a
 $ jail-ai claude
 
-→ Project hash: abc12345 (from /home/user/rust-project-a)
 → Detected: Rust
 → Building shared layers:
   ✓ localhost/jail-ai-base:latest (shared)
   ✓ localhost/jail-ai-rust:latest (shared)
   ✓ localhost/jail-ai-nodejs:latest (shared)
-→ Building project-specific image:
-  ✓ localhost/jail-ai-agent-claude:abc12345
-→ Container uses: localhost/jail-ai-agent-claude:abc12345
+→ Using shared mode: layer-based image (base-rust-nodejs)
+  ✓ localhost/jail-ai-agent-claude:base-rust-nodejs
+→ Container uses: localhost/jail-ai-agent-claude:base-rust-nodejs
 ```
 
 **Project B** (`~/rust-project-b`):
@@ -62,18 +85,43 @@ $ jail-ai claude
 $ cd ~/rust-project-b
 $ jail-ai claude
 
-→ Project hash: def67890 (from /home/user/rust-project-b)
 → Detected: Rust
 → Reusing shared layers:
   ✓ localhost/jail-ai-base:latest (cached)
   ✓ localhost/jail-ai-rust:latest (cached)
   ✓ localhost/jail-ai-nodejs:latest (cached)
-→ Building project-specific image:
-  ✓ localhost/jail-ai-agent-claude:def67890
-→ Container uses: localhost/jail-ai-agent-claude:def67890
+→ Using shared mode: layer-based image (base-rust-nodejs)
+  ✓ localhost/jail-ai-agent-claude:base-rust-nodejs (cached, instant!)
+→ Container uses: localhost/jail-ai-agent-claude:base-rust-nodejs
 ```
 
-**Result**: Both projects have isolated images but share base layers!
+**Result**: Both projects share the same final image - instant startup for Project B!
+
+### Example: Using Isolated Mode
+
+When you need project-specific isolation:
+
+```bash
+$ cd ~/rust-project-a
+$ jail-ai claude --isolated
+
+→ Detected: Rust
+→ Using isolated mode: workspace-specific image
+→ Project hash (isolated mode): abc12345
+→ Building shared layers:
+  ✓ localhost/jail-ai-base:latest (shared)
+  ✓ localhost/jail-ai-rust:latest (shared)
+  ✓ localhost/jail-ai-nodejs:latest (shared)
+→ Building agent image:
+  ✓ localhost/jail-ai-agent-claude:abc12345
+→ Container uses: localhost/jail-ai-agent-claude:abc12345
+```
+
+**When to use `--isolated`:**
+- Testing different agent versions per project
+- Project-specific customizations in final image
+- Complete isolation from other projects
+- Debugging image issues without affecting other projects
 
 ## Image Naming Convention
 
@@ -280,12 +328,23 @@ CONTAINER ID  IMAGE                                   NAME
 
 ## Summary
 
-✅ **Shared base layers**: `:latest` tag for efficiency  
-✅ **Project-specific finals**: `:workspace-hash` tag for isolation  
-✅ **Storage efficient**: Reuse shared layers  
-✅ **Rebuild fast**: Only rebuild project layer  
-✅ **Perfect isolation**: Each project has unique final image  
-✅ **Easy cleanup**: Remove per-project images safely  
+### Default Mode (Layer-Based Tagging)
+✅ **Maximum reuse**: Projects with same layers share images instantly  
+✅ **Fastest startup**: Zero build time for matching layer composition  
+✅ **Storage efficient**: One image per unique layer stack  
+✅ **Cross-project benefits**: Shared images improve all projects  
+✅ **Simple management**: Fewer images to maintain  
+
+### Isolated Mode (`--isolated` flag)
+✅ **Complete isolation**: Each project has unique final image  
+✅ **Project-specific**: Independent customization per workspace  
+✅ **Safe testing**: Experiment without affecting other projects  
 ✅ **Consistent naming**: Image tag matches container hash  
 
-**Best of both worlds**: Share infrastructure, isolate projects! 🎯
+### Both Modes Share
+✅ **Efficient base layers**: `:latest` tag for language toolchains  
+✅ **Fast layer builds**: Cached base/language layers  
+✅ **Easy cleanup**: Remove final images safely  
+✅ **Automatic detection**: Project type determines layer stack  
+
+**Hybrid approach**: Default to sharing for speed, opt-in to isolation when needed! 🎯

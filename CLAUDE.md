@@ -97,6 +97,13 @@ cargo run -- codex --codex-dir -- generate "create a REST API"
 # Start interactive shell in agent jail (without running the agent)
 cargo run -- claude --shell
 cargo run -- copilot --copilot-dir --shell
+
+# Layer-based (shared) vs Isolated images
+# By default, jail-ai uses layer-based tagging for image sharing across projects
+cargo run -- claude  # Uses shared image: localhost/jail-ai-agent-claude:base-rust-nodejs
+
+# Use --isolated flag for project-specific images (workspace hash)
+cargo run -- claude --isolated  # Uses isolated image: localhost/jail-ai-agent-claude:abc12345
 ```
 
 ### Version Management

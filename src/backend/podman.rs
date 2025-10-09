@@ -30,15 +30,15 @@ impl PodmanBackend {
             "--name".to_string(),
             config.name.clone(),
         ];
-        
+
         // If force_rebuild is true, replace existing container
         if config.force_rebuild {
             args.push("--replace".to_string());
         }
-        
+
         args.extend(vec![
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
-            "--userns=keep-id".to_string()
+            "--userns=keep-id".to_string(),
         ]);
 
         // Persistent volume for /home/agent to preserve data across upgrades
@@ -108,85 +108,87 @@ impl JailBackend for PodmanBackend {
         }
 
         // Determine which image to use
-        let actual_image =
-            if config.base_image == image::DEFAULT_IMAGE_NAME && config.use_layered_images {
-                // Use layered image system with auto-detection
-                info!("Using layered image system with auto-detection");
+        let actual_image = if config.base_image == image::DEFAULT_IMAGE_NAME
+            && config.use_layered_images
+        {
+            // Use layered image system with auto-detection
+            info!("Using layered image system with auto-detection");
 
-                // Try to find workspace path from bind mounts
-                let workspace_path = config
-                    .bind_mounts
-                    .iter()
-                    .find(|m| {
-                        m.target
-                            .to_str()
-                            .map(|s| s.contains("workspace"))
-                            .unwrap_or(false)
-                    })
-                    .map(|m| m.source.clone())
-                    .unwrap_or_else(|| {
-                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                    });
+            // Try to find workspace path from bind mounts
+            let workspace_path = config
+                .bind_mounts
+                .iter()
+                .find(|m| {
+                    m.target
+                        .to_str()
+                        .map(|s| s.contains("workspace"))
+                        .unwrap_or(false)
+                })
+                .map(|m| m.source.clone())
+                .unwrap_or_else(|| {
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                });
 
-                // Try to detect agent from jail name (format: jail-{project}-{hash}-{agent})
-                let agent_name = config
-                    .name
-                    .rsplit('-')
-                    .next()
-                    .and_then(|suffix| match suffix {
-                        "claude" | "copilot" | "cursor" | "gemini" | "codex" => Some(suffix),
-                        "agent" => {
-                            // Handle legacy jail names with format: ...-cursor-agent
-                            // Look at the second-to-last segment
-                            let parts: Vec<&str> = config.name.rsplitn(3, '-').collect();
-                            if parts.len() >= 2 {
-                                match parts[1] {
-                                    "cursor" => Some("cursor"),
-                                    _ => None,
-                                }
-                            } else {
-                                None
+            // Try to detect agent from jail name (format: jail-{project}-{hash}-{agent})
+            let agent_name = config
+                .name
+                .rsplit('-')
+                .next()
+                .and_then(|suffix| match suffix {
+                    "claude" | "copilot" | "cursor" | "gemini" | "codex" => Some(suffix),
+                    "agent" => {
+                        // Handle legacy jail names with format: ...-cursor-agent
+                        // Look at the second-to-last segment
+                        let parts: Vec<&str> = config.name.rsplitn(3, '-').collect();
+                        if parts.len() >= 2 {
+                            match parts[1] {
+                                "cursor" => Some("cursor"),
+                                _ => None,
                             }
+                        } else {
+                            None
                         }
-                        _ => None,
-                    });
+                    }
+                    _ => None,
+                });
 
-                debug!(
-                    "Workspace path: {:?}, Agent: {:?}",
-                    workspace_path, agent_name
-                );
+            debug!(
+                "Workspace path: {:?}, Agent: {:?}",
+                workspace_path, agent_name
+            );
 
-                // Build the appropriate layered image
-                crate::image_layers::ensure_layered_image_available(
-                    &workspace_path,
-                    agent_name,
-                    config.force_rebuild,
-                    &config.force_layers,
-                    config.verbose,
-                )
-                .await?
-            } else if config.base_image == image::DEFAULT_IMAGE_NAME {
-                // Default image should use layered system
-                // If use_layered_images is false, it's likely a configuration error
-                return Err(JailError::Backend(
+            // Build the appropriate layered image
+            crate::image_layers::ensure_layered_image_available(
+                &workspace_path,
+                agent_name,
+                config.force_rebuild,
+                &config.force_layers,
+                config.isolated,
+                config.verbose,
+            )
+            .await?
+        } else if config.base_image == image::DEFAULT_IMAGE_NAME {
+            // Default image should use layered system
+            // If use_layered_images is false, it's likely a configuration error
+            return Err(JailError::Backend(
                     "Default image requires layered images to be enabled. Please set use_layered_images to true.".to_string()
                 ));
-            } else {
-                // For custom images, check if they exist and pull if needed
-                let image_exists = self.image_exists(&config.base_image).await?;
-                if !image_exists {
-                    debug!("Image {} not found locally, pulling...", config.base_image);
-                    let mut pull_cmd = Command::new("podman");
-                    pull_cmd.arg("pull").arg(&config.base_image);
+        } else {
+            // For custom images, check if they exist and pull if needed
+            let image_exists = self.image_exists(&config.base_image).await?;
+            if !image_exists {
+                debug!("Image {} not found locally, pulling...", config.base_image);
+                let mut pull_cmd = Command::new("podman");
+                pull_cmd.arg("pull").arg(&config.base_image);
 
-                    run_command(&mut pull_cmd)
-                        .await
-                        .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
-                } else {
-                    debug!("Using local image: {}", config.base_image);
-                }
-                config.base_image.clone()
-            };
+                run_command(&mut pull_cmd)
+                    .await
+                    .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
+            } else {
+                debug!("Using local image: {}", config.base_image);
+            }
+            config.base_image.clone()
+        };
 
         // Create and start the container with the determined image
         let mut modified_config = config.clone();
@@ -431,6 +433,7 @@ impl JailBackend for PodmanBackend {
             force_rebuild: false,
             force_layers: Vec::new(),
             use_layered_images: true,
+            isolated: false,
             verbose: false,
         })
     }
@@ -460,6 +463,7 @@ mod tests {
             force_rebuild: false,
             force_layers: Vec::new(),
             use_layered_images: true,
+            isolated: false,
             verbose: false,
         };
 

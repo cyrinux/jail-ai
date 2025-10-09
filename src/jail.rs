@@ -119,6 +119,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn isolated(mut self, isolated: bool) -> Self {
+        self.config.isolated = isolated;
+        self
+    }
+
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.config.verbose = verbose;
         self

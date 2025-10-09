@@ -37,6 +37,10 @@ pub struct JailConfig {
     #[serde(default = "default_true")]
     pub use_layered_images: bool,
 
+    /// Use isolated project-specific images (workspace hash) instead of shared layer-based images
+    #[serde(default)]
+    pub isolated: bool,
+
     /// Show verbose output (e.g., image build logs)
     #[serde(default)]
     pub verbose: bool,
@@ -115,6 +119,7 @@ impl Default for JailConfig {
             force_rebuild: false,
             force_layers: Vec::new(),
             use_layered_images: true,
+            isolated: false,
             verbose: false,
         }
     }

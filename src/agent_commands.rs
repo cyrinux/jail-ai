@@ -30,6 +30,7 @@ pub struct AgentCommandParams {
     pub force_rebuild: bool,
     pub force_layers: Vec<String>,
     pub shell: bool,
+    pub isolated: bool,
     pub verbose: bool,
     pub args: Vec<String>,
 }
@@ -81,7 +82,7 @@ fn normalize_agent_name(agent_command: &str) -> &str {
 pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParams) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let base_name = auto_detect_jail_name()?;
-    
+
     // Normalize agent name for jail naming and image building
     let normalized_agent = normalize_agent_name(agent_command);
     let agent_suffix = Commands::sanitize_jail_name(normalized_agent);
@@ -110,11 +111,11 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         // Only use custom image if explicitly provided (not default)
         // This allows the layered image system to auto-detect and build agent-specific images
         let use_custom_image = params.image != crate::cli::DEFAULT_IMAGE;
-        
+
         let mut builder = JailBuilder::new(&jail_name)
             .backend(backend_type)
             .network(!params.no_network, true);
-        
+
         // Set image: use custom if provided, otherwise let layered system auto-detect
         if use_custom_image {
             builder = builder.base_image(params.image);
@@ -186,6 +187,9 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         // Set force layers
         builder = builder.force_layers(params.force_layers);
 
+        // Set isolated flag
+        builder = builder.isolated(params.isolated);
+
         // Set verbose flag
         builder = builder.verbose(params.verbose);
 
@@ -208,7 +212,10 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     }
 
     // Execute AI agent command (use the same backend type determined earlier)
-    let jail = JailBuilder::new(&jail_name).backend(backend_type).verbose(params.verbose).build();
+    let jail = JailBuilder::new(&jail_name)
+        .backend(backend_type)
+        .verbose(params.verbose)
+        .build();
 
     // If --shell flag is set, start an interactive shell instead of running the agent
     if params.shell {
