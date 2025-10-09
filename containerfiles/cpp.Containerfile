@@ -38,8 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install vcpkg (C/C++ package manager)
 USER agent
-RUN git clone --depth=1 https://github.com/microsoft/vcpkg.git /home/agent/.vcpkg \
-  && /home/agent/.vcpkg/bootstrap-vcpkg.sh -disableMetrics
+# RUN git clone --depth=1 https://github.com/microsoft/vcpkg.git /home/agent/.vcpkg \
+#   && /home/agent/.vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
 ENV PATH="/home/agent/.vcpkg:$PATH"
 

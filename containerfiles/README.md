@@ -121,7 +121,7 @@ When you create a jail, jail-ai automatically detects your project type and buil
 | `pom.xml`, `build.gradle` | Java | `base` → `java` |
 | `flake.nix` | Nix | `base` → `nix` |
 | `composer.json`, `composer.lock` | PHP | `base` → `php` |
-| `CMakeLists.txt`, `Makefile` | C/C++ | `base` → `cpp` |
+| `CMakeLists.txt` | C/C++ | `base` → `cpp` |
 | `*.csproj`, `*.sln` | C# | `base` → `csharp` |
 | Multiple files | Multi-language | `base` → all detected layers |
 | No specific files | Generic | `base` only |
