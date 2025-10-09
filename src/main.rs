@@ -108,6 +108,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 git_gpg,
                 force_rebuild,
                 layers,
+                isolated,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -211,6 +212,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     // Set force layers
                     builder = builder.force_layers(layers);
+
+                    // Set isolated flag
+                    builder = builder.isolated(isolated);
 
                     // Set verbose flag
                     builder = builder.verbose(verbose);
@@ -532,6 +536,7 @@ async fn run_agent_command(
             force_rebuild: common.force_rebuild,
             force_layers: common.layers,
             shell: common.shell,
+            isolated: common.isolated,
             verbose,
             args,
         },

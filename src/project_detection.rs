@@ -115,15 +115,13 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
             .read_dir()
             .ok()
             .and_then(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .find(|e| {
-                        e.path()
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|ext| ext == "csproj" || ext == "sln")
-                            .unwrap_or(false)
-                    })
+                entries.filter_map(Result::ok).find(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext == "csproj" || ext == "sln")
+                        .unwrap_or(false)
+                })
             })
             .is_some()
     {
@@ -136,15 +134,13 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
         .read_dir()
         .ok()
         .and_then(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .find(|e| {
-                    e.path()
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|ext| ext == "tf" || ext == "tfvars")
-                        .unwrap_or(false)
-                })
+            entries.filter_map(Result::ok).find(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext == "tf" || ext == "tfvars")
+                    .unwrap_or(false)
+            })
         })
         .is_some()
         || path.join("terraform.tfstate").exists()
@@ -160,13 +156,11 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
         .read_dir()
         .ok()
         .and_then(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .find(|e| {
-                    let filename = e.file_name();
-                    let filename_str = filename.to_string_lossy();
-                    filename_str.ends_with(".yaml") || filename_str.ends_with(".yml")
-                })
+            entries.filter_map(Result::ok).find(|e| {
+                let filename = e.file_name();
+                let filename_str = filename.to_string_lossy();
+                filename_str.ends_with(".yaml") || filename_str.ends_with(".yml")
+            })
         })
         .is_some()
         && (path.join("kustomization.yaml").exists()

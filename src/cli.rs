@@ -83,6 +83,10 @@ pub struct AgentCommandOptions {
     /// Start an interactive shell instead of running the agent command
     #[arg(long)]
     pub shell: bool,
+
+    /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
+    #[arg(long)]
+    pub isolated: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -183,6 +187,10 @@ pub enum Commands {
         /// Force specific layers (comma-separated, e.g., "base,rust,python")
         #[arg(long, value_delimiter = ',')]
         layers: Vec<String>,
+
+        /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
+        #[arg(long)]
+        isolated: bool,
     },
 
     /// Remove a jail

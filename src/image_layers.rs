@@ -58,6 +58,36 @@ fn generate_project_hash(workspace_path: &Path) -> String {
     hash_hex[..8].to_string()
 }
 
+/// Generate a layer-based tag from project type and agent
+/// Format: base-{lang1}-{lang2}-{agent} or base-{lang1}-{lang2} (no agent)
+/// Examples: "base-rust-nodejs-claude", "base-python", "base"
+fn generate_layer_tag(project_type: &ProjectType, agent_name: Option<&str>) -> String {
+    let mut layers = vec!["base"];
+
+    match project_type {
+        ProjectType::Generic => {
+            // Only base layer
+        }
+        ProjectType::Multi(types) => {
+            // Add all language layers
+            for lang_type in types {
+                layers.push(lang_type.language_layer());
+            }
+        }
+        _ => {
+            // Single language
+            layers.push(project_type.language_layer());
+        }
+    }
+
+    // Add agent if present
+    if let Some(agent) = agent_name {
+        layers.push(agent);
+    }
+
+    layers.join("-")
+}
+
 /// Get the shared language image name (with :latest tag)
 fn get_language_image_name(project_type: &ProjectType) -> &'static str {
     match project_type {
@@ -185,7 +215,11 @@ async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool>
 }
 
 /// Build a shared layer image (with :latest tag)
-async fn build_shared_layer(layer_name: &str, base_image: Option<&str>, verbose: bool) -> Result<String> {
+async fn build_shared_layer(
+    layer_name: &str,
+    base_image: Option<&str>,
+    verbose: bool,
+) -> Result<String> {
     let image_name = match layer_name {
         "base" => BASE_IMAGE_NAME.to_string(),
         "golang" => GOLANG_IMAGE_NAME.to_string(),
@@ -241,10 +275,7 @@ async fn build_image_from_containerfile(
     };
 
     let containerfile_content = get_containerfile_content(layer_name).ok_or_else(|| {
-        JailError::Backend(format!(
-            "No Containerfile found for layer: {}",
-            layer_name
-        ))
+        JailError::Backend(format!("No Containerfile found for layer: {}", layer_name))
     })?;
 
     // Generate hash of Containerfile content
@@ -271,9 +302,7 @@ async fn build_image_from_containerfile(
         cmd.arg("--build-arg").arg(format!("BASE_IMAGE={}", base));
     }
 
-    cmd.arg("-f")
-        .arg(&containerfile_path)
-        .arg(temp_dir.path());
+    cmd.arg("-f").arg(&containerfile_path).arg(temp_dir.path());
 
     debug!("Running build command: {:?}", cmd);
 
@@ -317,11 +346,14 @@ pub async fn build_project_image(
     agent_name: Option<&str>,
     force_rebuild: bool,
     force_layers: &[String],
+    isolated: bool,
     verbose: bool,
 ) -> Result<String> {
-    // Generate project-specific identifier
+    // Generate project-specific identifier (for isolated mode)
     let project_hash = generate_project_hash(workspace_path);
-    info!("Project hash: {}", project_hash);
+    if isolated {
+        info!("Project hash (isolated mode): {}", project_hash);
+    }
 
     // Detect project type
     let project_type = detect_project_type(workspace_path);
@@ -331,7 +363,7 @@ pub async fn build_project_image(
     let should_rebuild_base = force_rebuild
         || force_layers.contains(&"base".to_string())
         || !image_exists(BASE_IMAGE_NAME).await?;
-    
+
     let base_image = if should_rebuild_base {
         if verbose {
             info!("Building base layer...");
@@ -353,7 +385,7 @@ pub async fn build_project_image(
                 let should_rebuild_lang = force_rebuild
                     || force_layers.contains(&layer_name.to_string())
                     || !image_exists(lang_image_name).await?;
-                
+
                 current_image = if should_rebuild_lang {
                     build_shared_layer(layer_name, Some(&current_image), verbose).await?
                 } else {
@@ -368,7 +400,7 @@ pub async fn build_project_image(
             let should_rebuild_lang = force_rebuild
                 || force_layers.contains(&layer_name.to_string())
                 || !image_exists(lang_image_name).await?;
-            
+
             if should_rebuild_lang {
                 build_shared_layer(layer_name, Some(&base_image), verbose).await?
             } else {
@@ -380,51 +412,75 @@ pub async fn build_project_image(
 
     info!("Language layer ready: {}", language_image);
 
-    // Step 3: Build final project-specific image
+    // Step 3: Build final project-specific or layer-based image
     if let Some(agent) = agent_name {
-        // For agents: build base → language layers → agent (project-specific)
+        // For agents: build base → language layers → agent
         // This ensures agent has all language tooling (rust, nix, etc.)
-        info!("Building agent layer for project...");
 
-        // Build project-specific agent image FROM the language_image (not base!)
-        // This ensures the agent inherits all language layers built above
         let agent_layer = format!("agent-{}", agent);
-        let final_image_name = get_agent_project_image_name(agent, &project_hash);
+
+        // Determine the final image tag based on isolation mode
+        let image_tag = if isolated {
+            // Isolated mode: Use workspace hash
+            info!("Using isolated mode: workspace-specific image");
+            project_hash.clone()
+        } else {
+            // Shared mode: Use layer composition
+            let layer_tag = generate_layer_tag(&project_type, Some(agent));
+            info!("Using shared mode: layer-based image ({})", layer_tag);
+            layer_tag
+        };
+
+        let final_image_name = get_agent_project_image_name(agent, &image_tag);
         let should_rebuild_agent = force_rebuild
             || force_layers.contains(&agent_layer)
             || !image_exists(&final_image_name).await?;
 
         if should_rebuild_agent {
             if verbose {
-                info!(
-                    "Building project-specific agent image: {}",
-                    final_image_name
-                );
+                info!("Building agent image: {}", final_image_name);
             }
-            build_image_from_containerfile(&agent_layer, Some(&language_image), &final_image_name, verbose)
-                .await?;
+            build_image_from_containerfile(
+                &agent_layer,
+                Some(&language_image),
+                &final_image_name,
+                verbose,
+            )
+            .await?;
         } else {
-            debug!("Project-specific agent image already exists");
+            debug!("Agent image already exists: {}", final_image_name);
         }
 
         info!("Final image: {}", final_image_name);
         Ok(final_image_name)
     } else {
-        // No agent: just tag language image with project hash
+        // No agent: just tag language image
         let layer_type = project_type.language_layer();
-        let final_image_name = get_project_image_name(layer_type, &project_hash);
+
+        // Determine the final image tag based on isolation mode
+        let image_tag = if isolated {
+            // Isolated mode: Use workspace hash
+            info!("Using isolated mode: workspace-specific image");
+            project_hash.clone()
+        } else {
+            // Shared mode: Use layer composition
+            let layer_tag = generate_layer_tag(&project_type, None);
+            info!("Using shared mode: layer-based image ({})", layer_tag);
+            layer_tag
+        };
+
+        let final_image_name = get_project_image_name(layer_type, &image_tag);
 
         if force_rebuild || !image_exists(&final_image_name).await? {
-            info!("Tagging language image for project: {}", final_image_name);
+            info!("Tagging language image: {}", final_image_name);
 
             let mut cmd = Command::new("podman");
-            cmd.arg("tag")
-                .arg(&language_image)
-                .arg(&final_image_name);
+            cmd.arg("tag").arg(&language_image).arg(&final_image_name);
 
-            let status = cmd.status().await.map_err(|e| {
-                JailError::Backend(format!("Failed to tag image: {}", e))
-            })?;
+            let status = cmd
+                .status()
+                .await
+                .map_err(|e| JailError::Backend(format!("Failed to tag image: {}", e)))?;
 
             if !status.success() {
                 return Err(JailError::Backend(format!(
@@ -435,7 +491,7 @@ pub async fn build_project_image(
 
             info!("Tagged {} as {}", language_image, final_image_name);
         } else {
-            debug!("Project-specific image already exists");
+            debug!("Image already exists: {}", final_image_name);
         }
 
         info!("Final image: {}", final_image_name);
@@ -449,9 +505,18 @@ pub async fn ensure_layered_image_available(
     agent_name: Option<&str>,
     force_rebuild: bool,
     force_layers: &[String],
+    isolated: bool,
     verbose: bool,
 ) -> Result<String> {
-    build_project_image(workspace_path, agent_name, force_rebuild, force_layers, verbose).await
+    build_project_image(
+        workspace_path,
+        agent_name,
+        force_rebuild,
+        force_layers,
+        isolated,
+        verbose,
+    )
+    .await
 }
 
 #[cfg(test)]
