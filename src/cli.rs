@@ -318,16 +318,6 @@ pub enum Commands {
         #[arg(long)]
         all: bool,
     },
-
-    /// Start an interactive shell in an existing jail
-    Shell {
-        /// Name of the jail (auto-detected from current directory if not provided)
-        name: Option<String>,
-
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-    },
 }
 
 impl Commands {

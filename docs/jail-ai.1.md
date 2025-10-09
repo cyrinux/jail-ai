@@ -20,7 +20,6 @@ jail-ai codex [OPTIONS] [-- ARGS...]
 jail-ai list [-c|--current]
 jail-ai clean-all [-f|--force] [-v|--volume]
 jail-ai upgrade [NAME] [--all] [OPTIONS]
-jail-ai shell [NAME]
 ```
 
 ## DESCRIPTION
@@ -29,7 +28,7 @@ jail-ai shell [NAME]
 
 The tool automatically builds and manages custom container images with development tools, handles workspace mounting, manages authentication credentials, and provides granular control over resource limits and network access.
 
-When no command is specified, jail-ai enters an interactive shell in the default jail for the current directory.
+Use AI agent commands (e.g., `jail-ai claude`, `jail-ai copilot`) to quickly start agents in jails, or use `jail-ai create` to set up custom jails.
 
 ## COMMANDS
 
@@ -80,10 +79,6 @@ Stop and remove all jail-ai containers. Use `-f` to skip confirmation and `-v` t
 ### upgrade [NAME] [OPTIONS]
 
 Upgrade a jail by recreating it with the latest image version. Use `--all` to upgrade all jails. Use `-i` to specify a different image. The jail's configuration and mounts are preserved.
-
-### shell [NAME]
-
-Start an interactive shell in an existing jail. If no name is provided, starts a shell in the jail associated with the current directory. This is useful for inspecting or debugging a running jail.
 
 ## GLOBAL OPTIONS
 
@@ -140,11 +135,6 @@ jail-ai create my-agent --no-workspace
 Execute command in jail (non-interactive):
 ```bash
 jail-ai exec my-agent -- ls -la /workspace
-```
-
-Start an interactive shell in a jail:
-```bash
-jail-ai shell my-agent
 ```
 
 ### AI Agent Usage
