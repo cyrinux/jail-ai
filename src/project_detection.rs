@@ -143,6 +143,7 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
             })
         })
         .is_some()
+        || path.join("atlantis.yaml").exists()
         || path.join("terraform.tfstate").exists()
         || path.join(".terraform").exists()
         || path.join(".terraform.lock.hcl").exists()
