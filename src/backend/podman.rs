@@ -162,6 +162,7 @@ impl JailBackend for PodmanBackend {
                     &workspace_path,
                     agent_name,
                     config.force_rebuild,
+                    &config.force_layers,
                     config.verbose,
                 )
                 .await?
@@ -429,6 +430,7 @@ impl JailBackend for PodmanBackend {
                 cpu_quota,
             },
             force_rebuild: false,
+            force_layers: Vec::new(),
             use_layered_images: true,
             verbose: false,
         })
@@ -457,6 +459,7 @@ mod tests {
                 cpu_quota: Some(50),
             },
             force_rebuild: false,
+            force_layers: Vec::new(),
             use_layered_images: true,
             verbose: false,
         };

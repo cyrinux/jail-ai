@@ -17,6 +17,8 @@ const NIX_IMAGE_NAME: &str = "localhost/jail-ai-nix:latest";
 const PHP_IMAGE_NAME: &str = "localhost/jail-ai-php:latest";
 const CPP_IMAGE_NAME: &str = "localhost/jail-ai-cpp:latest";
 const CSHARP_IMAGE_NAME: &str = "localhost/jail-ai-csharp:latest";
+const TERRAFORM_IMAGE_NAME: &str = "localhost/jail-ai-terraform:latest";
+const KUBERNETES_IMAGE_NAME: &str = "localhost/jail-ai-kubernetes:latest";
 
 /// Containerfiles embedded from the repository
 const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base.Containerfile");
@@ -29,6 +31,8 @@ const NIX_CONTAINERFILE: &str = include_str!("../containerfiles/nix.Containerfil
 const PHP_CONTAINERFILE: &str = include_str!("../containerfiles/php.Containerfile");
 const CPP_CONTAINERFILE: &str = include_str!("../containerfiles/cpp.Containerfile");
 const CSHARP_CONTAINERFILE: &str = include_str!("../containerfiles/csharp.Containerfile");
+const TERRAFORM_CONTAINERFILE: &str = include_str!("../containerfiles/terraform.Containerfile");
+const KUBERNETES_CONTAINERFILE: &str = include_str!("../containerfiles/kubernetes.Containerfile");
 const AGENT_CLAUDE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-claude.Containerfile");
 const AGENT_COPILOT_CONTAINERFILE: &str =
@@ -66,6 +70,8 @@ fn get_language_image_name(project_type: &ProjectType) -> &'static str {
         ProjectType::Php => PHP_IMAGE_NAME,
         ProjectType::Cpp => CPP_IMAGE_NAME,
         ProjectType::CSharp => CSHARP_IMAGE_NAME,
+        ProjectType::Terraform => TERRAFORM_IMAGE_NAME,
+        ProjectType::Kubernetes => KUBERNETES_IMAGE_NAME,
         ProjectType::Multi(_) | ProjectType::Generic => BASE_IMAGE_NAME,
     }
 }
@@ -93,6 +99,8 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "php" => Some(PHP_CONTAINERFILE),
         "cpp" => Some(CPP_CONTAINERFILE),
         "csharp" => Some(CSHARP_CONTAINERFILE),
+        "terraform" => Some(TERRAFORM_CONTAINERFILE),
+        "kubernetes" => Some(KUBERNETES_CONTAINERFILE),
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
         "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
@@ -100,6 +108,14 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "agent-codex" => Some(AGENT_CODEX_CONTAINERFILE),
         _ => None,
     }
+}
+
+/// Generate a hash of the Containerfile content
+fn hash_containerfile(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let hash = hasher.finalize();
+    hex::encode(hash)[..16].to_string() // Use first 16 chars
 }
 
 /// Check if an image exists locally
@@ -110,6 +126,61 @@ pub async fn image_exists(image_name: &str) -> Result<bool> {
     match cmd.output().await {
         Ok(output) => Ok(output.status.success()),
         Err(_) => Ok(false),
+    }
+}
+
+/// Get the containerfile hash label from an image
+async fn get_image_containerfile_hash(image_name: &str) -> Result<Option<String>> {
+    let mut cmd = Command::new("podman");
+    cmd.arg("image")
+        .arg("inspect")
+        .arg(image_name)
+        .arg("--format")
+        .arg("{{index .Labels \"ai.jail.containerfile.hash\"}}");
+
+    match cmd.output().await {
+        Ok(output) if output.status.success() => {
+            let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if hash.is_empty() || hash == "<no value>" {
+                Ok(None)
+            } else {
+                Ok(Some(hash))
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Check if an image needs to be rebuilt based on Containerfile changes
+async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool> {
+    // If image doesn't exist, it needs to be built
+    if !image_exists(image_name).await? {
+        return Ok(true);
+    }
+
+    // Get the current Containerfile content
+    let containerfile_content = match get_containerfile_content(layer_name) {
+        Some(content) => content,
+        None => return Ok(false), // Unknown layer, don't rebuild
+    };
+
+    // Calculate current hash
+    let current_hash = hash_containerfile(containerfile_content);
+
+    // Get the hash from the image
+    let image_hash = get_image_containerfile_hash(image_name).await?;
+
+    // Rebuild if hashes don't match
+    match image_hash {
+        Some(hash) => Ok(hash != current_hash),
+        None => {
+            // No hash label found, rebuild to add it
+            debug!(
+                "No containerfile hash label found for {}, rebuilding",
+                image_name
+            );
+            Ok(true)
+        }
     }
 }
 
@@ -126,6 +197,8 @@ async fn build_shared_layer(layer_name: &str, base_image: Option<&str>, verbose:
         "php" => PHP_IMAGE_NAME.to_string(),
         "cpp" => CPP_IMAGE_NAME.to_string(),
         "csharp" => CSHARP_IMAGE_NAME.to_string(),
+        "terraform" => TERRAFORM_IMAGE_NAME.to_string(),
+        "kubernetes" => KUBERNETES_IMAGE_NAME.to_string(),
         _ => {
             return Err(JailError::Backend(format!(
                 "Unknown shared layer: {}",
@@ -134,9 +207,9 @@ async fn build_shared_layer(layer_name: &str, base_image: Option<&str>, verbose:
         }
     };
 
-    // Check if image already exists
-    if image_exists(&image_name).await? {
-        debug!("Shared layer {} already exists", image_name);
+    // Check if image needs to be rebuilt (doesn't exist or Containerfile changed)
+    if !image_needs_rebuild(&image_name, layer_name).await? {
+        debug!("Shared layer {} is up to date", image_name);
         return Ok(image_name);
     }
 
@@ -174,6 +247,9 @@ async fn build_image_from_containerfile(
         ))
     })?;
 
+    // Generate hash of Containerfile content
+    let containerfile_hash = hash_containerfile(containerfile_content);
+
     // Create a temporary file for the Containerfile
     let temp_dir = tempfile::tempdir()
         .map_err(|e| JailError::Backend(format!("Failed to create temp dir: {}", e)))?;
@@ -185,6 +261,10 @@ async fn build_image_from_containerfile(
     // Build command
     let mut cmd = Command::new("podman");
     cmd.arg("build").arg("-t").arg(image_tag);
+
+    // Add hash label to track Containerfile changes
+    cmd.arg("--label")
+        .arg(format!("ai.jail.containerfile.hash={}", containerfile_hash));
 
     // Add base image build arg if provided
     if let Some(base) = base_image {
@@ -236,6 +316,7 @@ pub async fn build_project_image(
     workspace_path: &Path,
     agent_name: Option<&str>,
     force_rebuild: bool,
+    force_layers: &[String],
     verbose: bool,
 ) -> Result<String> {
     // Generate project-specific identifier
@@ -247,7 +328,11 @@ pub async fn build_project_image(
     info!("Detected project type: {:?}", project_type);
 
     // Step 1: Build base layer (shared :latest)
-    let base_image = if force_rebuild || !image_exists(BASE_IMAGE_NAME).await? {
+    let should_rebuild_base = force_rebuild
+        || force_layers.contains(&"base".to_string())
+        || !image_exists(BASE_IMAGE_NAME).await?;
+    
+    let base_image = if should_rebuild_base {
         if verbose {
             info!("Building base layer...");
         }
@@ -265,7 +350,11 @@ pub async fn build_project_image(
             for lang_type in types {
                 let layer_name = lang_type.language_layer();
                 let lang_image_name = get_language_image_name(lang_type);
-                current_image = if force_rebuild || !image_exists(lang_image_name).await? {
+                let should_rebuild_lang = force_rebuild
+                    || force_layers.contains(&layer_name.to_string())
+                    || !image_exists(lang_image_name).await?;
+                
+                current_image = if should_rebuild_lang {
                     build_shared_layer(layer_name, Some(&current_image), verbose).await?
                 } else {
                     lang_image_name.to_string()
@@ -276,7 +365,11 @@ pub async fn build_project_image(
         _ => {
             let layer_name = project_type.language_layer();
             let lang_image_name = get_language_image_name(&project_type);
-            if force_rebuild || !image_exists(lang_image_name).await? {
+            let should_rebuild_lang = force_rebuild
+                || force_layers.contains(&layer_name.to_string())
+                || !image_exists(lang_image_name).await?;
+            
+            if should_rebuild_lang {
                 build_shared_layer(layer_name, Some(&base_image), verbose).await?
             } else {
                 debug!("Language layer {} already exists", lang_image_name);
@@ -297,8 +390,11 @@ pub async fn build_project_image(
         // This ensures the agent inherits all language layers built above
         let agent_layer = format!("agent-{}", agent);
         let final_image_name = get_agent_project_image_name(agent, &project_hash);
+        let should_rebuild_agent = force_rebuild
+            || force_layers.contains(&agent_layer)
+            || !image_exists(&final_image_name).await?;
 
-        if force_rebuild || !image_exists(&final_image_name).await? {
+        if should_rebuild_agent {
             if verbose {
                 info!(
                     "Building project-specific agent image: {}",
@@ -352,9 +448,10 @@ pub async fn ensure_layered_image_available(
     workspace_path: &Path,
     agent_name: Option<&str>,
     force_rebuild: bool,
+    force_layers: &[String],
     verbose: bool,
 ) -> Result<String> {
-    build_project_image(workspace_path, agent_name, force_rebuild, verbose).await
+    build_project_image(workspace_path, agent_name, force_rebuild, force_layers, verbose).await
 }
 
 #[cfg(test)]

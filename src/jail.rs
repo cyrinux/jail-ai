@@ -114,6 +114,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn force_layers(mut self, layers: Vec<String>) -> Self {
+        self.config.force_layers = layers;
+        self
+    }
+
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.config.verbose = verbose;
         self
