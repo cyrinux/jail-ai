@@ -23,6 +23,18 @@ impl PodmanBackend {
         }
     }
 
+    /// Get the image currently used by a container
+    pub async fn get_container_image(&self, name: &str) -> Result<String> {
+        let mut cmd = Command::new("podman");
+        cmd.arg("inspect")
+            .arg(name)
+            .arg("--format")
+            .arg("{{.Config.Image}}");
+
+        let output = run_command(&mut cmd).await?;
+        Ok(output.trim().to_string())
+    }
+
     fn build_run_args(&self, config: &JailConfig) -> Vec<String> {
         let mut args = vec![
             "run".to_string(),
@@ -99,12 +111,15 @@ impl JailBackend for PodmanBackend {
 
         // If force_rebuild is true, stop and remove existing container first
         if config.force_rebuild && self.exists(&config.name).await? {
-            info!("Force rebuild enabled: stopping and removing existing container '{}'", config.name);
-            
+            info!(
+                "Force rebuild enabled: stopping and removing existing container '{}'",
+                config.name
+            );
+
             // Stop and remove the existing container (using -f flag to force)
             let mut rm_cmd = Command::new("podman");
             rm_cmd.arg("rm").arg("-f").arg(&config.name);
-            
+
             if let Err(e) = run_command(&mut rm_cmd).await {
                 // Log warning but continue - the container might already be gone
                 debug!("Failed to remove existing container (may not exist): {}", e);

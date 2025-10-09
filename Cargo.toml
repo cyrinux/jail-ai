@@ -1,6 +1,6 @@
 [package]
 name = "jail-ai"
-version = "0.31.1"
+version = "0.31.2"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"

@@ -355,8 +355,7 @@ impl Commands {
         let target = PathBuf::from(parts[1]);
 
         // Validate mount source is safe
-        crate::validate_mount_source(&source)
-            .map_err(|e| e.to_string())?;
+        crate::validate_mount_source(&source).map_err(|e| e.to_string())?;
 
         Ok(crate::config::BindMount {
             source,
@@ -471,7 +470,7 @@ mod tests {
         assert!(!mount.readonly);
 
         assert!(Commands::parse_mount("invalid").is_err());
-        
+
         // Test unsafe mount validation
         assert!(Commands::parse_mount("/:/dst").is_err());
         // Test with actual home directory path (should fail)
@@ -572,7 +571,7 @@ mod tests {
         // Test that the --auth parameter is properly parsed
         let args = vec!["jail-ai", "codex", "--auth", "sk-test123", "--codex-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
-        
+
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert_eq!(common.auth, Some("sk-test123".to_string()));
@@ -587,7 +586,7 @@ mod tests {
         // Test that the --auth parameter is optional
         let args = vec!["jail-ai", "codex", "--codex-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
-        
+
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert_eq!(common.auth, None);

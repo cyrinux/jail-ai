@@ -110,6 +110,44 @@ cargo run -- claude  # Uses shared image: localhost/jail-ai-agent-claude:base-ru
 cargo run -- claude --isolated  # Uses isolated image: localhost/jail-ai-agent-claude:abc12345
 ```
 
+### Container Upgrade Detection
+
+When you re-enter an existing container, jail-ai automatically checks if a newer version of the underlying image is available. This happens when:
+
+- Base images or dependencies have been updated
+- New tools or features have been added to the Containerfiles
+- Security patches have been applied
+- The `--force-rebuild` flag was used to rebuild layers
+
+If an upgrade is available, you'll see a prompt like:
+
+```
+🔄 Container image update available!
+  Current image:  localhost/jail-ai-agent-claude:base-rust-nodejs-abc123
+  Expected image: localhost/jail-ai-agent-claude:base-rust-nodejs-def456
+
+This could be due to:
+  • Updated base images or dependencies
+  • New tools or features added
+  • Security patches
+
+Would you like to upgrade the container to use the newer image? (y/N):
+```
+
+**How it works:**
+
+- The check is automatic when entering an existing container (no `--force-rebuild` needed)
+- It compares the container's current image with what would be built based on the latest Containerfiles
+- If you choose to upgrade (type `y`), the container is recreated with the new image
+- If you decline (type `N` or just press Enter), the existing container continues to run
+- Your data in `/home/agent` is preserved via persistent volumes during upgrades
+
+**To force an upgrade without prompting:**
+
+```bash
+cargo run -- claude --force-rebuild
+```
+
 ### Version Management
 
 - Version is managed in `Cargo.toml` and should follow semantic versioning
@@ -135,6 +173,7 @@ cargo run -- claude --isolated  # Uses isolated image: localhost/jail-ai-agent-c
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
 - **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace
+- **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks if the underlying image has been updated and prompts you to upgrade
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags

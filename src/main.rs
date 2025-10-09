@@ -24,29 +24,30 @@ use git_gpg::create_claude_json_in_container;
 /// Validate that a mount source is safe for jail execution
 /// Prevents mounting root filesystem (/) or entire home directory
 pub fn validate_mount_source(source: &std::path::Path) -> error::Result<()> {
-    let source = source.canonicalize()
-        .map_err(error::JailError::Io)?;
-    
+    let source = source.canonicalize().map_err(error::JailError::Io)?;
+
     // Check if source is the root filesystem
     if source == std::path::PathBuf::from("/") {
         return Err(error::JailError::UnsafeMount(
-            "Cannot mount root filesystem (/) into container".to_string()
+            "Cannot mount root filesystem (/) into container".to_string(),
         ));
     }
-    
+
     // Get the user's home directory
     let home_dir = std::env::var("HOME")
         .map_err(|_| error::JailError::Config("HOME environment variable not set".to_string()))?;
-    let home_path = std::path::PathBuf::from(&home_dir).canonicalize()
+    let home_path = std::path::PathBuf::from(&home_dir)
+        .canonicalize()
         .map_err(error::JailError::Io)?;
-    
+
     // Check if source is the entire home directory
     if source == home_path {
-        return Err(error::JailError::UnsafeMount(
-            format!("Cannot mount entire home directory ({}) into container", home_path.display())
-        ));
+        return Err(error::JailError::UnsafeMount(format!(
+            "Cannot mount entire home directory ({}) into container",
+            home_path.display()
+        )));
     }
-    
+
     // Allow all other directories, including home subdirectories
     // Users should be able to mount any specific directory they want
     Ok(())
@@ -184,10 +185,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     if !no_workspace {
                         let workspace_dir =
                             get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
-                        
+
                         // Validate workspace directory is safe
                         agent_commands::validate_workspace_directory(&workspace_dir)?;
-                        
+
                         info!(
                             "Auto-mounting {} to {}",
                             workspace_dir.display(),
@@ -592,10 +593,10 @@ async fn create_default_jail(
 
     // Auto-mount workspace (git root if available, otherwise provided workspace)
     let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
-    
+
     // Validate workspace directory is safe
     agent_commands::validate_workspace_directory(&workspace_dir)?;
-    
+
     info!("Auto-mounting {} to /workspace", workspace_dir.display());
     builder = builder.bind_mount(workspace_dir, "/workspace", false);
 

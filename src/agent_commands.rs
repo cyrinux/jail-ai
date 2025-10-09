@@ -7,7 +7,7 @@ use crate::git_gpg::{
 use crate::jail::{JailBuilder, JailManager};
 use crate::jail_setup::{self, mount_agent_configs, setup_default_environment};
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 /// Parameters for AI agent commands
 pub struct AgentCommandParams {
@@ -73,22 +73,23 @@ pub fn get_git_root() -> Option<PathBuf> {
 /// Validate that a workspace directory is safe for jail execution
 /// Prevents execution in home directory root and system directories
 pub fn validate_workspace_directory(workspace_dir: &Path) -> Result<()> {
-    let workspace_dir = workspace_dir.canonicalize()
-        .map_err(error::JailError::Io)?;
-    
+    let workspace_dir = workspace_dir.canonicalize().map_err(error::JailError::Io)?;
+
     // Get the user's home directory
     let home_dir = std::env::var("HOME")
         .map_err(|_| error::JailError::Config("HOME environment variable not set".to_string()))?;
-    let home_path = PathBuf::from(&home_dir).canonicalize()
+    let home_path = PathBuf::from(&home_dir)
+        .canonicalize()
         .map_err(error::JailError::Io)?;
-    
+
     // Check if workspace is the home directory root
     if workspace_dir == home_path {
-        return Err(error::JailError::UnsafeWorkspace(
-            format!("Cannot run jail-ai in home directory root: {}", workspace_dir.display())
-        ));
+        return Err(error::JailError::UnsafeWorkspace(format!(
+            "Cannot run jail-ai in home directory root: {}",
+            workspace_dir.display()
+        )));
     }
-    
+
     // Check if workspace is a system directory
     let system_dirs = [
         "/",
@@ -108,36 +109,37 @@ pub fn validate_workspace_directory(workspace_dir: &Path) -> Result<()> {
         "/proc",
         "/dev",
     ];
-    
+
     for system_dir in &system_dirs {
         if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
             if workspace_dir == system_path {
-                return Err(error::JailError::UnsafeWorkspace(
-                    format!("Cannot run jail-ai in system directory: {}", workspace_dir.display())
-                ));
+                return Err(error::JailError::UnsafeWorkspace(format!(
+                    "Cannot run jail-ai in system directory: {}",
+                    workspace_dir.display()
+                )));
             }
         }
     }
-    
+
     // Check if workspace is inside a system directory (but not root)
     for system_dir in &system_dirs {
         if *system_dir == "/" {
             // Skip root directory check as everything is under root
             continue;
         }
-        
+
         if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
             if workspace_dir.starts_with(&system_path) && workspace_dir != system_path {
-                return Err(error::JailError::UnsafeWorkspace(
-                    format!("Cannot run jail-ai in system subdirectory: {}", workspace_dir.display())
-                ));
+                return Err(error::JailError::UnsafeWorkspace(format!(
+                    "Cannot run jail-ai in system subdirectory: {}",
+                    workspace_dir.display()
+                )));
             }
         }
     }
-    
+
     Ok(())
 }
-
 
 /// Map agent command names to normalized agent identifiers
 /// (e.g., "cursor-agent" -> "cursor")
@@ -146,6 +148,47 @@ fn normalize_agent_name(agent_command: &str) -> &str {
         "cursor-agent" => "cursor",
         _ => agent_command,
     }
+}
+
+/// Check if a container's image is outdated and needs an upgrade
+/// Returns (needs_upgrade, current_image, expected_image)
+async fn check_container_upgrade_needed(
+    jail_name: &str,
+    workspace_path: &Path,
+    agent_name: &str,
+    isolated: bool,
+) -> Result<(bool, String, String)> {
+    // Get the current image used by the container
+    let backend = crate::backend::podman::PodmanBackend::new();
+    let current_image = backend.get_container_image(jail_name).await?;
+
+    // Determine what image should be used now based on current project state
+    let expected_image =
+        crate::image_layers::get_expected_image_name(workspace_path, Some(agent_name), isolated)
+            .await?;
+
+    // Check if images differ
+    let needs_upgrade = current_image != expected_image;
+
+    Ok((needs_upgrade, current_image, expected_image))
+}
+
+/// Prompt user to upgrade container
+fn prompt_upgrade() -> Result<bool> {
+    use std::io::{self, Write};
+
+    print!("\nWould you like to upgrade the container to use the newer image? (y/N): ");
+    io::stdout()
+        .flush()
+        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| error::JailError::Config(format!("Failed to read input: {e}")))?;
+
+    let answer = input.trim().to_lowercase();
+    Ok(answer == "y" || answer == "yes")
 }
 
 /// Helper function to run AI agent commands (claude, copilot, cursor-agent, gemini)
@@ -176,18 +219,60 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     };
     let temp_jail = JailManager::new(temp_config);
     let jail_exists = temp_jail.exists().await?;
-    let should_recreate = params.force_rebuild || !params.force_layers.is_empty();
+    let mut should_recreate = params.force_rebuild || !params.force_layers.is_empty();
 
     if !jail_exists {
         info!("Creating new jail: {}", jail_name);
     } else if should_recreate {
-        info!("Jail exists but recreation requested (force_rebuild={}, force_layers={:?})", 
-              params.force_rebuild, params.force_layers);
+        info!(
+            "Jail exists but recreation requested (force_rebuild={}, force_layers={:?})",
+            params.force_rebuild, params.force_layers
+        );
+    } else {
+        // Jail exists and no forced recreation - check if upgrade is available
+        info!("Checking if container image needs upgrade...");
+
+        let workspace_dir = get_git_root().unwrap_or(cwd.clone());
+        match check_container_upgrade_needed(
+            &jail_name,
+            &workspace_dir,
+            normalized_agent,
+            params.isolated,
+        )
+        .await
+        {
+            Ok((true, current_img, expected_img)) => {
+                println!("\n🔄 Container image update available!");
+                println!("  Current image:  {}", current_img);
+                println!("  Expected image: {}", expected_img);
+                println!("\nThis could be due to:");
+                println!("  • Updated base images or dependencies");
+                println!("  • New tools or features added");
+                println!("  • Security patches");
+
+                if prompt_upgrade()? {
+                    info!("User chose to upgrade container");
+                    should_recreate = true;
+                } else {
+                    info!("User declined upgrade, continuing with existing container");
+                }
+            }
+            Ok((false, _, _)) => {
+                info!("Container image is up to date");
+            }
+            Err(e) => {
+                warn!("Failed to check for container upgrade: {}", e);
+                info!("Continuing with existing container");
+            }
+        }
     }
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            info!("Recreating jail '{}' due to --force-rebuild or --layers", jail_name);
+            info!(
+                "Recreating jail '{}' due to --force-rebuild or --layers",
+                jail_name
+            );
         }
 
         // Only use custom image if explicitly provided (not default)
@@ -212,10 +297,10 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
         // Auto-mount workspace (git root if available, otherwise current directory)
         if !params.no_workspace {
             let workspace_dir = get_git_root().unwrap_or(cwd.clone());
-            
+
             // Validate workspace directory is safe
             validate_workspace_directory(&workspace_dir)?;
-            
+
             info!(
                 "Auto-mounting {} to {}",
                 workspace_dir.display(),
@@ -334,12 +419,26 @@ pub async fn run_ai_agent_command(agent_command: &str, params: AgentCommandParam
     // Check if the jail uses the Nix wrapper by testing if it exists in the agent's home directory
     // If it does, wrap the command with nix-wrapper to ensure flake environment is loaded
     // Use a simple file check that's fast and won't hang
-    let wrapper_check = jail.exec(&["sh".to_string(), "-c".to_string(), "[ -x /home/agent/nix-wrapper ] && echo yes || echo no".to_string()], false).await;
-    let uses_nix_wrapper = wrapper_check.map(|output| output.trim() == "yes").unwrap_or(false);
+    let wrapper_check = jail
+        .exec(
+            &[
+                "sh".to_string(),
+                "-c".to_string(),
+                "[ -x /usr/local/bin/nix-wrapper ] && echo yes || echo no".to_string(),
+            ],
+            false,
+        )
+        .await;
+    let uses_nix_wrapper = wrapper_check
+        .map(|output| output.trim() == "yes")
+        .unwrap_or(false);
 
     let command = if uses_nix_wrapper {
         // Wrap command with nix-wrapper to load flake environment
-        let mut cmd = vec!["/home/agent/nix-wrapper".to_string(), agent_command.to_string()];
+        let mut cmd = vec![
+            "/usr/local/bin/nix-wrapper".to_string(),
+            agent_command.to_string(),
+        ];
         cmd.extend(params.args);
         cmd
     } else {

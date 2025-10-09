@@ -183,6 +183,43 @@ pub async fn image_exists(image_name: &str) -> Result<bool> {
     }
 }
 
+/// Get the expected image name for a workspace and agent
+/// This determines what image should be used based on current project state
+/// without actually building it
+pub async fn get_expected_image_name(
+    workspace_path: &Path,
+    agent_name: Option<&str>,
+    isolated: bool,
+) -> Result<String> {
+    let project_hash = generate_project_hash(workspace_path);
+    let project_type = detect_project_type(workspace_path);
+
+    if let Some(agent) = agent_name {
+        // Determine the final image tag based on isolation mode
+        let image_tag = if isolated {
+            // Isolated mode: Use workspace hash
+            project_hash
+        } else {
+            // Shared mode: Use layer composition
+            generate_layer_tag(&project_type, Some(agent))
+        };
+
+        Ok(get_agent_project_image_name(agent, &image_tag))
+    } else {
+        // No agent specified, use project image
+        let image_tag = if isolated {
+            project_hash
+        } else {
+            project_type.language_layer().to_string()
+        };
+
+        Ok(get_project_image_name(
+            project_type.language_layer(),
+            &image_tag,
+        ))
+    }
+}
+
 /// Get the containerfile hash label from an image
 async fn get_image_containerfile_hash(image_name: &str) -> Result<Option<String>> {
     let mut cmd = Command::new("podman");
@@ -384,8 +421,11 @@ pub async fn build_project_image(
     // Detect project type (skip autodetection if force_layers is specified)
     let project_type = if !force_layers.is_empty() {
         // Bypass autodetection: use only the specified layers
-        info!("Bypassing autodetection: using specified layers: {:?}", force_layers);
-        
+        info!(
+            "Bypassing autodetection: using specified layers: {:?}",
+            force_layers
+        );
+
         // Build a synthetic ProjectType from specified layers
         let mut lang_types = Vec::new();
         for layer in force_layers {
@@ -401,12 +441,12 @@ pub async fn build_project_image(
                 "csharp" => lang_types.push(ProjectType::CSharp),
                 "terraform" => lang_types.push(ProjectType::Terraform),
                 "kubernetes" => lang_types.push(ProjectType::Kubernetes),
-                "base" => {}, // base is implicit
-                layer_name if layer_name.starts_with("agent-") => {}, // ignore agent layers
+                "base" => {}                                         // base is implicit
+                layer_name if layer_name.starts_with("agent-") => {} // ignore agent layers
                 _ => debug!("Unknown layer '{}' in force_layers, ignoring", layer),
             }
         }
-        
+
         match lang_types.len() {
             0 => ProjectType::Generic,
             1 => lang_types[0].clone(),
