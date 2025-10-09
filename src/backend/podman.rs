@@ -38,8 +38,7 @@ impl PodmanBackend {
         
         args.extend(vec![
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
-            "--userns=keep-id".to_string(),
-            "--restart=always".to_string(),
+            "--userns=keep-id".to_string()
         ]);
 
         // Persistent volume for /home/agent to preserve data across upgrades
