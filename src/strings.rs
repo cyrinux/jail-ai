@@ -1,9 +1,8 @@
 /// User-facing strings for jail-ai
-/// 
+///
 /// This module contains all user-facing strings as constants for future i18n support.
 /// Currently only English strings are provided, but this structure allows for easy
 /// addition of other languages in the future.
-
 /// Update and upgrade related messages
 pub const UPDATE_AVAILABLE: &str = "\n🔄 Update available for your jail environment!";
 pub const OUTDATED_LAYERS_DETECTED: &str = "\n📦 Outdated layers detected:";

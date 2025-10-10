@@ -129,6 +129,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn pre_create_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
+        self.config.pre_create_dirs = dirs;
+        self
+    }
+
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }

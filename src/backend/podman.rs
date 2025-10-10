@@ -221,6 +221,41 @@ impl JailBackend for PodmanBackend {
         debug!("Creating container with args: {:?}", args);
         run_command(&mut cmd).await?;
 
+        // Pre-create directories if needed (for worktree support)
+        if !config.pre_create_dirs.is_empty() {
+            info!(
+                "Pre-creating {} directories in container for worktree support",
+                config.pre_create_dirs.len()
+            );
+
+            for dir in &config.pre_create_dirs {
+                debug!("Creating directory: {}", dir.display());
+
+                let mut mkdir_cmd = Command::new("podman");
+                mkdir_cmd
+                    .arg("exec")
+                    .arg(&config.name)
+                    .arg("mkdir")
+                    .arg("-p")
+                    .arg(dir.to_str().ok_or_else(|| {
+                        JailError::Backend(format!(
+                            "Invalid directory path: {}",
+                            dir.display()
+                        ))
+                    })?);
+
+                run_command(&mut mkdir_cmd).await.map_err(|e| {
+                    JailError::Backend(format!(
+                        "Failed to create directory {} in container: {}",
+                        dir.display(),
+                        e
+                    ))
+                })?;
+            }
+
+            info!("Pre-created directories successfully");
+        }
+
         info!("Jail {} created successfully", config.name);
         Ok(())
     }
@@ -456,6 +491,7 @@ impl JailBackend for PodmanBackend {
             use_layered_images: true,
             isolated: false,
             verbose: false,
+            pre_create_dirs: Vec::new(), // Not persisted in container metadata
         })
     }
 }
@@ -486,6 +522,7 @@ mod tests {
             use_layered_images: true,
             isolated: false,
             verbose: false,
+            pre_create_dirs: Vec::new(),
         };
 
         let args = backend.build_run_args(&config);

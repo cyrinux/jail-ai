@@ -44,6 +44,10 @@ pub struct JailConfig {
     /// Show verbose output (e.g., image build logs)
     #[serde(default)]
     pub verbose: bool,
+
+    /// Directories to create in container before mounting (for worktrees)
+    #[serde(default)]
+    pub pre_create_dirs: Vec<PathBuf>,
 }
 
 fn default_true() -> bool {
@@ -121,6 +125,7 @@ impl Default for JailConfig {
             use_layered_images: true,
             isolated: false,
             verbose: false,
+            pre_create_dirs: Vec::new(),
         }
     }
 }

@@ -342,18 +342,66 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
         builder = setup_default_environment(builder);
 
         // Auto-mount workspace (git root if available, otherwise current directory)
+        // Special handling for git worktrees
         if !params.no_workspace {
             let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
 
             // Validate workspace directory is safe
             validate_workspace_directory(&workspace_dir)?;
 
-            info!(
-                "Auto-mounting {} to {}",
-                workspace_dir.display(),
-                params.workspace_path
-            );
-            builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
+            // Check if this is a git worktree
+            if let Some(worktree_info) = crate::worktree::detect_worktree(&workspace_dir)? {
+                info!("Detected git worktree, setting up dual-mount configuration");
+
+                // Collect paths that need parent directory creation
+                let paths_to_mount = vec![
+                    worktree_info.worktree_path.as_path(),
+                    worktree_info.main_git_dir.as_path(),
+                ];
+                let parent_dirs = crate::worktree::get_required_parent_dirs(&paths_to_mount);
+
+                info!("Will create {} parent directories in container", parent_dirs.len());
+                builder = builder.pre_create_dirs(parent_dirs);
+
+                // Mount 1: Worktree at /workspace (familiar location)
+                info!(
+                    "Mounting worktree {} to /workspace",
+                    worktree_info.worktree_path.display()
+                );
+                builder = builder.bind_mount(&worktree_info.worktree_path, "/workspace", false);
+
+                // Mount 2: Worktree at original absolute path (preserve .git file reference)
+                info!(
+                    "Mounting worktree {} to {} (preserve absolute path)",
+                    worktree_info.worktree_path.display(),
+                    worktree_info.worktree_path.display()
+                );
+                builder = builder.bind_mount(
+                    &worktree_info.worktree_path,
+                    &worktree_info.worktree_path,
+                    false,
+                );
+
+                // Mount 3: Main .git at original absolute path (read-write for git operations)
+                info!(
+                    "Mounting main git directory {} to {} (read-write)",
+                    worktree_info.main_git_dir.display(),
+                    worktree_info.main_git_dir.display()
+                );
+                builder = builder.bind_mount(
+                    &worktree_info.main_git_dir,
+                    &worktree_info.main_git_dir,
+                    false,
+                );
+            } else {
+                // Regular directory, not a worktree
+                info!(
+                    "Auto-mounting {} to {}",
+                    workspace_dir.display(),
+                    params.workspace_path
+                );
+                builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
+            }
         }
 
         // Auto-mount agent config directories

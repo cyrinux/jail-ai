@@ -10,6 +10,7 @@ mod jail;
 mod jail_setup;
 mod project_detection;
 mod strings;
+mod worktree;
 
 use clap::Parser;
 use cli::{Cli, Commands};
