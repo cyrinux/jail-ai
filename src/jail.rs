@@ -99,6 +99,20 @@ impl JailBuilder {
         self
     }
 
+    pub fn port_mapping(
+        mut self,
+        host_port: u16,
+        container_port: u16,
+        protocol: impl Into<String>,
+    ) -> Self {
+        self.config.port_mappings.push(crate::config::PortMapping {
+            host_port,
+            container_port,
+            protocol: protocol.into(),
+        });
+        self
+    }
+
     pub fn memory_limit(mut self, mb: u64) -> Self {
         self.config.limits.memory_mb = Some(mb);
         self

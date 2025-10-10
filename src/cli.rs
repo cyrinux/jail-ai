@@ -20,6 +20,10 @@ pub struct AgentCommandOptions {
     #[arg(short = 'm', long)]
     pub mount: Vec<String>,
 
+    /// Port mapping from host to container (format: host_port:container_port or host_port:container_port/protocol)
+    #[arg(short = 'p', long)]
+    pub port: Vec<String>,
+
     /// Environment variable (format: KEY=VALUE)
     #[arg(short = 'e', long)]
     pub env: Vec<String>,
@@ -64,7 +68,11 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub codex_dir: bool,
 
-    /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
+    /// Mount entire ~/.config/jules directory for Jules CLI
+    #[arg(long)]
+    pub jules_dir: bool,
+
+    /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -132,6 +140,10 @@ pub enum Commands {
         #[arg(short = 'm', long)]
         mount: Vec<String>,
 
+        /// Port mapping from host to container (format: host_port:container_port or host_port:container_port/protocol)
+        #[arg(short = 'p', long)]
+        port: Vec<String>,
+
         /// Environment variable (format: KEY=VALUE)
         #[arg(short, long)]
         env: Vec<String>,
@@ -180,7 +192,11 @@ pub enum Commands {
         #[arg(long)]
         codex_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
+        /// Mount entire ~/.config/jules directory for Jules CLI
+        #[arg(long)]
+        jules_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -295,6 +311,18 @@ pub enum Commands {
         args: Vec<String>,
     },
 
+    /// Quick start Jules CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai jules --jules-dir -- chat "help with this code"
+    Jules {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+
+        /// Additional arguments to pass to jules (after --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// List all jails
     List {
         /// Show only jails for current directory
@@ -381,6 +409,52 @@ impl Commands {
         }
 
         Ok((parts[0].to_string(), parts[1].to_string()))
+    }
+
+    pub fn parse_port(port_str: &str) -> Result<crate::config::PortMapping, String> {
+        // Split by '/' to extract protocol if present
+        let parts: Vec<&str> = port_str.split('/').collect();
+        let port_part = parts[0];
+        let protocol = if parts.len() > 1 {
+            let proto = parts[1].to_lowercase();
+            if proto != "tcp" && proto != "udp" {
+                return Err(format!(
+                    "Invalid protocol '{}'. Expected: tcp or udp",
+                    parts[1]
+                ));
+            }
+            proto
+        } else {
+            "tcp".to_string()
+        };
+
+        // Split by ':' to extract host and container ports
+        let port_parts: Vec<&str> = port_part.split(':').collect();
+        if port_parts.len() != 2 {
+            return Err(format!(
+                "Invalid port mapping format '{port_str}'. Expected: host_port:container_port or host_port:container_port/protocol"
+            ));
+        }
+
+        let host_port = port_parts[0].parse::<u16>().map_err(|_| {
+            format!(
+                "Invalid host port '{}'. Expected a number between 1 and 65535",
+                port_parts[0]
+            )
+        })?;
+
+        let container_port = port_parts[1].parse::<u16>().map_err(|_| {
+            format!(
+                "Invalid container port '{}'. Expected a number between 1 and 65535",
+                port_parts[1]
+            )
+        })?;
+
+        Ok(crate::config::PortMapping {
+            host_port,
+            container_port,
+            protocol,
+        })
     }
 
     /// Sanitize a jail name to match podman requirements
@@ -602,5 +676,45 @@ mod tests {
             }
             _ => panic!("Expected Codex command"),
         }
+    }
+
+    #[test]
+    fn test_parse_port() {
+        // Test basic port mapping
+        let port = Commands::parse_port("8080:80").unwrap();
+        assert_eq!(port.host_port, 8080);
+        assert_eq!(port.container_port, 80);
+        assert_eq!(port.protocol, "tcp");
+
+        // Test port mapping with explicit TCP protocol
+        let port = Commands::parse_port("8080:80/tcp").unwrap();
+        assert_eq!(port.host_port, 8080);
+        assert_eq!(port.container_port, 80);
+        assert_eq!(port.protocol, "tcp");
+
+        // Test port mapping with UDP protocol
+        let port = Commands::parse_port("5432:5432/udp").unwrap();
+        assert_eq!(port.host_port, 5432);
+        assert_eq!(port.container_port, 5432);
+        assert_eq!(port.protocol, "udp");
+
+        // Test same port on host and container
+        let port = Commands::parse_port("5432:5432").unwrap();
+        assert_eq!(port.host_port, 5432);
+        assert_eq!(port.container_port, 5432);
+        assert_eq!(port.protocol, "tcp");
+
+        // Test invalid format
+        assert!(Commands::parse_port("invalid").is_err());
+        assert!(Commands::parse_port("8080").is_err());
+        assert!(Commands::parse_port("8080:80:90").is_err());
+
+        // Test invalid protocol
+        assert!(Commands::parse_port("8080:80/http").is_err());
+
+        // Test invalid port numbers
+        assert!(Commands::parse_port("invalid:80").is_err());
+        assert!(Commands::parse_port("8080:invalid").is_err());
+        assert!(Commands::parse_port("70000:80").is_err());
     }
 }

@@ -60,6 +60,17 @@ impl PodmanBackend {
             args.push("--network=private".to_string());
         }
 
+        // Port mappings (requires network to be enabled)
+        if config.network.enabled {
+            for port_mapping in &config.port_mappings {
+                args.push("-p".to_string());
+                args.push(format!(
+                    "{}:{}/{}",
+                    port_mapping.host_port, port_mapping.container_port, port_mapping.protocol
+                ));
+            }
+        }
+
         // Bind mounts
         for mount in &config.bind_mounts {
             let bind_arg = if mount.readonly {
@@ -461,6 +472,34 @@ impl JailBackend for PodmanBackend {
             private: network_mode == "private" || network_mode == "slirp4netns",
         };
 
+        // Extract port mappings
+        let mut port_mappings = Vec::new();
+        if let Some(port_bindings) = container["HostConfig"]["PortBindings"].as_object() {
+            for (container_port_proto, bindings) in port_bindings {
+                // container_port_proto format: "5432/tcp"
+                let parts: Vec<&str> = container_port_proto.split('/').collect();
+                if parts.len() == 2 {
+                    if let Ok(container_port) = parts[0].parse::<u16>() {
+                        let protocol = parts[1].to_string();
+                        // bindings is an array of host port bindings
+                        if let Some(bindings_array) = bindings.as_array() {
+                            for binding in bindings_array {
+                                if let Some(host_port_str) = binding["HostPort"].as_str() {
+                                    if let Ok(host_port) = host_port_str.parse::<u16>() {
+                                        port_mappings.push(crate::config::PortMapping {
+                                            host_port,
+                                            container_port,
+                                            protocol: protocol.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Extract resource limits
         let memory_mb = container["HostConfig"]["Memory"]
             .as_i64()
@@ -483,6 +522,7 @@ impl JailBackend for PodmanBackend {
             bind_mounts,
             environment,
             network,
+            port_mappings,
             limits: crate::config::ResourceLimits {
                 memory_mb,
                 cpu_quota,
@@ -515,6 +555,7 @@ mod tests {
                 enabled: false,
                 private: true,
             },
+            port_mappings: vec![],
             limits: crate::config::ResourceLimits {
                 memory_mb: Some(512),
                 cpu_quota: Some(50),
@@ -539,6 +580,88 @@ mod tests {
         assert!(args.contains(&"TEST=value".to_string()));
         // Verify persistent home volume is included
         assert!(args.contains(&"test-jail-home:/home/agent".to_string()));
+    }
+
+    #[test]
+    fn test_build_run_args_with_port_mappings() {
+        let backend = PodmanBackend::new();
+        let config = JailConfig {
+            name: "test-jail".to_string(),
+            backend: crate::config::BackendType::Podman,
+            base_image: "alpine:latest".to_string(),
+            bind_mounts: vec![],
+            environment: vec![],
+            network: crate::config::NetworkConfig {
+                enabled: true,
+                private: true,
+            },
+            port_mappings: vec![
+                crate::config::PortMapping {
+                    host_port: 8080,
+                    container_port: 80,
+                    protocol: "tcp".to_string(),
+                },
+                crate::config::PortMapping {
+                    host_port: 5432,
+                    container_port: 5432,
+                    protocol: "tcp".to_string(),
+                },
+            ],
+            limits: crate::config::ResourceLimits {
+                memory_mb: None,
+                cpu_quota: None,
+            },
+            upgrade: false,
+            force_layers: Vec::new(),
+            use_layered_images: true,
+            isolated: false,
+            verbose: false,
+            skip_nix: false,
+        };
+
+        let args = backend.build_run_args(&config);
+
+        // Verify port mappings are included
+        assert!(args.contains(&"-p".to_string()));
+        assert!(args.contains(&"8080:80/tcp".to_string()));
+        assert!(args.contains(&"5432:5432/tcp".to_string()));
+    }
+
+    #[test]
+    fn test_build_run_args_port_mappings_require_network() {
+        let backend = PodmanBackend::new();
+        let config = JailConfig {
+            name: "test-jail".to_string(),
+            backend: crate::config::BackendType::Podman,
+            base_image: "alpine:latest".to_string(),
+            bind_mounts: vec![],
+            environment: vec![],
+            network: crate::config::NetworkConfig {
+                enabled: false,
+                private: true,
+            },
+            port_mappings: vec![crate::config::PortMapping {
+                host_port: 8080,
+                container_port: 80,
+                protocol: "tcp".to_string(),
+            }],
+            limits: crate::config::ResourceLimits {
+                memory_mb: None,
+                cpu_quota: None,
+            },
+            upgrade: false,
+            force_layers: Vec::new(),
+            use_layered_images: true,
+            isolated: false,
+            verbose: false,
+            skip_nix: false,
+        };
+
+        let args = backend.build_run_args(&config);
+
+        // Port mappings should NOT be included when network is disabled
+        let port_args_count = args.iter().filter(|&arg| arg == "-p").count();
+        assert_eq!(port_args_count, 0);
     }
 
     #[test]

@@ -126,6 +126,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 backend,
                 image,
                 mount,
+                port,
                 env,
                 no_network,
                 memory,
@@ -138,6 +139,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 cursor_dir,
                 gemini_dir,
                 codex_dir,
+                jules_dir,
                 agent_configs,
                 git_gpg,
                 upgrade,
@@ -214,6 +216,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                             cursor_dir,
                             gemini_dir,
                             codex_dir,
+                            jules_dir,
                             agent_configs,
                         },
                     );
@@ -229,6 +232,17 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                         let mount =
                             Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
                         builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
+                    }
+
+                    // Parse port mappings
+                    for port_str in port {
+                        let port_mapping =
+                            Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
+                        builder = builder.port_mapping(
+                            port_mapping.host_port,
+                            port_mapping.container_port,
+                            &port_mapping.protocol,
+                        );
                     }
 
                     // Parse environment variables
@@ -370,6 +384,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
             Commands::Codex { common, args } => {
                 run_agent_command(agents::Agent::Codex, common, args, verbose).await?;
+            }
+
+            Commands::Jules { common, args } => {
+                run_agent_command(agents::Agent::Jules, common, args, verbose).await?;
             }
 
             Commands::List { current, backend } => {
@@ -555,6 +573,7 @@ async fn run_agent_command(
             backend: common.backend,
             image: common.image,
             mount: common.mount,
+            port: common.port,
             env: common.env,
             no_network: common.no_network,
             memory: common.memory,
@@ -566,6 +585,7 @@ async fn run_agent_command(
             cursor_dir: common.cursor_dir,
             gemini_dir: common.gemini_dir,
             codex_dir: common.codex_dir,
+            jules_dir: common.jules_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
             upgrade: common.upgrade,
@@ -709,6 +729,15 @@ async fn upgrade_single_jail(
     // Restore bind mounts
     for mount in &old_config.bind_mounts {
         builder = builder.bind_mount(mount.source.clone(), mount.target.clone(), mount.readonly);
+    }
+
+    // Restore port mappings
+    for port_mapping in &old_config.port_mappings {
+        builder = builder.port_mapping(
+            port_mapping.host_port,
+            port_mapping.container_port,
+            &port_mapping.protocol,
+        );
     }
 
     // Restore resource limits

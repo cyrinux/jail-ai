@@ -47,6 +47,15 @@ cargo run -- create my-agent --image alpine:latest
 # Create jail without workspace mount
 cargo run -- create my-agent --no-workspace
 
+# Create jail with port mapping (e.g., PostgreSQL)
+cargo run -- create my-agent -p 5432:5432
+
+# Create jail with multiple port mappings
+cargo run -- create my-agent -p 8080:80 -p 5432:5432
+
+# Create jail with port mapping using UDP protocol
+cargo run -- create my-agent -p 53:53/udp
+
 # Create jail with entire ~/.claude directory (default: only .claude/.credentials.json)
 cargo run -- create my-agent --claude-dir
 
@@ -62,7 +71,10 @@ cargo run -- create my-agent --gemini-dir
 # Create jail with ~/.config/codex directory for Codex CLI
 cargo run -- create my-agent --codex-dir
 
-# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir)
+# Create jail with ~/.config/jules directory for Jules CLI
+cargo run -- create my-agent --jules-dir
+
+# Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
 cargo run -- create my-agent --agent-configs
 
 # Create jail with git and GPG configuration mapping
@@ -71,7 +83,7 @@ cargo run -- create my-agent --git-gpg
 # Create jail with specific agent config and git/GPG support
 cargo run -- create my-agent --claude-dir --git-gpg
 
-# Create jail with all config directories and git/GPG support
+# Create jail with all config directories (claude, copilot, cursor, gemini, codex, jules) and git/GPG support
 cargo run -- create my-agent --agent-configs --git-gpg
 
 # Create jail with custom workspace path
@@ -97,6 +109,12 @@ cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
 # Codex CLI with API key authentication
 cargo run -- codex --codex-dir --auth sk-your-key -- generate "create a REST API"
+cargo run -- jules --jules-dir -- chat "help me debug this code"
+cargo run -- jules --jules-dir -- --help
+
+# AI Agent with port mapping (e.g., for connecting to host PostgreSQL)
+cargo run -- claude -p 5432:5432 -- chat "help me with database queries"
+cargo run -- claude -p 8080:80 -p 5432:5432 -- chat "debug my web app and database"
 
 # AI Agent commands ignoring flake.nix file (skip nix layer)
 cargo run -- claude --no-nix-flake -- chat "help me debug this code"
@@ -108,6 +126,7 @@ cargo run -- codex --codex-dir --shell
 # Start interactive shell in agent jail (without running the agent)
 cargo run -- claude --shell
 cargo run -- copilot --copilot-dir --shell
+cargo run -- jules --jules-dir --shell
 
 # Layer-based (shared) vs Isolated images
 # By default, jail-ai uses layer-based tagging for image sharing across projects
@@ -292,6 +311,7 @@ The layered image system automatically detects your project type and builds appr
   - **Cursor Agent** (`cursor-agent`) - Cursor's terminal AI agent
   - **Gemini CLI** (`gemini`) - Google's AI terminal assistant
   - **Codex CLI** (`codex`) - OpenAI's Codex CLI for code generation
+  - **Jules CLI** (`jules`) - Google's AI coding assistant CLI
 
 ### AI Agent Authentication
 
@@ -304,6 +324,7 @@ The AI coding agents require authentication.
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
 - `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
 - `jail-ai codex` → No auth mounted (use `--codex-dir` to mount `~/.codex`)
+- `jail-ai jules` → No auth mounted (use `--jules-dir` to mount `~/.config/jules`)
 
 **Opt-in mounting** (use flags to enable):
 
@@ -314,7 +335,8 @@ The AI coding agents require authentication.
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
   - **Authentication**: Use `--auth <key>` to provide an API key for authentication
   - **Manual authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
-- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`)
+- `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
+- `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`, `--jules-dir`)
 
 Example aliases for different security levels:
 
@@ -333,6 +355,9 @@ alias jail-gemini='jail-ai gemini --gemini-dir'
 
 # Codex: needs explicit config for auth
 alias jail-codex='jail-ai codex --codex-dir'
+
+# Jules: needs explicit config for auth
+alias jail-jules='jail-ai jules --jules-dir'
 
 # Claude with full config + git/GPG
 alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'

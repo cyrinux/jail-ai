@@ -15,6 +15,7 @@ pub struct AgentCommandParams {
     pub backend: Option<String>,
     pub image: String,
     pub mount: Vec<String>,
+    pub port: Vec<String>,
     pub env: Vec<String>,
     pub no_network: bool,
     pub memory: Option<u64>,
@@ -26,6 +27,7 @@ pub struct AgentCommandParams {
     pub cursor_dir: bool,
     pub gemini_dir: bool,
     pub codex_dir: bool,
+    pub jules_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub upgrade: bool,
@@ -432,6 +434,7 @@ pub async fn run_ai_agent_command(
                 cursor_dir: params.cursor_dir,
                 gemini_dir: params.gemini_dir,
                 codex_dir: params.codex_dir,
+                jules_dir: params.jules_dir,
                 agent_configs: params.agent_configs,
             },
         );
@@ -445,6 +448,17 @@ pub async fn run_ai_agent_command(
         for mount_str in params.mount {
             let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
             builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
+        }
+
+        // Parse port mappings
+        for port_str in params.port {
+            let port_mapping =
+                Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
+            builder = builder.port_mapping(
+                port_mapping.host_port,
+                port_mapping.container_port,
+                &port_mapping.protocol,
+            );
         }
 
         // Parse environment variables

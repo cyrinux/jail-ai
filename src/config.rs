@@ -22,6 +22,10 @@ pub struct JailConfig {
     /// Network access settings
     pub network: NetworkConfig,
 
+    /// Port mappings from host to container
+    #[serde(default)]
+    pub port_mappings: Vec<PortMapping>,
+
     /// Resource limits
     pub limits: ResourceLimits,
 
@@ -77,6 +81,19 @@ pub struct NetworkConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortMapping {
+    pub host_port: u16,
+    pub container_port: u16,
+    /// Protocol (tcp or udp)
+    #[serde(default = "default_tcp")]
+    pub protocol: String,
+}
+
+fn default_tcp() -> String {
+    "tcp".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceLimits {
     pub memory_mb: Option<u64>,
     pub cpu_quota: Option<u32>,
@@ -119,6 +136,7 @@ impl Default for JailConfig {
                 enabled: false,
                 private: true,
             },
+            port_mappings: Vec::new(),
             limits: ResourceLimits {
                 memory_mb: None,
                 cpu_quota: None,
