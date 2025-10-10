@@ -24,7 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     tig \
     vim \
-    tokei \
     nano \
     tree \
     file \
@@ -51,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Process management
     procps \
     htop \
-    # Additional utilities
+   # Additional utilities
     tmux \
     screen \
     sudo \
@@ -64,6 +63,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gpg-agent \
     pinentry-curses \
     && rm -rf /var/lib/apt/lists/*
+
+# Install tokei from cargo (code statistics tool)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cargo \
+    && cargo install tokei --root /usr/local \
+    && apt-get remove -y cargo rustc \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /root/.cargo
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
