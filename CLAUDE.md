@@ -65,7 +65,7 @@ cargo run -- create my-agent --copilot-dir
 # Create jail with ~/.cursor and ~/.config/cursor directories for Cursor Agent
 cargo run -- create my-agent --cursor-dir
 
-# Create jail with ~/.config/gemini directory for Gemini CLI
+# Create jail with ~/.gemini directory for Gemini CLI
 cargo run -- create my-agent --gemini-dir
 
 # Create jail with ~/.config/codex directory for Codex CLI
@@ -107,8 +107,11 @@ cargo run -- claude -- --help
 cargo run -- claude -- --version
 cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
-# Codex CLI with API key authentication
-cargo run -- codex --codex-dir --auth sk-your-key -- generate "create a REST API"
+# Codex CLI - Setup socat bridge for OAuth callbacks (does not start agent, only sets up bridge)
+cargo run -- codex --codex-dir --auth
+
+# Codex CLI - Run agent with authentication
+cargo run -- codex --codex-dir -- generate "create a REST API"
 cargo run -- jules --jules-dir -- chat "help me debug this code"
 cargo run -- jules --jules-dir -- --help
 
@@ -222,7 +225,7 @@ cargo run -- claude --upgrade
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags
-- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.config/gemini`, `--codex-dir` for `~/.config/codex`, or `--agent-configs` for all
+- **Granular Config Mounting**: Use `--claude-dir` for `~/.claude`, `--copilot-dir` for `~/.config/.copilot`, `--cursor-dir` for `~/.cursor`, `--gemini-dir` for `~/.gemini`, `--codex-dir` for `~/.config/codex`, or `--agent-configs` for all
 - **Opt-in Git/GPG Mapping**: Use `--git-gpg` to enable git configuration (name, email, signing key) and GPG config (`~/.gnupg`) mounting
 - **Podman Backend**: Uses podman for OCI container management
 - **Resource Limits**: Memory and CPU quota restrictions
@@ -322,7 +325,7 @@ The AI coding agents require authentication.
 - `jail-ai claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
 - `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
 - `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
-- `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.config/gemini`)
+- `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.gemini`)
 - `jail-ai codex` → No auth mounted (use `--codex-dir` to mount `~/.codex`)
 - `jail-ai jules` → No auth mounted (use `--jules-dir` to mount `~/.config/jules`)
 
@@ -331,19 +334,21 @@ The AI coding agents require authentication.
 - `--claude-dir`: Mount entire `~/.claude` → `/home/agent/.claude` directory (settings, commands, history)
 - `--copilot-dir`: Mount `~/.config/.copilot` → `/home/agent/.config/.copilot` directory (GitHub Copilot authentication and config)
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
-- `--gemini-dir`: Mount `~/.config/gemini` → `/home/agent/.config/gemini` directory (Gemini CLI authentication and settings)
+- `--gemini-dir`: Mount `~/.gemini` → `/home/agent/.gemini` directory (Gemini CLI authentication and settings)
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
-  - **Authentication**: Use `--auth <key>` to provide an API key for authentication
-  - **Manual authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
+  - **Authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
+  - **OAuth Bridge**: Use `--auth` flag to set up socat bridge for OAuth callbacks in the running container (exits immediately without starting agent)
+    - Example: `jail-ai codex --codex-dir --auth` sets up the bridge and exits
   - **Automatic Port Forwarding**: Port 1455 is automatically forwarded from host to container for Codex CLI (required for OAuth callbacks)
-  - **Secure Networking**: Uses private networking with socat bridge (`0.0.0.0:1455 → 127.0.0.1:1455`) for OAuth callback support, providing secure internet access and localhost binding without exposing host services
+  - **Secure Networking**: Uses private networking with socat bridge (container eth0 IP:1455 → 127.0.0.1:1455) for OAuth callback support, providing secure internet access and localhost binding without exposing host services
 - `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
-  - **Automatic Port Forwarding**: Port 44119 is automatically forwarded from host to container for Jules CLI (required for agent communication)
+  - **Authentication**: Run `jail-ai jules --jules-dir --shell` and manually run `jules auth` inside the jail
+  - **Note**: Jules uses a random port for local communication, so no static port forwarding is needed
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`, `--jules-dir`)
 
 **Note**:
-- **Codex CLI** automatically forwards port 1455 (TCP) for OAuth callbacks and uses a socat bridge inside the container to forward traffic from `0.0.0.0:1455` to `127.0.0.1:1455`. This enables OAuth callbacks to work with private networking, providing secure internet access and localhost binding without exposing host services. You don't need to manually specify `-p 1455:1455` when using the `codex` command.
-- **Jules CLI** automatically forwards port 44119 (TCP) for agent communication. You don't need to manually specify `-p 44119:44119` when using the `jules` command.
+- **Codex CLI** automatically forwards port 1455 (TCP) for OAuth callbacks. The `--auth` flag sets up a socat bridge inside the container to forward traffic from the container's eth0 interface IP (port 1455) to `127.0.0.1:1455`, then exits without starting the agent. This enables OAuth callbacks to work with private networking, providing secure internet access and localhost binding without exposing host services. Binding to the eth0 IP provides better security compared to binding to 0.0.0.0. You don't need to manually specify `-p 1455:1455` when using the `codex` command.
+- **Jules CLI** uses a random port for local agent communication, so no static port forwarding is needed. Jules works directly with private networking without requiring special socat bridge setup.
 
 Example aliases for different security levels:
 

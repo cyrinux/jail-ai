@@ -185,7 +185,7 @@ pub fn mount_agent_configs(
             builder = mount_config_if_exists(
                 builder,
                 home_path.join(".config").join("gemini"),
-                "/home/agent/.config/gemini",
+                "/home/agent/.gemini",
             );
         }
         if flags.codex_dir || flags.agent_configs {

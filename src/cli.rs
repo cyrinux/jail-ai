@@ -60,7 +60,7 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub cursor_dir: bool,
 
-    /// Mount entire ~/.config/gemini directory for Gemini CLI
+    /// Mount entire ~/.gemini directory for Gemini CLI
     #[arg(long)]
     pub gemini_dir: bool,
 
@@ -96,9 +96,9 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub isolated: bool,
 
-    /// API key for authentication (used with codex --auth)
+    /// Setup socat bridge for OAuth callbacks in the running container and exit (does not start the agent)
     #[arg(long)]
-    pub auth: Option<String>,
+    pub auth: bool,
 
     /// Ignore flake.nix file and skip nix layer if present
     #[arg(long)]
@@ -184,7 +184,7 @@ pub enum Commands {
         #[arg(long)]
         cursor_dir: bool,
 
-        /// Mount entire ~/.config/gemini directory for Gemini CLI
+        /// Mount entire ~/.gemini directory for Gemini CLI
         #[arg(long)]
         gemini_dir: bool,
 
@@ -649,14 +649,14 @@ mod tests {
     }
 
     #[test]
-    fn test_auth_parameter_parsing() {
-        // Test that the --auth parameter is properly parsed
-        let args = vec!["jail-ai", "codex", "--auth", "sk-test123", "--codex-dir"];
+    fn test_auth_flag_parsing() {
+        // Test that the --auth flag is properly parsed
+        let args = vec!["jail-ai", "codex", "--auth", "--codex-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
 
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
-                assert_eq!(common.auth, Some("sk-test123".to_string()));
+                assert!(common.auth);
                 assert!(common.codex_dir);
             }
             _ => panic!("Expected Codex command"),
@@ -664,14 +664,14 @@ mod tests {
     }
 
     #[test]
-    fn test_auth_parameter_optional() {
-        // Test that the --auth parameter is optional
+    fn test_auth_flag_optional() {
+        // Test that the --auth flag is optional
         let args = vec!["jail-ai", "codex", "--codex-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
 
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
-                assert_eq!(common.auth, None);
+                assert!(!common.auth);
                 assert!(common.codex_dir);
             }
             _ => panic!("Expected Codex command"),

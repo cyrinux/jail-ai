@@ -106,18 +106,6 @@ impl Agent {
         }
     }
 
-    /// Check if this agent supports authentication via API key
-    pub fn supports_api_key_auth(&self) -> bool {
-        match self {
-            Self::Claude => claude::SUPPORTS_API_KEY_AUTH,
-            Self::Copilot => copilot::SUPPORTS_API_KEY_AUTH,
-            Self::Cursor => cursor::SUPPORTS_API_KEY_AUTH,
-            Self::Gemini => gemini::SUPPORTS_API_KEY_AUTH,
-            Self::Codex => codex::SUPPORTS_API_KEY_AUTH,
-            Self::Jules => jules::SUPPORTS_API_KEY_AUTH,
-        }
-    }
-
     /// Get all config directory paths for agents
     /// Returns (host_path, container_path) tuples
     pub fn config_dir_paths(&self) -> Vec<(&'static str, &'static str)> {
@@ -234,13 +222,6 @@ mod tests {
         assert!(!Agent::Gemini.has_auto_credentials());
         assert!(!Agent::Codex.has_auto_credentials());
         assert!(!Agent::Jules.has_auto_credentials());
-    }
-
-    #[test]
-    fn test_agent_supports_api_key_auth() {
-        assert!(!Agent::Claude.supports_api_key_auth());
-        assert!(!Agent::Copilot.supports_api_key_auth());
-        assert!(Agent::Codex.supports_api_key_auth());
     }
 
     #[test]

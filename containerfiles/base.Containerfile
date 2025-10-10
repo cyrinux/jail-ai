@@ -171,7 +171,7 @@ RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
 
 # Create workspace and empty config directories for mounting
 RUN mkdir -p /workspace && chown agent:agent /workspace \
-    && mkdir -p /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.config/gemini /home/agent/.config/codex /home/agent/.gnupg \
+    && mkdir -p /home/agent/.claude /home/agent/.config/.copilot /home/agent/.cursor /home/agent/.gemini /home/agent/.config/codex /home/agent/.gnupg \
     && chown -R agent:agent /home/agent
 
 # Switch to agent user

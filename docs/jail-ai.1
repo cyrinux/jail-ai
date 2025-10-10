@@ -74,10 +74,10 @@ Quick start GitHub Copilot CLI in a jail for the current directory. Use \fB\-\-c
 Quick start Cursor Agent in a jail for the current directory. Use \fB\-\-cursor\-dir\fR to mount ~/.cursor and ~/.config/cursor for authentication and settings. Any arguments after \fB\-\-\fR are passed directly to the cursor-agent command.
 .TP
 .B gemini [OPTIONS] [\-\- ARGS...]
-Quick start Gemini CLI in a jail for the current directory. Use \fB\-\-gemini\-dir\fR to mount ~/.config/gemini for authentication. Any arguments after \fB\-\-\fR are passed directly to the gemini command.
+Quick start Gemini CLI in a jail for the current directory. Use \fB\-\-gemini\-dir\fR to mount ~/.gemini for authentication. Any arguments after \fB\-\-\fR are passed directly to the gemini command.
 .TP
 .B codex [OPTIONS] [\-\- ARGS...]
-Quick start Codex CLI in a jail for the current directory. Use \fB\-\-codex\-dir\fR to mount ~/.codex for authentication. Use \fB\-\-auth <key>\fR to provide an API key for authentication, or use \fB\-\-shell\fR to manually authenticate. Any arguments after \fB\-\-\fR are passed directly to the codex command.
+Quick start Codex CLI in a jail for the current directory. Use \fB\-\-codex\-dir\fR to mount ~/.codex for authentication. Use \fB\-\-auth\fR to setup socat bridge for OAuth callbacks (exits without starting agent), or use \fB\-\-shell\fR to manually authenticate. Any arguments after \fB\-\-\fR are passed directly to the codex command.
 .TP
 .B list [\-c|\-\-current]
 List all jails managed by jail-ai. Use \fB\-c\fR to show only jails associated with the current directory.
@@ -151,14 +151,14 @@ Mount ~/.cursor and ~/.config/cursor directories for Cursor Agent authentication
 Default behavior: no authentication mounted (requires this flag for cursor to work)
 .TP
 .B \-\-gemini\-dir
-Mount ~/.config/gemini directory for Gemini CLI authentication and settings.
+Mount ~/.gemini directory for Gemini CLI authentication and settings.
 .br
 Default behavior: no authentication mounted (requires this flag for gemini to work)
 .TP
 .B \-\-codex\-dir
 Mount ~/.codex directory for Codex CLI authentication and settings.
 .br
-Use \fB\-\-auth <key>\fR to provide an API key for authentication.
+Use \fB\-\-auth\fR to setup socat bridge for OAuth callbacks (exits without starting agent).
 .br
 Default behavior: no authentication mounted (requires this flag for codex to work)
 .TP
@@ -431,7 +431,7 @@ Cursor Agent data directory. Mounted when \fB\-\-cursor\-dir\fR is specified.
 .I ~/.config/cursor/
 Cursor Agent configuration directory. Mounted when \fB\-\-cursor\-dir\fR is specified.
 .TP
-.I ~/.config/gemini/
+.I ~/.gemini/
 Gemini CLI configuration directory. Mounted when \fB\-\-gemini\-dir\fR is specified.
 .TP
 .I ~/.config/codex/

@@ -15,8 +15,5 @@ pub const DISPLAY_NAME: &str = "Codex";
 /// Auto-mount credentials (minimal auth)
 pub const HAS_AUTO_CREDENTIALS: bool = false;
 
-/// Supports API key authentication
-pub const SUPPORTS_API_KEY_AUTH: bool = true;
-
 /// Config directory paths: (host_path, container_path)
 pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".codex", "/home/agent/.codex")];

@@ -62,11 +62,11 @@ Quick start Cursor Agent in a jail for the current directory. Use `--cursor-dir`
 
 ### gemini [OPTIONS] [-- ARGS...]
 
-Quick start Gemini CLI in a jail for the current directory. Use `--gemini-dir` to mount `~/.config/gemini` for authentication. Any arguments after `--` are passed directly to the gemini command.
+Quick start Gemini CLI in a jail for the current directory. Use `--gemini-dir` to mount `~/.gemini` for authentication. Any arguments after `--` are passed directly to the gemini command.
 
 ### codex [OPTIONS] [-- ARGS...]
 
-Quick start Codex CLI in a jail for the current directory. Use `--codex-dir` to mount `~/.codex` for authentication. Use `--auth <key>` to provide an API key for authentication, or use `--shell` to manually authenticate. Any arguments after `--` are passed directly to the codex command.
+Quick start Codex CLI in a jail for the current directory. Use `--codex-dir` to mount `~/.codex` for authentication. Use `--auth` to setup socat bridge for OAuth callbacks (exits without starting agent), or use `--shell` to manually authenticate. Any arguments after `--` are passed directly to the codex command.
 
 ### list [-c|--current]
 
@@ -105,8 +105,8 @@ The following options are available for the **create**, **claude**, **copilot**,
 | `--claude-dir` | Mount entire `~/.claude` directory (includes settings, commands, history). Default behavior for 'claude' command: only mounts `~/.claude/.credentials.json` |
 | `--copilot-dir` | Mount `~/.config/.copilot` directory for GitHub Copilot authentication and configuration. Default behavior: no authentication mounted (requires this flag for copilot to work) |
 | `--cursor-dir` | Mount `~/.cursor` and `~/.config/cursor` directories for Cursor Agent authentication, settings, and configuration. Default behavior: no authentication mounted (requires this flag for cursor to work) |
-| `--gemini-dir` | Mount `~/.config/gemini` directory for Gemini CLI authentication and settings. Default behavior: no authentication mounted (requires this flag for gemini to work) |
-| `--codex-dir` | Mount `~/.codex` directory for Codex CLI authentication and settings. Use `--auth <key>` to provide an API key for authentication. Default behavior: no authentication mounted (requires this flag for codex to work) |
+| `--gemini-dir` | Mount `~/.gemini` directory for Gemini CLI authentication and settings. Default behavior: no authentication mounted (requires this flag for gemini to work) |
+| `--codex-dir` | Mount `~/.codex` directory for Codex CLI authentication and settings. Use `--auth` to setup socat bridge for OAuth callbacks (exits without starting agent). Default behavior: no authentication mounted (requires this flag for codex to work) |
 | `--agent-configs` | Mount all agent config directories. Combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, and `--codex-dir`. Useful when working with multiple AI agents in the same jail. |
 | `--git-gpg` | Enable git and GPG configuration mapping. Mounts `~/.gnupg` directory, all GPG agent sockets (`/run/user/<UID>/gnupg/*`), and creates or mounts git configuration with user identity and signing settings. If `gpg.format=ssh` is configured, also mounts the SSH allowed signers file. This is opt-in (disabled by default) for security. |
 | `--force-rebuild` | Force rebuild of the default image, even if it already exists. Useful after modifying `~/.config/jail-ai/Containerfile`. |
@@ -305,7 +305,7 @@ jail-ai clean-all --force
 | `~/.config/.copilot/` | GitHub Copilot CLI configuration directory. Mounted when `--copilot-dir` is specified. |
 | `~/.cursor/` | Cursor Agent data directory. Mounted when `--cursor-dir` is specified. |
 | `~/.config/cursor/` | Cursor Agent configuration directory. Mounted when `--cursor-dir` is specified. |
-| `~/.config/gemini/` | Gemini CLI configuration directory. Mounted when `--gemini-dir` is specified. |
+| `~/.gemini/` | Gemini CLI configuration directory. Mounted when `--gemini-dir` is specified. |
 | `~/.codex/` | Codex CLI configuration directory. Mounted when `--codex-dir` is specified. |
 | `~/.gnupg/` | GPG configuration directory. Mounted when `--git-gpg` is specified, enabling GPG signing inside the jail. |
 | `/run/user/<UID>/gnupg/` | GPG agent socket directory. All sockets (S.gpg-agent, S.gpg-agent.ssh, S.gpg-agent.extra, S.gpg-agent.browser) are mounted when `--git-gpg` is specified. |

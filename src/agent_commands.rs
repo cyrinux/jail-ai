@@ -35,7 +35,7 @@ pub struct AgentCommandParams {
     pub shell: bool,
     pub isolated: bool,
     pub verbose: bool,
-    pub auth: Option<String>,
+    pub auth: bool,
     pub skip_nix: bool,
     pub args: Vec<String>,
 }
@@ -349,8 +349,8 @@ pub async fn run_ai_agent_command(
         // Agent OAuth callbacks work with private networking + port forwarding
         // Private network provides: secure internet access, isolated from host services
         // Port forwarding allows OAuth callbacks from host browser to reach the agent
-        if normalized_agent == "codex" || normalized_agent == "jules" {
-            info!("Using secure private networking with port forwarding for {} (OAuth/agent communication)", normalized_agent);
+        if normalized_agent == "codex" {
+            info!("Using secure private networking with port forwarding for {} (OAuth callbacks)", normalized_agent);
         }
 
         // Set image: use custom if provided, otherwise let layered system auto-detect
@@ -451,11 +451,6 @@ pub async fn run_ai_agent_command(
             builder = setup_git_gpg_config(builder, &cwd, &home_path)?;
         }
 
-        // Auto-forward port 44119 for Jules CLI (required for agent communication)
-        if normalized_agent == "jules" && !params.port.iter().any(|p| p.contains("44119")) {
-            info!("Auto-forwarding port 44119 for Jules CLI");
-            builder = builder.port_mapping(44119, 44119, "tcp");
-        }
 
         // Auto-forward port 1455 for Codex CLI OAuth callbacks
         if normalized_agent == "codex" && !params.port.iter().any(|p| p.contains("1455")) {
@@ -545,24 +540,45 @@ pub async fn run_ai_agent_command(
         return Ok(());
     }
 
-    // Handle Codex CLI authentication if --auth key is provided
-    if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
-        if agent == crate::agents::Agent::Codex && agent.supports_api_key_auth() {
-            if let Some(api_key) = &params.auth {
-                info!("Codex CLI authentication with provided API key...");
-                // Use echo to pipe the API key to codex login --with-api-key
-                let auth_cmd = vec![
-                    "sh".to_string(),
-                    "-c".to_string(),
-                    format!("echo '{}' | codex login --with-api-key", api_key),
-                ];
-                let auth_output = jail.exec(&auth_cmd, false).await?;
-                if !auth_output.is_empty() {
-                    print!("{auth_output}");
+    // Handle socat bridge setup if --auth flag is provided
+    // This is a utility command to set up OAuth callbacks, not to run the agent
+    if params.auth {
+        if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
+            match agent {
+                crate::agents::Agent::Codex => {
+                    info!("Setting up socat bridge for Codex OAuth callbacks...");
+                    
+                    // Start socat bridge to forward traffic from container eth0 IP:1455 -> 127.0.0.1:1455
+                    // This enables OAuth callbacks to work with private networking
+                    // The socat bridge binds to the eth0 interface IP instead of 0.0.0.0 for better security
+                    let socat_cmd = vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        // Get eth0 IP (main container network interface), kill existing socat on port 1455, then start new one in background
+                        "CONTAINER_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){3}' | head -n1); \
+                         pkill -f 'socat.*1455' 2>/dev/null || true; \
+                         socat TCP-LISTEN:1455,bind=${CONTAINER_IP:-0.0.0.0},fork,reuseaddr TCP:127.0.0.1:1455 </dev/null >/dev/null 2>&1 & \
+                         sleep 0.1".to_string(),
+                    ];
+                    
+                    if let Err(e) = jail.exec(&socat_cmd, false).await {
+                        warn!("Failed to start socat bridge (OAuth may not work): {}", e);
+                        return Err(e);
+                    } else {
+                        info!("Socat bridge started successfully for OAuth callbacks");
+                    }
+                }
+                _ => {
+                    warn!("--auth flag is currently only supported for Codex agent");
                 }
             }
         }
+        
+        // Return immediately after setting up the bridge, do not start the agent
+        info!("Socat bridge setup complete, exiting without starting agent");
+        return Ok(());
     }
+    
     info!("about to run");
 
     // Check if the jail uses the Nix wrapper by testing if it exists in the agent's home directory
