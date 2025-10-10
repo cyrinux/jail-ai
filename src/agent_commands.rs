@@ -346,14 +346,11 @@ pub async fn run_ai_agent_command(
             .backend(backend_type)
             .network(!params.no_network, true);
 
-        // Codex CLI requires special setup for OAuth callbacks to work properly
-        // The OAuth server binds to 127.0.0.1:1455 inside the container
-        // We use regular port forwarding (secure private network) without pasta options
-        // A socat bridge will be set up to forward 0.0.0.0:1455 -> 127.0.0.1:1455
-        // This provides secure networking: internet access + localhost binding only
-        if normalized_agent == "codex" {
-            info!("Using secure private networking with port forwarding for Codex CLI (OAuth callbacks)");
-            // Port forwarding will be added below (1455:1455)
+        // Agent OAuth callbacks work with private networking + port forwarding
+        // Private network provides: secure internet access, isolated from host services
+        // Port forwarding allows OAuth callbacks from host browser to reach the agent
+        if normalized_agent == "codex" || normalized_agent == "jules" {
+            info!("Using secure private networking with port forwarding for {} (OAuth/agent communication)", normalized_agent);
         }
 
         // Set image: use custom if provided, otherwise let layered system auto-detect
@@ -461,9 +458,8 @@ pub async fn run_ai_agent_command(
         }
 
         // Auto-forward port 1455 for Codex CLI OAuth callbacks
-        // Note: A socat bridge will be set up to forward 0.0.0.0:1455 -> 127.0.0.1:1455
         if normalized_agent == "codex" && !params.port.iter().any(|p| p.contains("1455")) {
-            info!("Auto-forwarding port 1455 for Codex CLI (OAuth callbacks)");
+            info!("Auto-forwarding port 1455 for Codex CLI OAuth callbacks");
             builder = builder.port_mapping(1455, 1455, "tcp");
         }
 
@@ -585,23 +581,6 @@ pub async fn run_ai_agent_command(
     let uses_nix_wrapper = wrapper_check
         .map(|output| output.trim() == "yes")
         .unwrap_or(false);
-
-    // For Codex CLI, start socat bridge to forward 0.0.0.0:1455 -> 127.0.0.1:1455
-    // This allows port forwarding to work with Codex's OAuth callback server
-    if normalized_agent == "codex" {
-        info!("Starting socat bridge for Codex CLI OAuth callbacks");
-        let socat_cmd = vec![
-            "sh".to_string(),
-            "-c".to_string(),
-            // Kill any existing socat on port 1455, then start new one in background
-            "pkill -f 'socat.*1455' 2>/dev/null || true; socat TCP-LISTEN:1455,bind=0.0.0.0,fork,reuseaddr TCP:127.0.0.1:1455 </dev/null >/dev/null 2>&1 & sleep 0.1".to_string(),
-        ];
-        if let Err(e) = jail.exec(&socat_cmd, false).await {
-            warn!("Failed to start socat bridge: {}. OAuth callbacks may not work.", e);
-        } else {
-            info!("Socat bridge started successfully");
-        }
-    }
 
     let command = if uses_nix_wrapper {
         // Wrap command with nix-wrapper to load flake environment

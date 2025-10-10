@@ -93,25 +93,19 @@ impl JailBuilder {
         self
     }
 
+    /// Configure network access for the jail
+    /// 
+    /// # Arguments
+    /// * `enabled` - If false, container has no network access (--network=none)
+    /// * `private` - If true with enabled=true, uses private networking (slirp4netns) for secure isolation
+    /// 
+    /// Private networking provides:
+    /// - Secure internet access without exposing host services
+    /// - Proper port forwarding for OAuth callbacks and agent communication
+    /// - Network isolation between containers and from host
     pub fn network(mut self, enabled: bool, private: bool) -> Self {
         self.config.network.enabled = enabled;
         self.config.network.private = private;
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn use_host_network(mut self, use_host: bool) -> Self {
-        self.config.network.use_host_network = use_host;
-        // If using host network, network must be enabled
-        if use_host {
-            self.config.network.enabled = true;
-        }
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn pasta_options(mut self, options: Vec<String>) -> Self {
-        self.config.network.pasta_options = options;
         self
     }
 

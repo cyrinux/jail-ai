@@ -20,11 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     coreutils \
     curl \
     wget \
-    sl \
     git \
     tig \
     vim \
-    nano \
+    iputils-ping \
+    iproute2 \
+    socat \
     tree \
     file \
     buildah \
@@ -48,6 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zip \
     # Network tools
     ca-certificates \
+    netcat-openbsd \
     # Process management
     procps \
     htop \

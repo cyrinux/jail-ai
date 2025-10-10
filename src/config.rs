@@ -76,16 +76,12 @@ pub struct BindMount {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
+    /// Enable network access (if false, uses --network=none for complete isolation)
     pub enabled: bool,
+    /// Use private networking (slirp4netns) for secure, isolated network access
+    /// When true with enabled=true: provides internet access without exposing host services
+    /// Port forwarding works correctly with private networking for OAuth callbacks
     pub private: bool,
-    /// Use host networking (--network=host) - container shares host's network namespace
-    /// This is useful for services that need to bind to 127.0.0.1 on the host (e.g., OAuth callbacks)
-    #[serde(default)]
-    pub use_host_network: bool,
-    /// Custom network options for pasta (e.g., "--map-host-loopback" for localhost access)
-    /// These options are appended to --network=pasta:<options>
-    #[serde(default)]
-    pub pasta_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,10 +137,8 @@ impl Default for JailConfig {
             bind_mounts: Vec::new(),
             environment: Vec::new(),
             network: NetworkConfig {
-                enabled: false,
+                enabled: true,
                 private: true,
-                use_host_network: false,
-                pasta_options: Vec::new(),
             },
             port_mappings: Vec::new(),
             limits: ResourceLimits {

@@ -54,25 +54,22 @@ impl PodmanBackend {
         args.push(format!("{home_volume}:/home/agent"));
 
         // Network settings
-        if config.network.use_host_network {
-            // Host networking - container shares host's network namespace
-            // This allows binding to 127.0.0.1 on the host (useful for OAuth callbacks)
-            args.push("--network=host".to_string());
-        } else if !config.network.enabled {
+        // We always use either no network (--network=none) or private network (slirp4netns)
+        // Private networking provides secure isolation while allowing internet access
+        if !config.network.enabled {
+            // Complete network isolation
             args.push("--network=none".to_string());
         } else if config.network.private {
-            // Use pasta networking with custom options if specified
-            if !config.network.pasta_options.is_empty() {
-                let pasta_opts = config.network.pasta_options.join(",");
-                args.push(format!("--network=pasta:{}", pasta_opts));
-            } else {
-                args.push("--network=private".to_string());
-            }
+            // Private networking with slirp4netns: secure, isolated, supports port forwarding
+            args.push("--network=slirp4netns".to_string());
+        } else {
+            // Shared networking (uses default bridge network)
+            // Note: This mode is less isolated but allows container-to-container communication
         }
 
-        // Port mappings (requires network to be enabled and not using host networking)
-        // Note: Host networking doesn't support port mappings because container directly uses host's network
-        if config.network.enabled && !config.network.use_host_network {
+        // Port mappings (requires network to be enabled)
+        // With private networking, port forwarding works correctly for OAuth callbacks
+        if config.network.enabled {
             for port_mapping in &config.port_mappings {
                 args.push("-p".to_string());
                 args.push(format!(
@@ -480,9 +477,9 @@ impl JailBackend for PodmanBackend {
             .unwrap_or("default");
         let network = crate::config::NetworkConfig {
             enabled: network_mode != "none",
-            private: network_mode == "private" || network_mode == "slirp4netns",
-            use_host_network: network_mode == "host",
-            pasta_options: Vec::new(), // Cannot extract pasta options from inspect
+            // Check for both "slirp4netns" and "private" for backward compatibility
+            // (older versions incorrectly used "private" which isn't a standard mode)
+            private: network_mode == "slirp4netns" || network_mode == "private",
         };
 
         // Extract port mappings
@@ -567,8 +564,6 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
-                use_host_network: false,
-                pasta_options: Vec::new(),
             },
             port_mappings: vec![],
             limits: crate::config::ResourceLimits {
@@ -609,8 +604,6 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: true,
                 private: true,
-                use_host_network: false,
-                pasta_options: Vec::new(),
             },
             port_mappings: vec![
                 crate::config::PortMapping {
@@ -656,8 +649,6 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
-                use_host_network: false,
-                pasta_options: Vec::new(),
             },
             port_mappings: vec![crate::config::PortMapping {
                 host_port: 8080,
