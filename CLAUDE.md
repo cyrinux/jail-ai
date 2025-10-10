@@ -335,13 +335,14 @@ The AI coding agents require authentication.
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
   - **Authentication**: Use `--auth <key>` to provide an API key for authentication
   - **Manual authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
-  - **Secure Networking**: Codex CLI uses pasta networking with `--map-host-loopback` for OAuth callback support (secure localhost access only)
+  - **Automatic Port Forwarding**: Port 1455 is automatically forwarded from host to container for Codex CLI (required for OAuth callbacks)
+  - **Secure Networking**: Uses private networking with socat bridge (`0.0.0.0:1455 → 127.0.0.1:1455`) for OAuth callback support, providing secure internet access and localhost binding without exposing host services
 - `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
   - **Automatic Port Forwarding**: Port 44119 is automatically forwarded from host to container for Jules CLI (required for agent communication)
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`, `--jules-dir`)
 
 **Note**:
-- **Codex CLI** uses pasta networking with `--map-host-loopback` for OAuth callback support. This provides secure localhost access without exposing the host network.
+- **Codex CLI** automatically forwards port 1455 (TCP) for OAuth callbacks and uses a socat bridge inside the container to forward traffic from `0.0.0.0:1455` to `127.0.0.1:1455`. This enables OAuth callbacks to work with private networking, providing secure internet access and localhost binding without exposing host services. You don't need to manually specify `-p 1455:1455` when using the `codex` command.
 - **Jules CLI** automatically forwards port 44119 (TCP) for agent communication. You don't need to manually specify `-p 44119:44119` when using the `jules` command.
 
 Example aliases for different security levels:

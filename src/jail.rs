@@ -109,6 +109,7 @@ impl JailBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn pasta_options(mut self, options: Vec<String>) -> Self {
         self.config.network.pasta_options = options;
         self
