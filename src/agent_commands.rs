@@ -450,6 +450,12 @@ pub async fn run_ai_agent_command(
             builder = builder.port_mapping(44119, 44119, "tcp");
         }
 
+        // Auto-forward port 1455 for Codex CLI (required for agent communication)
+        if normalized_agent == "codex" && !params.port.iter().any(|p| p.contains("1455")) {
+            info!("Auto-forwarding port 1455 for Codex CLI");
+            builder = builder.port_mapping(1455, 1455, "tcp");
+        }
+
         // Parse mounts
         for mount_str in params.mount {
             let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
