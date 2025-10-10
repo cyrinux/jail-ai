@@ -1,6 +1,7 @@
 use crate::error::{JailError, Result};
 use crate::project_detection::{
-    detect_project_type, detect_project_type_with_options, ProjectType,
+    detect_project_type, detect_project_type_with_options, has_custom_containerfile, ProjectType,
+    CUSTOM_CONTAINERFILE_NAME,
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
@@ -60,6 +61,7 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "csharp" => "🎯",
         "terraform" => "🏗️",
         "kubernetes" => "☸️",
+        "custom" => "🎨",
         "agent-claude" => "🤖",
         "agent-copilot" => "🦾",
         "agent-cursor" => "➡️",
@@ -84,10 +86,14 @@ fn generate_project_hash(workspace_path: &Path) -> String {
     hash_hex[..8].to_string()
 }
 
-/// Generate a layer-based tag from project type and agent
-/// Format: base-{lang1}-{lang2}-{agent} or base-{lang1}-{lang2} (no agent)
-/// Examples: "base-rust-nodejs-claude", "base-python", "base"
-fn generate_layer_tag(project_type: &ProjectType, agent_name: Option<&str>) -> String {
+/// Generate a layer-based tag from project type, custom layer, and agent
+/// Format: base-{lang1}-{lang2}-custom-{agent} or base-{lang1}-{lang2} (no agent)
+/// Examples: "base-rust-nodejs-custom-claude", "base-python-custom", "base-custom", "base"
+fn generate_layer_tag(
+    project_type: &ProjectType,
+    has_custom: bool,
+    agent_name: Option<&str>,
+) -> String {
     let mut layers = vec!["base"];
 
     match project_type {
@@ -104,6 +110,11 @@ fn generate_layer_tag(project_type: &ProjectType, agent_name: Option<&str>) -> S
             // Single language
             layers.push(project_type.language_layer());
         }
+    }
+
+    // Add custom layer if present
+    if has_custom {
+        layers.push("custom");
     }
 
     // Add agent if present
@@ -195,6 +206,7 @@ pub async fn get_expected_image_name(
 ) -> Result<String> {
     let project_hash = generate_project_hash(workspace_path);
     let project_type = detect_project_type(workspace_path);
+    let has_custom = has_custom_containerfile(workspace_path);
 
     if let Some(agent) = agent_name {
         // Determine the final image tag based on isolation mode
@@ -203,7 +215,7 @@ pub async fn get_expected_image_name(
             project_hash
         } else {
             // Shared mode: Use layer composition
-            generate_layer_tag(&project_type, Some(agent))
+            generate_layer_tag(&project_type, has_custom, Some(agent))
         };
 
         Ok(get_agent_project_image_name(agent, &image_tag))
@@ -314,6 +326,9 @@ pub async fn check_layers_need_rebuild(
         }
     }
 
+    // Check custom layer if present
+    let has_custom = has_custom_containerfile(workspace_path);
+
     // Check agent layer if specified
     if let Some(agent_str) = agent_name {
         // Try to parse agent - if recognized, use proper layer name
@@ -328,7 +343,7 @@ pub async fn check_layers_need_rebuild(
         if agent_containerfile.is_some() {
             // We need to check the actual agent image that would be used
             // For shared mode, we use layer-based tagging
-            let layer_tag = generate_layer_tag(&project_type, Some(agent_str));
+            let layer_tag = generate_layer_tag(&project_type, has_custom, Some(agent_str));
             let agent_image = get_agent_project_image_name(agent_str, &layer_tag);
 
             if image_needs_rebuild(&agent_image, &agent_layer).await? {
@@ -338,6 +353,103 @@ pub async fn check_layers_need_rebuild(
     }
 
     Ok(outdated_layers)
+}
+
+/// Build a custom layer from project's jail-ai.Containerfile
+async fn build_custom_layer(
+    workspace_path: &Path,
+    base_image: &str,
+    image_tag: &str,
+    verbose: bool,
+) -> Result<String> {
+    let custom_containerfile_path = workspace_path.join(CUSTOM_CONTAINERFILE_NAME);
+
+    if !custom_containerfile_path.exists() {
+        return Err(JailError::Backend(format!(
+            "Custom Containerfile not found: {}",
+            custom_containerfile_path.display()
+        )));
+    }
+
+    // Create spinner if not in verbose mode
+    let spinner = if !verbose {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        let emoji = get_layer_emoji("custom");
+        pb.set_message(format!("{} Building custom layer...", emoji));
+        pb.enable_steady_tick(std::time::Duration::from_millis(80));
+        Some(pb)
+    } else {
+        info!("Building custom image: {}", image_tag);
+        None
+    };
+
+    // Read custom Containerfile content for hashing
+    let containerfile_content = tokio::fs::read_to_string(&custom_containerfile_path)
+        .await
+        .map_err(|e| {
+            JailError::Backend(format!("Failed to read custom Containerfile: {}", e))
+        })?;
+
+    // Generate hash of Containerfile content
+    let containerfile_hash = hash_containerfile(&containerfile_content);
+
+    // Build command
+    let mut cmd = Command::new("podman");
+    cmd.arg("build").arg("-t").arg(image_tag);
+
+    // Add hash label to track Containerfile changes
+    cmd.arg("--label")
+        .arg(format!("ai.jail.containerfile.hash={}", containerfile_hash));
+
+    // Add base image build arg
+    cmd.arg("--build-arg").arg(format!("BASE_IMAGE={}", base_image));
+
+    // Use the custom Containerfile from workspace
+    cmd.arg("-f")
+        .arg(&custom_containerfile_path)
+        .arg(workspace_path);
+
+    debug!("Running build command: {:?}", cmd);
+
+    use std::process::Stdio;
+    let status = if verbose {
+        // In verbose mode, show all output
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .await
+            .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?
+    } else {
+        // In non-verbose mode, hide output
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .map_err(|e| JailError::Backend(format!("Failed to execute build command: {}", e)))?
+    };
+
+    if let Some(pb) = spinner {
+        let emoji = get_layer_emoji("custom");
+        pb.finish_with_message(format!("✓ {} Built custom layer", emoji));
+    }
+
+    if !status.success() {
+        return Err(JailError::Backend(format!(
+            "Failed to build custom layer, build command exited with status: {}",
+            status
+        )));
+    }
+
+    info!("Successfully built custom layer: {}", image_tag);
+    Ok(image_tag.to_string())
 }
 
 /// Build a shared layer image (with :latest tag)
@@ -508,6 +620,7 @@ pub async fn build_project_image(
                 "terraform" => lang_types.push(ProjectType::Terraform),
                 "kubernetes" => lang_types.push(ProjectType::Kubernetes),
                 "base" => {}                                         // base is implicit
+                "custom" => {}                                       // custom is handled separately
                 layer_name if layer_name.starts_with("agent-") => {} // ignore agent layers
                 _ => debug!("Unknown layer '{}' in force_layers, ignoring", layer),
             }
@@ -578,6 +691,37 @@ pub async fn build_project_image(
 
     info!("Language layer ready: {}", language_image);
 
+    // Step 2.5: Build custom layer if present
+    let has_custom = has_custom_containerfile(workspace_path);
+    let custom_image = if has_custom {
+        // Generate image name for custom layer
+        let custom_layer_tag = if isolated {
+            format!("{}-custom", project_hash)
+        } else {
+            generate_layer_tag(&project_type, true, None)
+        };
+
+        let custom_image_name = format!("localhost/jail-ai-custom:{}", custom_layer_tag);
+
+        let should_rebuild_custom = upgrade
+            || force_layers.contains(&"custom".to_string())
+            || !image_exists(&custom_image_name).await?;
+
+        if should_rebuild_custom {
+            if verbose {
+                info!("Building custom layer: {}", custom_image_name);
+            }
+            build_custom_layer(workspace_path, &language_image, &custom_image_name, verbose).await?
+        } else {
+            debug!("Custom layer already exists: {}", custom_image_name);
+            custom_image_name
+        }
+    } else {
+        language_image.clone()
+    };
+
+    info!("Custom layer ready: {}", custom_image);
+
     // Step 3: Build final project-specific or layer-based image
     if let Some(agent) = agent_name {
         // For agents: build base → language layers → agent
@@ -592,7 +736,7 @@ pub async fn build_project_image(
             project_hash.clone()
         } else {
             // Shared mode: Use layer composition
-            let layer_tag = generate_layer_tag(&project_type, Some(agent));
+            let layer_tag = generate_layer_tag(&project_type, has_custom, Some(agent));
             info!("Using shared mode: layer-based image ({})", layer_tag);
             layer_tag
         };
@@ -608,7 +752,7 @@ pub async fn build_project_image(
             }
             build_image_from_containerfile(
                 &agent_layer,
-                Some(&language_image),
+                Some(&custom_image),
                 &final_image_name,
                 verbose,
             )
@@ -620,7 +764,7 @@ pub async fn build_project_image(
         info!("Final image: {}", final_image_name);
         Ok(final_image_name)
     } else {
-        // No agent: just tag language image
+        // No agent: just tag custom/language image
         let layer_type = project_type.language_layer();
 
         // Determine the final image tag based on isolation mode
@@ -630,7 +774,7 @@ pub async fn build_project_image(
             project_hash.clone()
         } else {
             // Shared mode: Use layer composition
-            let layer_tag = generate_layer_tag(&project_type, None);
+            let layer_tag = generate_layer_tag(&project_type, has_custom, None);
             info!("Using shared mode: layer-based image ({})", layer_tag);
             layer_tag
         };
@@ -638,10 +782,10 @@ pub async fn build_project_image(
         let final_image_name = get_project_image_name(layer_type, &image_tag);
 
         if upgrade || !image_exists(&final_image_name).await? {
-            info!("Tagging language image: {}", final_image_name);
+            info!("Tagging custom/language image: {}", final_image_name);
 
             let mut cmd = Command::new("podman");
-            cmd.arg("tag").arg(&language_image).arg(&final_image_name);
+            cmd.arg("tag").arg(&custom_image).arg(&final_image_name);
 
             let status = cmd
                 .status()
@@ -651,11 +795,11 @@ pub async fn build_project_image(
             if !status.success() {
                 return Err(JailError::Backend(format!(
                     "Failed to tag image {} as {}",
-                    language_image, final_image_name
+                    custom_image, final_image_name
                 )));
             }
 
-            info!("Tagged {} as {}", language_image, final_image_name);
+            info!("Tagged {} as {}", custom_image, final_image_name);
         } else {
             debug!("Image already exists: {}", final_image_name);
         }

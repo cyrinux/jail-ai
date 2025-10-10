@@ -210,6 +210,58 @@ cargo run -- claude --upgrade
 - **Network Isolation**: Configurable network access (disabled, private, or shared)
 - **Bind Mounts**: Support for read-only and read-write mounts
 
+## Custom Project Layer
+
+jail-ai supports project-specific customization through a `jail-ai.Containerfile` in your project root. When this file is present, it will be automatically detected and built as a custom layer in the image stack:
+
+**Build Order**: base → language layers (rust, nodejs, etc.) → **custom** → agent layers (claude, copilot, etc.)
+
+### Creating a Custom Layer
+
+Create a file named `jail-ai.Containerfile` in your project root:
+
+```dockerfile
+# jail-ai.Containerfile - Custom layer for this project
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Install project-specific tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    vim-nox \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install project-specific npm packages
+RUN npm install -g your-package
+
+USER agent
+WORKDIR /workspace
+```
+
+### Features
+
+- **Automatic Detection**: jail-ai automatically detects `jail-ai.Containerfile` in the project root
+- **Layer Caching**: The custom layer is cached and only rebuilt when the Containerfile changes or with `--upgrade`
+- **Shared by Default**: In shared mode, projects with the same language stack + custom layer share the image
+- **Isolated Mode**: Use `--isolated` flag for project-specific images (uses workspace hash in tag)
+- **Force Rebuild**: Use `--upgrade --force-layers custom` to force rebuild of just the custom layer
+
+### Use Cases
+
+- **Project-specific tools**: Install tools that are only needed for this project
+- **Custom configurations**: Set up project-specific environment variables or configs
+- **Version pinning**: Install specific versions of tools that differ from the base layers
+- **Development dependencies**: Add debugging tools or profilers for this project
+- **CI/CD alignment**: Match the exact environment used in your CI/CD pipeline
+
+### Image Tag Examples
+
+Without custom layer: `localhost/jail-ai-agent-claude:base-rust-nodejs`  
+With custom layer: `localhost/jail-ai-agent-claude:base-rust-nodejs-custom`
+
+See `examples/jail-ai.Containerfile` for a complete template.
+
 ## Custom Image Tools
 
 The layered image system automatically detects your project type and builds appropriate images with the following tools:

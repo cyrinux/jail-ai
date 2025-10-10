@@ -1,6 +1,9 @@
 use std::path::Path;
 use tracing::{debug, info};
 
+/// Custom Containerfile name in project root
+pub const CUSTOM_CONTAINERFILE_NAME: &str = "jail-ai.Containerfile";
+
 /// Detected project type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectType {
@@ -196,6 +199,16 @@ pub fn detect_project_type_with_options(path: &Path, skip_nix: bool) -> ProjectT
             ProjectType::Multi(detected_types)
         }
     }
+}
+
+/// Check if a custom Containerfile exists in the project root
+pub fn has_custom_containerfile(path: &Path) -> bool {
+    let custom_path = path.join(CUSTOM_CONTAINERFILE_NAME);
+    let exists = custom_path.exists() && custom_path.is_file();
+    if exists {
+        info!("Found custom Containerfile: {}", CUSTOM_CONTAINERFILE_NAME);
+    }
+    exists
 }
 
 #[cfg(test)]
