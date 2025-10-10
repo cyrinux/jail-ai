@@ -1,4 +1,5 @@
 mod agent_commands;
+mod agents;
 mod backend;
 mod cli;
 mod config;
@@ -20,7 +21,6 @@ use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Import functions from modules
-use agent_commands::get_git_root;
 use git_gpg::create_claude_json_in_container;
 
 /// Validate that a mount source is safe for jail execution
@@ -143,6 +143,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 upgrade,
                 layers,
                 isolated,
+                no_nix_flake,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -185,8 +186,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     // Auto-mount workspace (git root if available, otherwise current directory)
                     if !no_workspace {
-                        let workspace_dir =
-                            get_git_root().unwrap_or_else(|| std::env::current_dir().unwrap());
+                        let workspace_dir = agent_commands::get_git_root()
+                            .unwrap_or_else(|| std::env::current_dir().unwrap());
 
                         // Validate workspace directory is safe
                         agent_commands::validate_workspace_directory(&workspace_dir)?;
@@ -256,6 +257,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     // Set verbose flag
                     builder = builder.verbose(verbose);
+
+                    // Set skip_nix flag
+                    builder = builder.skip_nix(no_nix_flake);
 
                     builder.build()
                 };
@@ -349,23 +353,23 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
             }
 
             Commands::Claude { common, args } => {
-                run_agent_command("claude", common, args, verbose).await?;
+                run_agent_command(agents::Agent::Claude, common, args, verbose).await?;
             }
 
             Commands::Copilot { common, args } => {
-                run_agent_command("copilot", common, args, verbose).await?;
+                run_agent_command(agents::Agent::Copilot, common, args, verbose).await?;
             }
 
             Commands::Cursor { common, args } => {
-                run_agent_command("cursor-agent", common, args, verbose).await?;
+                run_agent_command(agents::Agent::Cursor, common, args, verbose).await?;
             }
 
             Commands::Gemini { common, args } => {
-                run_agent_command("gemini", common, args, verbose).await?;
+                run_agent_command(agents::Agent::Gemini, common, args, verbose).await?;
             }
 
             Commands::Codex { common, args } => {
-                run_agent_command("codex", common, args, verbose).await?;
+                run_agent_command(agents::Agent::Codex, common, args, verbose).await?;
             }
 
             Commands::List { current, backend } => {
@@ -540,13 +544,13 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 /// Helper function to run an AI agent command
 /// This consolidates the common logic for all agent commands
 async fn run_agent_command(
-    agent_name: &str,
+    agent: agents::Agent,
     common: cli::AgentCommandOptions,
     args: Vec<String>,
     verbose: bool,
 ) -> error::Result<()> {
     agent_commands::run_ai_agent_command(
-        agent_name,
+        agent.command_name(),
         agent_commands::AgentCommandParams {
             backend: common.backend,
             image: common.image,
@@ -570,6 +574,7 @@ async fn run_agent_command(
             isolated: common.isolated,
             verbose,
             auth: common.auth,
+            skip_nix: common.no_nix_flake,
             args,
         },
     )
@@ -594,7 +599,7 @@ async fn create_default_jail(
     builder = jail_setup::setup_default_environment(builder);
 
     // Auto-mount workspace (git root if available, otherwise provided workspace)
-    let workspace_dir = get_git_root().unwrap_or(workspace.to_path_buf());
+    let workspace_dir = agent_commands::get_git_root().unwrap_or(workspace.to_path_buf());
 
     // Validate workspace directory is safe
     agent_commands::validate_workspace_directory(&workspace_dir)?;

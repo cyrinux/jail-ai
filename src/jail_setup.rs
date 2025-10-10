@@ -126,56 +126,70 @@ pub fn mount_agent_configs(
 ) -> JailBuilder {
     let mut builder = builder;
 
-    // Opt-in: Mount entire ~/.claude directory
-    if flags.claude_dir || flags.agent_configs {
-        builder = mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
-    } else if agent == "claude" {
-        // If not mounting full .claude directory, mount minimal auth files for Claude agent only
-        let claude_creds = home_path.join(".claude").join(".credentials.json");
-        if claude_creds.exists() {
-            info!(
-                "Auto-mounting {} to /home/agent/.claude/.credentials.json",
-                claude_creds.display()
-            );
-            builder =
-                builder.bind_mount(claude_creds, "/home/agent/.claude/.credentials.json", false);
+    // Try to parse agent - if it's recognized, use Agent enum logic
+    if let Some(parsed_agent) = crate::agents::Agent::from_str(agent) {
+        // Check if agent-specific config dir should be mounted
+        let should_mount = match parsed_agent {
+            crate::agents::Agent::Claude => flags.claude_dir || flags.agent_configs,
+            crate::agents::Agent::Copilot => flags.copilot_dir || flags.agent_configs,
+            crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
+            crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
+            crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
+        };
+
+        if should_mount {
+            // Mount full config directories
+            let config_paths = parsed_agent.config_dir_paths();
+            for (host_path_str, container_path) in config_paths {
+                let host_path = home_path.join(host_path_str);
+                builder = mount_config_if_exists(builder, host_path, container_path);
+            }
+        } else if parsed_agent.has_auto_credentials() {
+            // Mount minimal auth files for agents that support it (e.g., Claude)
+            // Use the first config path for credential mounting
+            let config_paths = parsed_agent.config_dir_paths();
+            if let Some((host_path_str, _)) = config_paths.first() {
+                let creds_file = home_path.join(host_path_str).join(".credentials.json");
+                if creds_file.exists() {
+                    let target = format!("/home/agent/{}/.credentials.json", host_path_str);
+                    info!("Auto-mounting {} to {}", creds_file.display(), target);
+                    builder = builder.bind_mount(creds_file, target, false);
+                }
+            }
         }
-    }
-
-    // Opt-in: Mount ~/.config/.copilot for GitHub Copilot
-    if flags.copilot_dir || flags.agent_configs {
-        builder = mount_config_if_exists(
-            builder,
-            home_path.join(".config").join(".copilot"),
-            "/home/agent/.config/.copilot",
-        );
-    }
-
-    // Opt-in: Mount ~/.cursor and ~/.config/cursor for Cursor Agent
-    if flags.cursor_dir || flags.agent_configs {
-        // Mount ~/.cursor (contains: chats, extensions, projects, cli-config.json, etc.)
-        builder = mount_config_if_exists(builder, home_path.join(".cursor"), "/home/agent/.cursor");
-
-        // Mount ~/.config/cursor (contains: auth.json, cli-config.json, prompt_history.json, etc.)
-        builder = mount_config_if_exists(
-            builder,
-            home_path.join(".config").join("cursor"),
-            "/home/agent/.config/cursor",
-        );
-    }
-
-    // Opt-in: Mount ~/.config/gemini for Gemini CLI
-    if flags.gemini_dir || flags.agent_configs {
-        builder = mount_config_if_exists(
-            builder,
-            home_path.join(".config").join("gemini"),
-            "/home/agent/.config/gemini",
-        );
-    }
-
-    // Opt-in: Mount ~/.codex for Codex CLI
-    if flags.codex_dir || flags.agent_configs {
-        builder = mount_config_if_exists(builder, home_path.join(".codex"), "/home/agent/.codex");
+    } else {
+        // Fallback for unknown agents: apply all flags
+        if flags.claude_dir || flags.agent_configs {
+            builder =
+                mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
+        }
+        if flags.copilot_dir || flags.agent_configs {
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".config").join(".copilot"),
+                "/home/agent/.config/.copilot",
+            );
+        }
+        if flags.cursor_dir || flags.agent_configs {
+            builder =
+                mount_config_if_exists(builder, home_path.join(".cursor"), "/home/agent/.cursor");
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".config").join("cursor"),
+                "/home/agent/.config/cursor",
+            );
+        }
+        if flags.gemini_dir || flags.agent_configs {
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".config").join("gemini"),
+                "/home/agent/.config/gemini",
+            );
+        }
+        if flags.codex_dir || flags.agent_configs {
+            builder =
+                mount_config_if_exists(builder, home_path.join(".codex"), "/home/agent/.codex");
+        }
     }
 
     builder

@@ -1,8 +1,7 @@
 /// User-facing strings for jail-ai
 ///
-/// This module contains all user-facing strings as constants for future i18n support.
-/// Currently only English strings are provided, but this structure allows for easy
-/// addition of other languages in the future.
+/// This module contains all user-facing strings as constants.
+
 /// Update and upgrade related messages
 pub const UPDATE_AVAILABLE: &str = "\n🔄 Update available for your jail environment!";
 pub const OUTDATED_LAYERS_DETECTED: &str = "\n📦 Outdated layers detected:";
@@ -32,4 +31,3 @@ pub const RECREATING_JAIL_DETECTED_UPDATES: &str = "Recreating jail '{}' due to 
 pub fn format_string(template: &str, arg: &dyn std::fmt::Display) -> String {
     template.replace("{}", &arg.to_string())
 }
-

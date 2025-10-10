@@ -112,6 +112,7 @@ The following options are available for the **create**, **claude**, **copilot**,
 | `--force-rebuild` | Force rebuild of the default image, even if it already exists. Useful after modifying `~/.config/jail-ai/Containerfile`. |
 | `--layers LAYER[,LAYER...]` | Force specific image layers (comma-separated). Available layers: base, rust, python, nodejs, golang, java, php, cpp, csharp, nix, kubernetes, terraform, and agent-specific layers (agent-claude, agent-copilot, agent-cursor, agent-gemini, agent-codex). Example: `--layers base,rust,python` |
 | `--shell` | Start an interactive shell instead of running the agent command. This allows you to use the jail environment without executing the AI agent. Example: `jail-ai claude --shell` |
+| `--no-nix-flake` | Ignore flake.nix file and skip nix layer if present. By default, jail-ai automatically detects and builds nix layer when flake.nix is found in the workspace. Use this flag to disable nix detection and layer building. |
 
 ## EXAMPLES
 
@@ -130,6 +131,11 @@ jail-ai create my-agent --image alpine:latest
 Create a jail without workspace mount:
 ```bash
 jail-ai create my-agent --no-workspace
+```
+
+Create a jail ignoring flake.nix file (skip nix layer):
+```bash
+jail-ai create my-agent --no-nix-flake
 ```
 
 Execute command in jail (non-interactive):
@@ -182,6 +188,12 @@ Start an interactive shell in an agent jail (without running the agent):
 ```bash
 jail-ai claude --shell
 jail-ai copilot --copilot-dir --shell
+```
+
+AI agent commands ignoring flake.nix file (skip nix layer):
+```bash
+jail-ai claude --no-nix-flake -- chat "help me debug this code"
+jail-ai copilot --no-nix-flake --copilot-dir -- suggest "write tests"
 ```
 
 ### Configuration Mounting

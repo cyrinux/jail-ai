@@ -91,6 +91,10 @@ pub struct AgentCommandOptions {
     /// API key for authentication (used with codex --auth)
     #[arg(long)]
     pub auth: Option<String>,
+
+    /// Ignore flake.nix file and skip nix layer if present
+    #[arg(long)]
+    pub no_nix_flake: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -195,6 +199,10 @@ pub enum Commands {
         /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
         #[arg(long)]
         isolated: bool,
+
+        /// Ignore flake.nix file and skip nix layer if present
+        #[arg(long)]
+        no_nix_flake: bool,
     },
 
     /// Remove a jail

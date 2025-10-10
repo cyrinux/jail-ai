@@ -44,6 +44,11 @@ impl ProjectType {
 
 /// Detect project type based on files in the directory
 pub fn detect_project_type(path: &Path) -> ProjectType {
+    detect_project_type_with_options(path, false)
+}
+
+/// Detect project type based on files in the directory with options
+pub fn detect_project_type_with_options(path: &Path, skip_nix: bool) -> ProjectType {
     let mut detected_types = Vec::new();
 
     // Check for Rust project
@@ -84,10 +89,12 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
         detected_types.push(ProjectType::Java);
     }
 
-    // Check for Nix project
-    if path.join("flake.nix").exists() {
+    // Check for Nix project (unless skipped)
+    if !skip_nix && path.join("flake.nix").exists() {
         debug!("Detected Nix project (flake.nix)");
         detected_types.push(ProjectType::Nix);
+    } else if skip_nix && path.join("flake.nix").exists() {
+        debug!("Skipping Nix project detection due to --no-nix-flake flag");
     }
 
     // Check for PHP project
@@ -278,5 +285,20 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let project_type = detect_project_type(temp_dir.path());
         assert_eq!(project_type, ProjectType::Generic);
+    }
+
+    #[test]
+    fn test_detect_nix_project_with_skip_nix() {
+        let temp_dir = TempDir::new().unwrap();
+        let flake_nix = temp_dir.path().join("flake.nix");
+        File::create(flake_nix).unwrap();
+
+        // With skip_nix = true, should not detect Nix project
+        let project_type = detect_project_type_with_options(temp_dir.path(), true);
+        assert_eq!(project_type, ProjectType::Generic);
+
+        // With skip_nix = false, should detect Nix project
+        let project_type = detect_project_type_with_options(temp_dir.path(), false);
+        assert_eq!(project_type, ProjectType::Nix);
     }
 }

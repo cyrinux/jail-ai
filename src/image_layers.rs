@@ -1,5 +1,7 @@
 use crate::error::{JailError, Result};
-use crate::project_detection::{detect_project_type, ProjectType};
+use crate::project_detection::{
+    detect_project_type, detect_project_type_with_options, ProjectType,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -313,16 +315,22 @@ pub async fn check_layers_need_rebuild(
     }
 
     // Check agent layer if specified
-    if let Some(agent) = agent_name {
-        let agent_layer = format!("agent-{}", agent);
+    if let Some(agent_str) = agent_name {
+        // Try to parse agent - if recognized, use proper layer name
+        let agent_layer = if let Some(agent) = crate::agents::Agent::from_str(agent_str) {
+            agent.layer_name()
+        } else {
+            format!("agent-{}", agent_str)
+        };
+
         let agent_containerfile = get_containerfile_content(&agent_layer);
-        
+
         if agent_containerfile.is_some() {
             // We need to check the actual agent image that would be used
             // For shared mode, we use layer-based tagging
-            let layer_tag = generate_layer_tag(&project_type, Some(agent));
-            let agent_image = get_agent_project_image_name(agent, &layer_tag);
-            
+            let layer_tag = generate_layer_tag(&project_type, Some(agent_str));
+            let agent_image = get_agent_project_image_name(agent_str, &layer_tag);
+
             if image_needs_rebuild(&agent_image, &agent_layer).await? {
                 outdated_layers.push(agent_layer);
             }
@@ -468,6 +476,7 @@ pub async fn build_project_image(
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
+    skip_nix: bool,
 ) -> Result<String> {
     // Generate project-specific identifier (for isolated mode)
     let project_hash = generate_project_hash(workspace_path);
@@ -511,7 +520,7 @@ pub async fn build_project_image(
         }
     } else {
         // Auto-detect project type
-        let detected = detect_project_type(workspace_path);
+        let detected = detect_project_type_with_options(workspace_path, skip_nix);
         info!("Detected project type: {:?}", detected);
         detected
     };
@@ -664,6 +673,7 @@ pub async fn ensure_layered_image_available(
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
+    skip_nix: bool,
 ) -> Result<String> {
     build_project_image(
         workspace_path,
@@ -672,6 +682,7 @@ pub async fn ensure_layered_image_available(
         force_layers,
         isolated,
         verbose,
+        skip_nix,
     )
     .await
 }

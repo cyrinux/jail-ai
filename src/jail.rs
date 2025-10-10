@@ -133,6 +133,10 @@ impl JailBuilder {
         self.config.pre_create_dirs = dirs;
         self
     }
+    pub fn skip_nix(mut self, skip_nix: bool) -> Self {
+        self.config.skip_nix = skip_nix;
+        self
+    }
 
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
@@ -160,5 +164,18 @@ mod tests {
         assert_eq!(config.limits.memory_mb, Some(1024));
         assert_eq!(config.limits.cpu_quota, Some(75));
         assert_eq!(config.environment.len(), 1);
+    }
+
+    #[test]
+    fn test_jail_builder_skip_nix() {
+        let manager = JailBuilder::new("test-jail").skip_nix(true).build();
+
+        let config = manager.config();
+        assert_eq!(config.skip_nix, true);
+
+        let manager = JailBuilder::new("test-jail").skip_nix(false).build();
+
+        let config = manager.config();
+        assert_eq!(config.skip_nix, false);
     }
 }

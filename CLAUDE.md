@@ -77,6 +77,9 @@ cargo run -- create my-agent --agent-configs --git-gpg
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
 
+# Create jail ignoring flake.nix file (skip nix layer)
+cargo run -- create my-agent --no-nix-flake
+
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
 
@@ -94,6 +97,10 @@ cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
 # Codex CLI with API key authentication
 cargo run -- codex --codex-dir --auth sk-your-key -- generate "create a REST API"
+
+# AI Agent commands ignoring flake.nix file (skip nix layer)
+cargo run -- claude --no-nix-flake -- chat "help me debug this code"
+cargo run -- copilot --no-nix-flake --copilot-dir -- suggest "write tests"
 
 # Codex CLI with manual authentication (interactive shell)
 cargo run -- codex --codex-dir --shell
@@ -167,38 +174,6 @@ cargo run -- claude --upgrade
 - **After `git pull` with Containerfile changes**: Layers with modified definitions are detected
 - **After rebuilding specific layers with `--upgrade`**: Container image tag changes, prompting recreation
 
-### Internationalization (i18n)
-
-jail-ai supports multiple languages based on your system's `LANG` environment variable:
-
-**Supported Languages:**
-- 🇬🇧 English (en) - Default
-- 🇪🇸 Spanish (es) - Español
-- 🇫🇷 French (fr) - Français
-
-**Usage:**
-```bash
-# Use Spanish
-export LANG=es_ES.UTF-8
-cargo run -- claude
-
-# Use French
-export LANG=fr_FR.UTF-8
-cargo run -- claude
-
-# Use English (default)
-unset LANG
-cargo run -- claude
-```
-
-**Locale-specific responses:**
-The prompts accept locale-appropriate affirmative responses:
-- English: `y`, `yes`
-- Spanish: `s`, `si`
-- French: `o`, `oui`
-
-All user-facing upgrade messages, prompts, and notifications are translated. Log messages remain in English for debugging consistency.
-
 ### Version Management
 
 - Version is managed in `Cargo.toml` and should follow semantic versioning
@@ -223,9 +198,8 @@ All user-facing upgrade messages, prompts, and notifications are translated. Log
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
-- **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace
+- **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace (use `--no-nix-flake` to disable)
 - **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks for outdated layers and container image mismatches, prompting you to rebuild. This ensures a smooth experience after upgrading the jail-ai binary.
-- **Internationalization (i18n)**: Supports English, Spanish (Español), and French (Français) based on your system locale (`LANG` environment variable)
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags

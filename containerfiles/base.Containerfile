@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     tig \
     vim \
+    tokei \
     nano \
     tree \
     file \

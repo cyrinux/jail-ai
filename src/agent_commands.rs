@@ -34,6 +34,7 @@ pub struct AgentCommandParams {
     pub isolated: bool,
     pub verbose: bool,
     pub auth: Option<String>,
+    pub skip_nix: bool,
     pub args: Vec<String>,
 }
 
@@ -145,10 +146,9 @@ pub fn validate_workspace_directory(workspace_dir: &Path) -> Result<()> {
 /// Map agent command names to normalized agent identifiers
 /// (e.g., "cursor-agent" -> "cursor")
 fn normalize_agent_name(agent_command: &str) -> &str {
-    match agent_command {
-        "cursor-agent" => "cursor",
-        _ => agent_command,
-    }
+    crate::agents::Agent::from_str(agent_command)
+        .map(|a| a.normalized_name())
+        .unwrap_or(agent_command)
 }
 
 /// Check if a container's image is outdated and needs an upgrade
@@ -189,12 +189,14 @@ fn prompt_upgrade() -> Result<bool> {
         .map_err(|e| error::JailError::Config(format!("Failed to read input: {e}")))?;
 
     let answer = input.trim().to_lowercase();
-    // Support yes/y in English, si/s in Spanish, oui/o in French
-    Ok(answer == "y" || answer == "yes" || answer == "s" || answer == "si" || answer == "o" || answer == "oui")
+    Ok(answer == "y" || answer == "yes")
 }
 
 /// Helper function to run AI agent commands (claude, copilot, cursor-agent, gemini)
-pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandParams) -> Result<()> {
+pub async fn run_ai_agent_command(
+    agent_command: &str,
+    mut params: AgentCommandParams,
+) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let base_name = auto_detect_jail_name()?;
 
@@ -224,7 +226,10 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     let mut should_recreate = params.upgrade || !params.force_layers.is_empty();
 
     if !jail_exists {
-        info!("{}", strings::format_string(strings::CREATING_NEW_JAIL, &jail_name));
+        info!(
+            "{}",
+            strings::format_string(strings::CREATING_NEW_JAIL, &jail_name)
+        );
     } else if should_recreate {
         info!(
             "Jail exists but recreation requested (upgrade={}, layers={:?})",
@@ -233,9 +238,9 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     } else {
         // Jail exists and no forced recreation - check if upgrade is available
         info!("{}", strings::CHECKING_UPDATES);
-        
+
         let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
-        
+
         // Check if any layers need rebuilding (e.g., after jail-ai binary upgrade)
         let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
             &workspace_dir,
@@ -249,7 +254,7 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
                 Vec::new()
             }
         };
-        
+
         // Check if container image is outdated
         let container_outdated = match check_container_upgrade_needed(
             &jail_name,
@@ -271,11 +276,11 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
                 None
             }
         };
-        
+
         // Determine what needs upgrading and prompt accordingly
         if !outdated_layers.is_empty() || container_outdated.is_some() {
             println!("{}", strings::UPDATE_AVAILABLE);
-            
+
             if !outdated_layers.is_empty() {
                 println!("{}", strings::OUTDATED_LAYERS_DETECTED);
                 for layer in &outdated_layers {
@@ -283,13 +288,16 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
                 }
                 println!("{}", strings::OUTDATED_LAYERS_EXPLAIN);
             }
-            
+
             if let Some((ref current_img, ref expected_img)) = container_outdated {
                 println!("{}", strings::CONTAINER_IMAGE_MISMATCH);
                 println!("{}", strings::format_string(strings::CURRENT, current_img));
-                println!("{}", strings::format_string(strings::EXPECTED, expected_img));
+                println!(
+                    "{}",
+                    strings::format_string(strings::EXPECTED, expected_img)
+                );
             }
-            
+
             println!("{}", strings::RECOMMENDATION_USE_UPGRADE);
             if !outdated_layers.is_empty() {
                 println!("{}", strings::REBUILD_OUTDATED_LAYERS);
@@ -299,7 +307,7 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
             }
             println!("{}", strings::ENSURE_LATEST_TOOLS);
             println!("{}", strings::DATA_PRESERVED);
-            
+
             if prompt_upgrade()? {
                 info!("{}", strings::USER_CHOSE_UPGRADE);
                 should_recreate = true;
@@ -316,9 +324,15 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
             if params.upgrade || !params.force_layers.is_empty() {
-                info!("{}", strings::format_string(strings::RECREATING_JAIL_UPGRADE, &jail_name));
+                info!(
+                    "{}",
+                    strings::format_string(strings::RECREATING_JAIL_UPGRADE, &jail_name)
+                );
             } else {
-                info!("{}", strings::format_string(strings::RECREATING_JAIL_DETECTED_UPDATES, &jail_name));
+                info!(
+                    "{}",
+                    strings::format_string(strings::RECREATING_JAIL_DETECTED_UPDATES, &jail_name)
+                );
             }
         }
 
@@ -459,13 +473,18 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
         // Set verbose flag
         builder = builder.verbose(params.verbose);
 
+        // Set skip_nix flag
+        builder = builder.skip_nix(params.skip_nix);
+
         let jail = builder.build();
         jail.create().await?;
 
         // Create .claude.json file inside the container for Claude agent
-        if agent_command == "claude" {
-            if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
-                tracing::warn!("Failed to create .claude.json in container: {}", e);
+        if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
+            if agent == crate::agents::Agent::Claude {
+                if let Err(e) = create_claude_json_in_container(&home_path, &jail).await {
+                    tracing::warn!("Failed to create .claude.json in container: {}", e);
+                }
             }
         }
 
@@ -494,18 +513,20 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     }
 
     // Handle Codex CLI authentication if --auth key is provided
-    if agent_command == "codex --dangerously-bypass-approvals-and-sandbox" {
-        if let Some(api_key) = &params.auth {
-            info!("Codex CLI authentication with provided API key...");
-            // Use echo to pipe the API key to codex login --with-api-key
-            let auth_cmd = vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                format!("echo '{}' | codex login --with-api-key", api_key),
-            ];
-            let auth_output = jail.exec(&auth_cmd, false).await?;
-            if !auth_output.is_empty() {
-                print!("{auth_output}");
+    if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
+        if agent == crate::agents::Agent::Codex && agent.supports_api_key_auth() {
+            if let Some(api_key) = &params.auth {
+                info!("Codex CLI authentication with provided API key...");
+                // Use echo to pipe the API key to codex login --with-api-key
+                let auth_cmd = vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    format!("echo '{}' | codex login --with-api-key", api_key),
+                ];
+                let auth_output = jail.exec(&auth_cmd, false).await?;
+                if !auth_output.is_empty() {
+                    print!("{auth_output}");
+                }
             }
         }
     }
@@ -579,51 +600,8 @@ pub async fn find_jails_for_directory(workspace_dir: &Path) -> Result<Vec<String
 /// Extract agent name from jail name for display purposes
 /// Jail name format: jail-{project}-{hash}-{agent}
 /// Returns a simplified agent name for display (e.g., "cursor" instead of "cursor-agent")
-pub fn extract_agent_name(jail_name: &str) -> &str {
-    // The format is: jail-{project}-{hash}-{agent}
-    // The hash is always 8 characters, so we need to find it and take everything after it
-
-    if jail_name.starts_with("jail-") {
-        // Find the hash part (8 characters) and take everything after it
-        let parts: Vec<&str> = jail_name.split('-').collect();
-
-        // Look for a part that is exactly 8 characters (the hash)
-        for (i, part) in parts.iter().enumerate() {
-            if part.len() == 8 && part.chars().all(|c| c.is_ascii_hexdigit()) {
-                // Found the hash at index i, agent starts after the next dash
-                if i + 1 < parts.len() {
-                    // Find the position of the agent part in the original string
-                    // Count characters up to and including the hash, then skip the next dash
-                    let mut pos = 0;
-                    for (j, p) in parts.iter().enumerate() {
-                        if j <= i {
-                            pos += p.len() + 1; // +1 for the dash
-                        } else {
-                            break;
-                        }
-                    }
-                    // Skip the dash after the hash
-                    if pos < jail_name.len() && jail_name.chars().nth(pos) == Some('-') {
-                        pos += 1;
-                    }
-                    let agent_part = &jail_name[pos..];
-
-                    // Simplify common agent names for display
-                    match agent_part {
-                        "cursor-agent" => return "cursor",
-                        "claude" => return "claude",
-                        "copilot" => return "copilot",
-                        "gemini" => return "gemini",
-                        "codex" => return "codex",
-                        _ => return agent_part, // Return as-is for other agents
-                    }
-                }
-            }
-        }
-    }
-
-    // Fallback: just take the last part
-    jail_name.split('-').next_back().unwrap_or("unknown")
+pub fn extract_agent_name(jail_name: &str) -> &'static str {
+    crate::agents::get_agent_display_name(jail_name)
 }
 
 /// Prompt user to select a jail from a list
@@ -638,7 +616,9 @@ pub fn select_jail(jails: &[String]) -> Result<String> {
     }
 
     print!("Select a jail (1-{}): ", jails.len());
-    io::stdout().flush().unwrap();
+    io::stdout()
+        .flush()
+        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
 
     let mut input = String::new();
     io::stdin()
