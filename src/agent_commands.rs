@@ -346,6 +346,14 @@ pub async fn run_ai_agent_command(
             .backend(backend_type)
             .network(!params.no_network, true);
 
+        // Codex CLI requires host networking for OAuth callbacks to work properly
+        // The OAuth server binds to 127.0.0.1:1455 inside the container and needs
+        // to be accessible from the host's 127.0.0.1:1455
+        if normalized_agent == "codex" {
+            info!("Using host networking for Codex CLI (required for OAuth callbacks)");
+            builder = builder.use_host_network(true);
+        }
+
         // Set image: use custom if provided, otherwise let layered system auto-detect
         if use_custom_image {
             builder = builder.base_image(params.image);
@@ -450,11 +458,8 @@ pub async fn run_ai_agent_command(
             builder = builder.port_mapping(44119, 44119, "tcp");
         }
 
-        // Auto-forward port 1455 for Codex CLI (required for agent communication)
-        if normalized_agent == "codex" && !params.port.iter().any(|p| p.contains("1455")) {
-            info!("Auto-forwarding port 1455 for Codex CLI");
-            builder = builder.port_mapping(1455, 1455, "tcp");
-        }
+        // Note: Codex CLI uses host networking instead of port forwarding
+        // See the .use_host_network(true) call above for Codex CLI
 
         // Parse mounts
         for mount_str in params.mount {

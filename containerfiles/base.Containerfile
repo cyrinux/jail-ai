@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tree \
     file \
     buildah \
+    podman \
     less \
     openssh-client \
     kitty-terminfo \

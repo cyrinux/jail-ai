@@ -78,6 +78,10 @@ pub struct BindMount {
 pub struct NetworkConfig {
     pub enabled: bool,
     pub private: bool,
+    /// Use host networking (--network=host) - container shares host's network namespace
+    /// This is useful for services that need to bind to 127.0.0.1 on the host (e.g., OAuth callbacks)
+    #[serde(default)]
+    pub use_host_network: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +139,7 @@ impl Default for JailConfig {
             network: NetworkConfig {
                 enabled: false,
                 private: true,
+                use_host_network: false,
             },
             port_mappings: Vec::new(),
             limits: ResourceLimits {

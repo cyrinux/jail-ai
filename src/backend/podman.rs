@@ -54,14 +54,19 @@ impl PodmanBackend {
         args.push(format!("{home_volume}:/home/agent"));
 
         // Network settings
-        if !config.network.enabled {
+        if config.network.use_host_network {
+            // Host networking - container shares host's network namespace
+            // This allows binding to 127.0.0.1 on the host (useful for OAuth callbacks)
+            args.push("--network=host".to_string());
+        } else if !config.network.enabled {
             args.push("--network=none".to_string());
         } else if config.network.private {
             args.push("--network=private".to_string());
         }
 
-        // Port mappings (requires network to be enabled)
-        if config.network.enabled {
+        // Port mappings (requires network to be enabled and not using host networking)
+        // Note: Host networking doesn't support port mappings because container directly uses host's network
+        if config.network.enabled && !config.network.use_host_network {
             for port_mapping in &config.port_mappings {
                 args.push("-p".to_string());
                 args.push(format!(
@@ -167,7 +172,7 @@ impl JailBackend for PodmanBackend {
                 .rsplit('-')
                 .next()
                 .and_then(|suffix| match suffix {
-                    "claude" | "copilot" | "cursor" | "gemini" | "codex" => Some(suffix),
+                    "claude" | "copilot" | "cursor" | "gemini" | "jules" | "codex" => Some(suffix),
                     "agent" => {
                         // Handle legacy jail names with format: ...-cursor-agent
                         // Look at the second-to-last segment
@@ -470,6 +475,7 @@ impl JailBackend for PodmanBackend {
         let network = crate::config::NetworkConfig {
             enabled: network_mode != "none",
             private: network_mode == "private" || network_mode == "slirp4netns",
+            use_host_network: network_mode == "host",
         };
 
         // Extract port mappings
@@ -554,6 +560,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
+                use_host_network: false,
             },
             port_mappings: vec![],
             limits: crate::config::ResourceLimits {
@@ -594,6 +601,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: true,
                 private: true,
+                use_host_network: false,
             },
             port_mappings: vec![
                 crate::config::PortMapping {
@@ -639,6 +647,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
+                use_host_network: false,
             },
             port_mappings: vec![crate::config::PortMapping {
                 host_port: 8080,
