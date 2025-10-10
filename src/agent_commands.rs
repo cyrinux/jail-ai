@@ -444,6 +444,12 @@ pub async fn run_ai_agent_command(
             builder = setup_git_gpg_config(builder, &cwd, &home_path)?;
         }
 
+        // Auto-forward port 44119 for Jules CLI (required for agent communication)
+        if normalized_agent == "jules" && !params.port.iter().any(|p| p.contains("44119")) {
+            info!("Auto-forwarding port 44119 for Jules CLI");
+            builder = builder.port_mapping(44119, 44119, "tcp");
+        }
+
         // Parse mounts
         for mount_str in params.mount {
             let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
