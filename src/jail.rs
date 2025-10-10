@@ -99,12 +99,18 @@ impl JailBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn use_host_network(mut self, use_host: bool) -> Self {
         self.config.network.use_host_network = use_host;
         // If using host network, network must be enabled
         if use_host {
             self.config.network.enabled = true;
         }
+        self
+    }
+
+    pub fn pasta_options(mut self, options: Vec<String>) -> Self {
+        self.config.network.pasta_options = options;
         self
     }
 

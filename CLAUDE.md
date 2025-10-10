@@ -335,13 +335,13 @@ The AI coding agents require authentication.
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
   - **Authentication**: Use `--auth <key>` to provide an API key for authentication
   - **Manual authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
-  - **Host Networking**: Codex CLI uses `--network=host` mode for OAuth callback support (binds to host's `127.0.0.1:1455`)
+  - **Secure Networking**: Codex CLI uses pasta networking with `--map-host-loopback` for OAuth callback support (secure localhost access only)
 - `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
   - **Automatic Port Forwarding**: Port 44119 is automatically forwarded from host to container for Jules CLI (required for agent communication)
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`, `--jules-dir`)
 
 **Note**:
-- **Codex CLI** uses host networking (`--network=host`) for OAuth callback support, allowing it to bind to `127.0.0.1:1455` on the host.
+- **Codex CLI** uses pasta networking with `--map-host-loopback` for OAuth callback support. This provides secure localhost access without exposing the host network.
 - **Jules CLI** automatically forwards port 44119 (TCP) for agent communication. You don't need to manually specify `-p 44119:44119` when using the `jules` command.
 
 Example aliases for different security levels:

@@ -61,7 +61,13 @@ impl PodmanBackend {
         } else if !config.network.enabled {
             args.push("--network=none".to_string());
         } else if config.network.private {
-            args.push("--network=private".to_string());
+            // Use pasta networking with custom options if specified
+            if !config.network.pasta_options.is_empty() {
+                let pasta_opts = config.network.pasta_options.join(",");
+                args.push(format!("--network=pasta:{}", pasta_opts));
+            } else {
+                args.push("--network=private".to_string());
+            }
         }
 
         // Port mappings (requires network to be enabled and not using host networking)
@@ -476,6 +482,7 @@ impl JailBackend for PodmanBackend {
             enabled: network_mode != "none",
             private: network_mode == "private" || network_mode == "slirp4netns",
             use_host_network: network_mode == "host",
+            pasta_options: Vec::new(), // Cannot extract pasta options from inspect
         };
 
         // Extract port mappings
@@ -561,6 +568,7 @@ mod tests {
                 enabled: false,
                 private: true,
                 use_host_network: false,
+                pasta_options: Vec::new(),
             },
             port_mappings: vec![],
             limits: crate::config::ResourceLimits {
@@ -602,6 +610,7 @@ mod tests {
                 enabled: true,
                 private: true,
                 use_host_network: false,
+                pasta_options: Vec::new(),
             },
             port_mappings: vec![
                 crate::config::PortMapping {
@@ -648,6 +657,7 @@ mod tests {
                 enabled: false,
                 private: true,
                 use_host_network: false,
+                pasta_options: Vec::new(),
             },
             port_mappings: vec![crate::config::PortMapping {
                 host_port: 8080,

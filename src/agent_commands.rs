@@ -346,12 +346,13 @@ pub async fn run_ai_agent_command(
             .backend(backend_type)
             .network(!params.no_network, true);
 
-        // Codex CLI requires host networking for OAuth callbacks to work properly
+        // Codex CLI requires special networking for OAuth callbacks to work properly
         // The OAuth server binds to 127.0.0.1:1455 inside the container and needs
         // to be accessible from the host's 127.0.0.1:1455
+        // Use pasta networking with --map-host-loopback for secure localhost access
         if normalized_agent == "codex" {
-            info!("Using host networking for Codex CLI (required for OAuth callbacks)");
-            builder = builder.use_host_network(true);
+            info!("Using pasta networking with host-loopback mapping for Codex CLI (OAuth callbacks)");
+            builder = builder.pasta_options(vec!["--map-host-loopback".to_string()]);
         }
 
         // Set image: use custom if provided, otherwise let layered system auto-detect

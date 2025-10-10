@@ -82,6 +82,10 @@ pub struct NetworkConfig {
     /// This is useful for services that need to bind to 127.0.0.1 on the host (e.g., OAuth callbacks)
     #[serde(default)]
     pub use_host_network: bool,
+    /// Custom network options for pasta (e.g., "--map-host-loopback" for localhost access)
+    /// These options are appended to --network=pasta:<options>
+    #[serde(default)]
+    pub pasta_options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +144,7 @@ impl Default for JailConfig {
                 enabled: false,
                 private: true,
                 use_host_network: false,
+                pasta_options: Vec::new(),
             },
             port_mappings: Vec::new(),
             limits: ResourceLimits {
