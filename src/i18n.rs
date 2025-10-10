@@ -5,8 +5,10 @@ use std::sync::OnceLock;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Locale {
     En,
+    EnUs,
     Es,
     Fr,
+    Dk,
 }
 
 impl Locale {
@@ -19,6 +21,10 @@ impl Locale {
                 return Locale::Es;
             } else if lang.starts_with("fr") {
                 return Locale::Fr;
+            } else if lang.starts_with("dk") {
+                return Locale::Dk;
+            } else if lang.starts_with("en_us") {
+                return Locale::EnUs;
             }
         }
         
@@ -29,6 +35,10 @@ impl Locale {
                 return Locale::Es;
             } else if lang.starts_with("fr") {
                 return Locale::Fr;
+            } else if lang.starts_with("dk") {
+                return Locale::Dk;
+            } else if lang.starts_with("en_us") {
+                return Locale::EnUs;
             }
         }
         
@@ -66,9 +76,10 @@ fn translations(locale: Locale) -> &'static Translations {
     static EN: OnceLock<Translations> = OnceLock::new();
     static ES: OnceLock<Translations> = OnceLock::new();
     static FR: OnceLock<Translations> = OnceLock::new();
+    static DK: OnceLock<Translations> = OnceLock::new();
     
     match locale {
-        Locale::En => EN.get_or_init(|| {
+        Locale::En | Locale::EnUs => EN.get_or_init(|| {
             let mut m = HashMap::new();
             m.insert("update_available", "\n🔄 Update available for your jail environment!");
             m.insert("outdated_layers_detected", "\n📦 Outdated layers detected:");
@@ -89,6 +100,29 @@ fn translations(locale: Locale) -> &'static Translations {
             m.insert("creating_new_jail", "Creating new jail: {}");
             m.insert("recreating_jail_upgrade", "Recreating jail '{}' due to --upgrade or --layers");
             m.insert("recreating_jail_detected_updates", "Recreating jail '{}' due to detected updates");
+            m
+        }),
+        Locale::Fr => FR.get_or_init(|| {
+            let mut m = HashMap::new();
+            m.insert("update_available", "\n🔄 Mise à jour disponible pour votre environnement jail !");
+            m.insert("outdated_layers_detected", "\n📦 Couches obsolètes détectées :");
+            m.insert("outdated_layers_explain", "\nCela se produit généralement après la mise à jour du binaire jail-ai.\nLes couches contiennent des outils, des dépendances ou des correctifs de sécurité mis à jour.");
+            m.insert("container_image_mismatch", "\n🐳 Incohérence de l'image du conteneur :");
+            m.insert("current", "  Actuelle : {}");
+            m.insert("expected", "  Attendue : {}");
+            m.insert("recommendation_use_upgrade", "\n💡 Recommandation : Utilisez --upgrade pour :");
+            m.insert("rebuild_outdated_layers", "  • Reconstruire les couches obsolètes avec les dernières définitions");
+            m.insert("recreate_container", "  • Recréer le conteneur avec l'image correcte");
+            m.insert("ensure_latest_tools", "  • Vous assurer d'avoir les derniers outils et correctifs de sécurité");
+            m.insert("data_preserved", "\nVos données dans /home/agent seront préservées pendant la reconstruction.");
+            m.insert("would_you_like_rebuild", "\nSouhaitez-vous reconstruire maintenant ? (o/N) : ");
+            m.insert("checking_updates", "Vérification des mises à jour...");
+            m.insert("user_chose_upgrade", "L'utilisateur a choisi de mettre à jour");
+            m.insert("user_declined_upgrade", "L'utilisateur a refusé la reconstruction, poursuite avec le conteneur existant");
+            m.insert("container_up_to_date", "Le conteneur et les couches sont à jour");
+            m.insert("creating_new_jail", "Création d'un nouveau jail : {}");
+            m.insert("recreating_jail_upgrade", "Recréation du jail '{}' en raison de --upgrade ou --layers");
+            m.insert("recreating_jail_detected_updates", "Recréation du jail '{}' en raison de mises à jour détectées");
             m
         }),
         Locale::Es => ES.get_or_init(|| {
@@ -114,27 +148,27 @@ fn translations(locale: Locale) -> &'static Translations {
             m.insert("recreating_jail_detected_updates", "Recreando jail '{}' debido a actualizaciones detectadas");
             m
         }),
-        Locale::Fr => FR.get_or_init(|| {
+        Locale::Dk => DK.get_or_init(|| {
             let mut m = HashMap::new();
-            m.insert("update_available", "\n🔄 Mise à jour disponible pour votre environnement jail !");
-            m.insert("outdated_layers_detected", "\n📦 Couches obsolètes détectées :");
-            m.insert("outdated_layers_explain", "\nCela se produit généralement après la mise à jour du binaire jail-ai.\nLes couches contiennent des outils, des dépendances ou des correctifs de sécurité mis à jour.");
-            m.insert("container_image_mismatch", "\n🐳 Incohérence de l'image du conteneur :");
-            m.insert("current", "  Actuelle : {}");
-            m.insert("expected", "  Attendue : {}");
-            m.insert("recommendation_use_upgrade", "\n💡 Recommandation : Utilisez --upgrade pour :");
-            m.insert("rebuild_outdated_layers", "  • Reconstruire les couches obsolètes avec les dernières définitions");
-            m.insert("recreate_container", "  • Recréer le conteneur avec l'image correcte");
-            m.insert("ensure_latest_tools", "  • Vous assurer d'avoir les derniers outils et correctifs de sécurité");
-            m.insert("data_preserved", "\nVos données dans /home/agent seront préservées pendant la reconstruction.");
-            m.insert("would_you_like_rebuild", "\nSouhaitez-vous reconstruire maintenant ? (o/N) : ");
-            m.insert("checking_updates", "Vérification des mises à jour...");
-            m.insert("user_chose_upgrade", "L'utilisateur a choisi de mettre à jour");
-            m.insert("user_declined_upgrade", "L'utilisateur a refusé la reconstruction, poursuite avec le conteneur existant");
-            m.insert("container_up_to_date", "Le conteneur et les couches sont à jour");
-            m.insert("creating_new_jail", "Création d'un nouveau jail : {}");
-            m.insert("recreating_jail_upgrade", "Recréation du jail '{}' en raison de --upgrade ou --layers");
-            m.insert("recreating_jail_detected_updates", "Recréation du jail '{}' en raison de mises à jour détectées");
+            m.insert("update_available", "\n🔄 Opdatering tilgængelig for dit jail-miljø!");
+            m.insert("outdated_layers_detected", "\n📦 Forældede lag opdaget:");
+            m.insert("outdated_layers_explain", "\nDette sker typisk efter opgradering af jail-ai-binaren.\nLag indeholder opdaterede værktøjer, afhængigheder eller sikkerhedsrettelser.");
+            m.insert("container_image_mismatch", "\n🐳 Uoverensstemmelse i container-image:");
+            m.insert("current", "  Nuværende: {}");
+            m.insert("expected", "  Forventet:  {}");
+            m.insert("recommendation_use_upgrade", "\n💡 Anbefaling: Brug --upgrade til at:");
+            m.insert("rebuild_outdated_layers", "  • Genopbygge forældede lag med de seneste definitioner");
+            m.insert("recreate_container", "  • Genoprette containeren med det korrekte image");
+            m.insert("ensure_latest_tools", "  • Sikre, at du har de nyeste værktøjer og sikkerhedsrettelser");
+            m.insert("data_preserved", "\nDine data i /home/agent vil blive bevaret under genopbygningen.");
+            m.insert("would_you_like_rebuild", "\nVil du genopbygge nu? (y/N): ");
+            m.insert("checking_updates", "Søger efter opdateringer...");
+            m.insert("user_chose_upgrade", "Brugeren valgte at opgradere");
+            m.insert("user_declined_upgrade", "Brugeren afviste genopbygning, fortsætter med eksisterende container");
+            m.insert("container_up_to_date", "Container og lag er opdaterede");
+            m.insert("creating_new_jail", "Opretter nyt jail: {}");
+            m.insert("recreating_jail_upgrade", "Genopretter jail '{}' på grund af --upgrade eller --layers");
+            m.insert("recreating_jail_detected_updates", "Genopretter jail '{}' på grund af opdagede opdateringer");
             m
         }),
     }
