@@ -136,7 +136,7 @@ Layers contain updated tools, dependencies, or security patches.
   Current:  localhost/jail-ai-agent-claude:base-rust-nodejs-abc123
   Expected: localhost/jail-ai-agent-claude:base-rust-nodejs-def456
 
-💡 Recommendation: Use --force-rebuild to:
+💡 Recommendation: Use --upgrade to:
   • Rebuild outdated layers with latest definitions
   • Recreate container with the correct image
   • Ensure you have the latest tools and security patches
@@ -148,24 +148,56 @@ Would you like to rebuild now? (y/N):
 
 **How it works:**
 
-- The check is automatic when entering an existing container (no `--force-rebuild` needed)
+- The check is automatic when entering an existing container (no `--upgrade` needed)
 - Compares embedded Containerfile hashes to detect outdated layers
 - Compares the container's current image with what should be used
-- If you choose to rebuild (type `y`), it performs a full `--force-rebuild` automatically
+- If you choose to rebuild (type `y`), it performs a full `--upgrade` automatically
 - If you decline (type `N` or just press Enter), the existing container continues to run
 - Your data in `/home/agent` is preserved via persistent volumes during rebuilds
 
 **To force a rebuild without prompting:**
 
 ```bash
-cargo run -- claude --force-rebuild
+cargo run -- claude --upgrade
 ```
 
 **Common scenarios:**
 
 - **After upgrading jail-ai binary**: Embedded Containerfiles change, so layers are detected as outdated
 - **After `git pull` with Containerfile changes**: Layers with modified definitions are detected
-- **After rebuilding specific layers**: Container image tag changes, prompting recreation
+- **After rebuilding specific layers with `--upgrade`**: Container image tag changes, prompting recreation
+
+### Internationalization (i18n)
+
+jail-ai supports multiple languages based on your system's `LANG` environment variable:
+
+**Supported Languages:**
+- 🇬🇧 English (en) - Default
+- 🇪🇸 Spanish (es) - Español
+- 🇫🇷 French (fr) - Français
+
+**Usage:**
+```bash
+# Use Spanish
+export LANG=es_ES.UTF-8
+cargo run -- claude
+
+# Use French
+export LANG=fr_FR.UTF-8
+cargo run -- claude
+
+# Use English (default)
+unset LANG
+cargo run -- claude
+```
+
+**Locale-specific responses:**
+The prompts accept locale-appropriate affirmative responses:
+- English: `y`, `yes`
+- Spanish: `s`, `si`
+- French: `o`, `oui`
+
+All user-facing upgrade messages, prompts, and notifications are translated. Log messages remain in English for debugging consistency.
 
 ### Version Management
 
@@ -193,6 +225,7 @@ cargo run -- claude --force-rebuild
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
 - **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace
 - **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks for outdated layers and container image mismatches, prompting you to rebuild. This ensures a smooth experience after upgrading the jail-ai binary.
+- **Internationalization (i18n)**: Supports English, Spanish (Español), and French (Français) based on your system locale (`LANG` environment variable)
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available
 - **Minimal Auth Mounting**: Claude agent auto-mounts `~/.claude/.credentials.json` by default; other agents require explicit config flags

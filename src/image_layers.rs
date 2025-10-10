@@ -464,7 +464,7 @@ async fn build_image_from_containerfile(
 pub async fn build_project_image(
     workspace_path: &Path,
     agent_name: Option<&str>,
-    force_rebuild: bool,
+    upgrade: bool,
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
@@ -517,7 +517,7 @@ pub async fn build_project_image(
     };
 
     // Step 1: Build base layer (shared :latest)
-    let should_rebuild_base = force_rebuild
+    let should_rebuild_base = upgrade
         || force_layers.contains(&"base".to_string())
         || !image_exists(BASE_IMAGE_NAME).await?;
 
@@ -539,7 +539,7 @@ pub async fn build_project_image(
             for lang_type in types {
                 let layer_name = lang_type.language_layer();
                 let lang_image_name = get_language_image_name(lang_type);
-                let should_rebuild_lang = force_rebuild
+                let should_rebuild_lang = upgrade
                     || force_layers.contains(&layer_name.to_string())
                     || !image_exists(lang_image_name).await?;
 
@@ -554,7 +554,7 @@ pub async fn build_project_image(
         _ => {
             let layer_name = project_type.language_layer();
             let lang_image_name = get_language_image_name(&project_type);
-            let should_rebuild_lang = force_rebuild
+            let should_rebuild_lang = upgrade
                 || force_layers.contains(&layer_name.to_string())
                 || !image_exists(lang_image_name).await?;
 
@@ -589,7 +589,7 @@ pub async fn build_project_image(
         };
 
         let final_image_name = get_agent_project_image_name(agent, &image_tag);
-        let should_rebuild_agent = force_rebuild
+        let should_rebuild_agent = upgrade
             || force_layers.contains(&agent_layer)
             || !image_exists(&final_image_name).await?;
 
@@ -628,7 +628,7 @@ pub async fn build_project_image(
 
         let final_image_name = get_project_image_name(layer_type, &image_tag);
 
-        if force_rebuild || !image_exists(&final_image_name).await? {
+        if upgrade || !image_exists(&final_image_name).await? {
             info!("Tagging language image: {}", final_image_name);
 
             let mut cmd = Command::new("podman");
@@ -660,7 +660,7 @@ pub async fn build_project_image(
 pub async fn ensure_layered_image_available(
     workspace_path: &Path,
     agent_name: Option<&str>,
-    force_rebuild: bool,
+    upgrade: bool,
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
@@ -668,7 +668,7 @@ pub async fn ensure_layered_image_available(
     build_project_image(
         workspace_path,
         agent_name,
-        force_rebuild,
+        upgrade,
         force_layers,
         isolated,
         verbose,

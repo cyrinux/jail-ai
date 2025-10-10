@@ -109,8 +109,8 @@ impl JailBuilder {
         self
     }
 
-    pub fn force_rebuild(mut self, force: bool) -> Self {
-        self.config.force_rebuild = force;
+    pub fn upgrade(mut self, upgrade: bool) -> Self {
+        self.config.upgrade = upgrade;
         self
     }
 

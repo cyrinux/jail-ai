@@ -109,10 +109,10 @@ impl JailBackend for PodmanBackend {
     async fn create(&self, config: &JailConfig) -> Result<()> {
         info!("Creating podman jail: {}", config.name);
 
-        // If force_rebuild is true, stop and remove existing container first
-        if config.force_rebuild && self.exists(&config.name).await? {
+        // If upgrade is true, stop and remove existing container first
+        if config.upgrade && self.exists(&config.name).await? {
             info!(
-                "Force rebuild enabled: stopping and removing existing container '{}'",
+                "Upgrade enabled: stopping and removing existing container '{}'",
                 config.name
             );
 
@@ -124,7 +124,7 @@ impl JailBackend for PodmanBackend {
                 // Log warning but continue - the container might already be gone
                 debug!("Failed to remove existing container (may not exist): {}", e);
             }
-        } else if !config.force_rebuild && self.exists(&config.name).await? {
+        } else if !config.upgrade && self.exists(&config.name).await? {
             return Err(JailError::AlreadyExists(config.name.clone()));
         }
 
@@ -182,7 +182,7 @@ impl JailBackend for PodmanBackend {
             crate::image_layers::ensure_layered_image_available(
                 &workspace_path,
                 agent_name,
-                config.force_rebuild,
+                config.upgrade,
                 &config.force_layers,
                 config.isolated,
                 config.verbose,
@@ -451,7 +451,7 @@ impl JailBackend for PodmanBackend {
                 memory_mb,
                 cpu_quota,
             },
-            force_rebuild: false,
+            upgrade: false,
             force_layers: Vec::new(),
             use_layered_images: true,
             isolated: false,
@@ -481,7 +481,7 @@ mod tests {
                 memory_mb: Some(512),
                 cpu_quota: Some(50),
             },
-            force_rebuild: false,
+            upgrade: false,
             force_layers: Vec::new(),
             use_layered_images: true,
             isolated: false,

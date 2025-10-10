@@ -25,9 +25,9 @@ pub struct JailConfig {
     /// Resource limits
     pub limits: ResourceLimits,
 
-    /// Force rebuild of the default image
+    /// Upgrade: rebuild outdated layers and recreate container
     #[serde(default)]
-    pub force_rebuild: bool,
+    pub upgrade: bool,
 
     /// Force specific layers (comma-separated, e.g., "base,rust,python")
     #[serde(default)]
@@ -116,7 +116,7 @@ impl Default for JailConfig {
                 memory_mb: None,
                 cpu_quota: None,
             },
-            force_rebuild: false,
+            upgrade: false,
             force_layers: Vec::new(),
             use_layered_images: true,
             isolated: false,

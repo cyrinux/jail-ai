@@ -9,6 +9,7 @@ mod image_layers;
 mod jail;
 mod jail_setup;
 mod project_detection;
+mod strings;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -138,7 +139,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 codex_dir,
                 agent_configs,
                 git_gpg,
-                force_rebuild,
+                upgrade,
                 layers,
                 isolated,
             } => {
@@ -243,8 +244,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                         builder = builder.cpu_quota(cpu_quota);
                     }
 
-                    // Set force rebuild flag
-                    builder = builder.force_rebuild(force_rebuild);
+                    // Set upgrade flag
+                    builder = builder.upgrade(upgrade);
 
                     // Set force layers
                     builder = builder.force_layers(layers);
@@ -562,7 +563,7 @@ async fn run_agent_command(
             codex_dir: common.codex_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
-            force_rebuild: common.force_rebuild,
+            upgrade: common.upgrade,
             force_layers: common.layers,
             shell: common.shell,
             isolated: common.isolated,

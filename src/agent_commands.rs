@@ -6,6 +6,7 @@ use crate::git_gpg::{
 };
 use crate::jail::{JailBuilder, JailManager};
 use crate::jail_setup::{self, mount_agent_configs, setup_default_environment};
+use crate::strings;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
@@ -27,7 +28,7 @@ pub struct AgentCommandParams {
     pub codex_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
-    pub force_rebuild: bool,
+    pub upgrade: bool,
     pub force_layers: Vec<String>,
     pub shell: bool,
     pub isolated: bool,
@@ -173,11 +174,11 @@ async fn check_container_upgrade_needed(
     Ok((needs_upgrade, current_image, expected_image))
 }
 
-/// Prompt user to force rebuild (for outdated layers or container)
-fn prompt_force_rebuild() -> Result<bool> {
+/// Prompt user to upgrade (for outdated layers or container)
+fn prompt_upgrade() -> Result<bool> {
     use std::io::{self, Write};
 
-    print!("\nWould you like to rebuild now? (y/N): ");
+    print!("{}", strings::WOULD_YOU_LIKE_REBUILD);
     io::stdout()
         .flush()
         .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
@@ -188,7 +189,8 @@ fn prompt_force_rebuild() -> Result<bool> {
         .map_err(|e| error::JailError::Config(format!("Failed to read input: {e}")))?;
 
     let answer = input.trim().to_lowercase();
-    Ok(answer == "y" || answer == "yes")
+    // Support yes/y in English, si/s in Spanish, oui/o in French
+    Ok(answer == "y" || answer == "yes" || answer == "s" || answer == "si" || answer == "o" || answer == "oui")
 }
 
 /// Helper function to run AI agent commands (claude, copilot, cursor-agent, gemini)
@@ -211,7 +213,7 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     };
 
     // Check if we need to create/recreate the jail
-    // Force recreation if --force-rebuild or --layers is specified
+    // Force recreation if --upgrade or --layers is specified
     let temp_config = JailConfig {
         name: jail_name.clone(),
         backend: backend_type,
@@ -219,18 +221,18 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
     };
     let temp_jail = JailManager::new(temp_config);
     let jail_exists = temp_jail.exists().await?;
-    let mut should_recreate = params.force_rebuild || !params.force_layers.is_empty();
+    let mut should_recreate = params.upgrade || !params.force_layers.is_empty();
 
     if !jail_exists {
-        info!("Creating new jail: {}", jail_name);
+        info!("{}", strings::format_string(strings::CREATING_NEW_JAIL, &jail_name));
     } else if should_recreate {
         info!(
-            "Jail exists but recreation requested (force_rebuild={}, force_layers={:?})",
-            params.force_rebuild, params.force_layers
+            "Jail exists but recreation requested (upgrade={}, layers={:?})",
+            params.upgrade, params.force_layers
         );
     } else {
         // Jail exists and no forced recreation - check if upgrade is available
-        info!("Checking for updates...");
+        info!("{}", strings::CHECKING_UPDATES);
         
         let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
         
@@ -272,55 +274,51 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
         
         // Determine what needs upgrading and prompt accordingly
         if !outdated_layers.is_empty() || container_outdated.is_some() {
-            println!("\n🔄 Update available for your jail environment!");
+            println!("{}", strings::UPDATE_AVAILABLE);
             
             if !outdated_layers.is_empty() {
-                println!("\n📦 Outdated layers detected:");
+                println!("{}", strings::OUTDATED_LAYERS_DETECTED);
                 for layer in &outdated_layers {
                     println!("  • {}", layer);
                 }
-                println!("\nThis typically happens after upgrading the jail-ai binary.");
-                println!("Layers contain updated tools, dependencies, or security patches.");
+                println!("{}", strings::OUTDATED_LAYERS_EXPLAIN);
             }
             
             if let Some((ref current_img, ref expected_img)) = container_outdated {
-                println!("\n🐳 Container image mismatch:");
-                println!("  Current:  {}", current_img);
-                println!("  Expected: {}", expected_img);
+                println!("{}", strings::CONTAINER_IMAGE_MISMATCH);
+                println!("{}", strings::format_string(strings::CURRENT, current_img));
+                println!("{}", strings::format_string(strings::EXPECTED, expected_img));
             }
             
-            println!("\n💡 Recommendation: Use --force-rebuild to:");
+            println!("{}", strings::RECOMMENDATION_USE_UPGRADE);
             if !outdated_layers.is_empty() {
-                println!("  • Rebuild outdated layers with latest definitions");
+                println!("{}", strings::REBUILD_OUTDATED_LAYERS);
             }
             if container_outdated.is_some() {
-                println!("  • Recreate container with the correct image");
+                println!("{}", strings::RECREATE_CONTAINER);
             }
-            println!("  • Ensure you have the latest tools and security patches");
-            println!("\nYour data in /home/agent will be preserved during the rebuild.");
+            println!("{}", strings::ENSURE_LATEST_TOOLS);
+            println!("{}", strings::DATA_PRESERVED);
             
-            if prompt_force_rebuild()? {
-                info!("User chose to force rebuild");
+            if prompt_upgrade()? {
+                info!("{}", strings::USER_CHOSE_UPGRADE);
                 should_recreate = true;
-                // Enable force_rebuild to ensure layers are rebuilt when recreating
-                params.force_rebuild = true;
+                // Enable upgrade to ensure layers are rebuilt when recreating
+                params.upgrade = true;
             } else {
-                info!("User declined rebuild, continuing with existing container");
+                info!("{}", strings::USER_DECLINED_UPGRADE);
             }
         } else {
-            info!("Container and layers are up to date");
+            info!("{}", strings::CONTAINER_UP_TO_DATE);
         }
     }
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            if params.force_rebuild || !params.force_layers.is_empty() {
-                info!(
-                    "Recreating jail '{}' due to --force-rebuild or --layers",
-                    jail_name
-                );
+            if params.upgrade || !params.force_layers.is_empty() {
+                info!("{}", strings::format_string(strings::RECREATING_JAIL_UPGRADE, &jail_name));
             } else {
-                info!("Recreating jail '{}' due to detected updates", jail_name);
+                info!("{}", strings::format_string(strings::RECREATING_JAIL_DETECTED_UPDATES, &jail_name));
             }
         }
 
@@ -401,8 +399,8 @@ pub async fn run_ai_agent_command(agent_command: &str, mut params: AgentCommandP
             builder = builder.cpu_quota(cpu_quota);
         }
 
-        // Set force rebuild flag
-        builder = builder.force_rebuild(params.force_rebuild);
+        // Set upgrade flag
+        builder = builder.upgrade(params.upgrade);
 
         // Set force layers
         builder = builder.force_layers(params.force_layers);

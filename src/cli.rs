@@ -72,9 +72,9 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub git_gpg: bool,
 
-    /// Force rebuild of the default image, even if it already exists
+    /// Upgrade: rebuild outdated layers and recreate container
     #[arg(long)]
-    pub force_rebuild: bool,
+    pub upgrade: bool,
 
     /// Force specific layers (comma-separated, e.g., "base,rust,python")
     #[arg(long, value_delimiter = ',')]
@@ -184,9 +184,9 @@ pub enum Commands {
         #[arg(long)]
         git_gpg: bool,
 
-        /// Force rebuild of the default image, even if it already exists
+        /// Upgrade: rebuild outdated layers and recreate container
         #[arg(long)]
-        force_rebuild: bool,
+        upgrade: bool,
 
         /// Force specific layers (comma-separated, e.g., "base,rust,python")
         #[arg(long, value_delimiter = ',')]
