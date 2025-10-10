@@ -21,4 +21,7 @@ RUN CLAUDE_BIN=$(which claude || echo "") && \
 USER agent
 WORKDIR /workspace
 
+# Set agent identifier for prompt display
+ENV JAIL_AI_AGENT="🤖 Claude"
+
 CMD ["/bin/zsh"]

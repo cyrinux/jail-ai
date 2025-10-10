@@ -50,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Process management
     procps \
     htop \
-   # Additional utilities
+    # Additional utilities
     tmux \
     screen \
     sudo \
@@ -63,14 +63,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gpg-agent \
     pinentry-curses \
     && rm -rf /var/lib/apt/lists/*
-
-# Install tokei from cargo (code statistics tool)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    cargo \
-    && cargo install tokei --root /usr/local \
-    && apt-get remove -y cargo rustc \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /root/.cargo
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -121,16 +113,34 @@ RUN mkdir -p /etc/skel \
     && echo '# Load Powerlevel10k config if exists' >> /etc/skel/.zshrc \
     && echo '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' >> /etc/skel/.zshrc
 
-# Create a minimal p10k config in /etc/skel
+# Create a minimal p10k config in /etc/skel with custom jail_agent segment
 RUN echo '# Powerlevel10k configuration' > /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir vcs)' >> /etc/skel/.p10k.zsh \
+    && echo '' >> /etc/skel/.p10k.zsh \
+    && echo '# Custom segment for jail-ai agent identification' >> /etc/skel/.p10k.zsh \
+    && echo 'function prompt_jail_agent() {' >> /etc/skel/.p10k.zsh \
+    && echo '  if [[ -n "${JAIL_AI_AGENT}" ]]; then' >> /etc/skel/.p10k.zsh \
+    && echo '    p10k segment -f 15 -b 4 -t "${JAIL_AI_AGENT}"' >> /etc/skel/.p10k.zsh \
+    && echo '  fi' >> /etc/skel/.p10k.zsh \
+    && echo '}' >> /etc/skel/.p10k.zsh \
+    && echo '' >> /etc/skel/.p10k.zsh \
+    && echo '# Enable instant prompt (must be near the top)' >> /etc/skel/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /etc/skel/.p10k.zsh \
+    && echo '' >> /etc/skel/.p10k.zsh \
+    && echo '# Prompt elements' >> /etc/skel/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(jail_agent dir vcs)' >> /etc/skel/.p10k.zsh \
     && echo 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /etc/skel/.p10k.zsh
+    && echo '' >> /etc/skel/.p10k.zsh \
+    && echo '# Prompt formatting' >> /etc/skel/.p10k.zsh \
+    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /etc/skel/.p10k.zsh
 
 # Set up bash environment in /etc/skel (for compatibility)
 RUN echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"' >> /etc/skel/.bashrc \
-    && echo 'export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc \
+    && echo '# Custom PS1 with agent identification' >> /etc/skel/.bashrc \
+    && echo 'if [ -n "$JAIL_AI_AGENT" ]; then' >> /etc/skel/.bashrc \
+    && echo '  export PS1="\[\033[01;34m\]${JAIL_AI_AGENT}\[\033[00m\] \[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc \
+    && echo 'else' >> /etc/skel/.bashrc \
+    && echo '  export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc \
+    && echo 'fi' >> /etc/skel/.bashrc \
     && echo 'alias ll="ls -lah"' >> /etc/skel/.bashrc \
     && echo 'alias rg="rg --color=auto"' >> /etc/skel/.bashrc
 

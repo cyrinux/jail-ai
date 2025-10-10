@@ -27,4 +27,7 @@ RUN curl -fsSL https://cursor.com/install | bash \
 USER agent
 WORKDIR /workspace
 
+# Set agent identifier for prompt display
+ENV JAIL_AI_AGENT="✨ Cursor"
+
 CMD ["/bin/zsh"]

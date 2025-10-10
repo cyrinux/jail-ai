@@ -12,4 +12,7 @@ RUN npm install -g @google/gemini-cli
 USER agent
 WORKDIR /workspace
 
+# Set agent identifier for prompt display
+ENV JAIL_AI_AGENT="💎 Gemini"
+
 CMD ["/bin/zsh"]

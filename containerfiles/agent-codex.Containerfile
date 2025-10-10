@@ -12,4 +12,7 @@ RUN npm install -g @openai/codex
 USER agent
 WORKDIR /workspace
 
+# Set agent identifier for prompt display
+ENV JAIL_AI_AGENT="🔮 Codex"
+
 CMD ["/bin/zsh"]

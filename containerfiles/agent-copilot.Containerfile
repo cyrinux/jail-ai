@@ -12,4 +12,7 @@ RUN npm install -g @github/copilot
 USER agent
 WORKDIR /workspace
 
+# Set agent identifier for prompt display
+ENV JAIL_AI_AGENT="🐙 Copilot"
+
 CMD ["/bin/zsh"]
