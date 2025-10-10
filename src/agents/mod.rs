@@ -1,7 +1,7 @@
 //! Agent registry for managing AI agent configurations.
 //!
 //! This module provides a centralized way to manage different AI coding agents
-//! (Claude, Copilot, Cursor, Gemini, Codex) with type-safe configuration.
+//! (Claude, Copilot, Cursor, Gemini, Codex, Jules) with type-safe configuration.
 //!
 //! # Architecture
 //!
@@ -24,6 +24,7 @@ mod codex;
 mod copilot;
 mod cursor;
 mod gemini;
+mod jules;
 
 use std::fmt;
 
@@ -35,6 +36,7 @@ pub enum Agent {
     Cursor,
     Gemini,
     Codex,
+    Jules,
 }
 
 impl Agent {
@@ -46,6 +48,7 @@ impl Agent {
             "cursor" | "cursor-agent" => Some(Self::Cursor),
             "gemini" => Some(Self::Gemini),
             "codex" => Some(Self::Codex),
+            "jules" => Some(Self::Jules),
             _ => None,
         }
     }
@@ -58,6 +61,7 @@ impl Agent {
             Self::Cursor => cursor::COMMAND_NAME,
             Self::Gemini => gemini::COMMAND_NAME,
             Self::Codex => codex::COMMAND_NAME,
+            Self::Jules => jules::COMMAND_NAME,
         }
     }
 
@@ -69,6 +73,7 @@ impl Agent {
             Self::Cursor => cursor::NORMALIZED_NAME,
             Self::Gemini => gemini::NORMALIZED_NAME,
             Self::Codex => codex::NORMALIZED_NAME,
+            Self::Jules => jules::NORMALIZED_NAME,
         }
     }
 
@@ -80,6 +85,7 @@ impl Agent {
             Self::Cursor => cursor::DISPLAY_NAME,
             Self::Gemini => gemini::DISPLAY_NAME,
             Self::Codex => codex::DISPLAY_NAME,
+            Self::Jules => jules::DISPLAY_NAME,
         }
     }
 
@@ -96,6 +102,7 @@ impl Agent {
             Self::Cursor => cursor::HAS_AUTO_CREDENTIALS,
             Self::Gemini => gemini::HAS_AUTO_CREDENTIALS,
             Self::Codex => codex::HAS_AUTO_CREDENTIALS,
+            Self::Jules => jules::HAS_AUTO_CREDENTIALS,
         }
     }
 
@@ -107,6 +114,7 @@ impl Agent {
             Self::Cursor => cursor::SUPPORTS_API_KEY_AUTH,
             Self::Gemini => gemini::SUPPORTS_API_KEY_AUTH,
             Self::Codex => codex::SUPPORTS_API_KEY_AUTH,
+            Self::Jules => jules::SUPPORTS_API_KEY_AUTH,
         }
     }
 
@@ -119,6 +127,7 @@ impl Agent {
             Self::Cursor => cursor::CONFIG_DIR_PATHS.to_vec(),
             Self::Gemini => gemini::CONFIG_DIR_PATHS.to_vec(),
             Self::Codex => codex::CONFIG_DIR_PATHS.to_vec(),
+            Self::Jules => jules::CONFIG_DIR_PATHS.to_vec(),
         }
     }
 }
@@ -178,6 +187,7 @@ mod tests {
         assert_eq!(Agent::from_str("cursor-agent"), Some(Agent::Cursor));
         assert_eq!(Agent::from_str("gemini"), Some(Agent::Gemini));
         assert_eq!(Agent::from_str("codex"), Some(Agent::Codex));
+        assert_eq!(Agent::from_str("jules"), Some(Agent::Jules));
         assert_eq!(Agent::from_str("unknown"), None);
         assert_eq!(Agent::from_str("CLAUDE"), Some(Agent::Claude)); // case-insensitive
     }
@@ -189,6 +199,7 @@ mod tests {
         assert_eq!(Agent::Cursor.command_name(), "cursor-agent");
         assert_eq!(Agent::Gemini.command_name(), "gemini");
         assert_eq!(Agent::Codex.command_name(), "codex");
+        assert_eq!(Agent::Jules.command_name(), "jules");
     }
 
     #[test]
@@ -222,6 +233,7 @@ mod tests {
         assert!(!Agent::Cursor.has_auto_credentials());
         assert!(!Agent::Gemini.has_auto_credentials());
         assert!(!Agent::Codex.has_auto_credentials());
+        assert!(!Agent::Jules.has_auto_credentials());
     }
 
     #[test]

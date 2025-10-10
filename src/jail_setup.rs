@@ -100,6 +100,7 @@ pub struct AgentConfigFlags {
     pub cursor_dir: bool,
     pub gemini_dir: bool,
     pub codex_dir: bool,
+    pub jules_dir: bool,
     pub agent_configs: bool,
 }
 
@@ -135,6 +136,7 @@ pub fn mount_agent_configs(
             crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
             crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
             crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
+            crate::agents::Agent::Jules => flags.jules_dir || flags.agent_configs,
         };
 
         if should_mount {
@@ -189,6 +191,13 @@ pub fn mount_agent_configs(
         if flags.codex_dir || flags.agent_configs {
             builder =
                 mount_config_if_exists(builder, home_path.join(".codex"), "/home/agent/.codex");
+        }
+        if flags.jules_dir || flags.agent_configs {
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".config").join("jules"),
+                "/home/agent/.config/jules",
+            );
         }
     }
 
