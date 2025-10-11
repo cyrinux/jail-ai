@@ -249,7 +249,7 @@ impl JailBackend for PodmanBackend {
                 &config.force_layers,
                 config.isolated,
                 config.verbose,
-                config.skip_nix,
+                config.no_nix,
             )
             .await?
         } else if config.base_image == image::DEFAULT_IMAGE_NAME {
@@ -639,7 +639,7 @@ impl JailBackend for PodmanBackend {
             isolated: false,
             verbose: false,
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
-            skip_nix: false,
+            no_nix: false,
         })
     }
 }
@@ -675,7 +675,7 @@ mod tests {
             isolated: false,
             verbose: false,
             pre_create_dirs: Vec::new(),
-            skip_nix: false,
+            no_nix: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -749,7 +749,7 @@ mod tests {
             use_layered_images: true,
             isolated: false,
             verbose: false,
-            skip_nix: false,
+            no_nix: false,
             pre_create_dirs: Vec::new(),
         };
 
@@ -789,7 +789,7 @@ mod tests {
             use_layered_images: true,
             isolated: false,
             verbose: false,
-            skip_nix: false,
+            no_nix: false,
             pre_create_dirs: Vec::new(),
         };
 
@@ -912,7 +912,7 @@ mod tests {
             use_layered_images: true,
             isolated: false,
             verbose: false,
-            skip_nix: false,
+            no_nix: false,
             pre_create_dirs: Vec::new(),
         };
 

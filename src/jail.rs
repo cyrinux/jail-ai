@@ -169,8 +169,8 @@ impl JailBuilder {
         self.config.pre_create_dirs = dirs;
         self
     }
-    pub fn skip_nix(mut self, skip_nix: bool) -> Self {
-        self.config.skip_nix = skip_nix;
+    pub fn no_nix(mut self, no_nix: bool) -> Self {
+        self.config.no_nix = no_nix;
         self
     }
 
@@ -203,15 +203,15 @@ mod tests {
     }
 
     #[test]
-    fn test_jail_builder_skip_nix() {
-        let manager = JailBuilder::new("test-jail").skip_nix(true).build();
+    fn test_jail_builder_no_nix() {
+        let manager = JailBuilder::new("test-jail").no_nix(true).build();
 
         let config = manager.config();
-        assert_eq!(config.skip_nix, true);
+        assert_eq!(config.no_nix, true);
 
-        let manager = JailBuilder::new("test-jail").skip_nix(false).build();
+        let manager = JailBuilder::new("test-jail").no_nix(false).build();
 
         let config = manager.config();
-        assert_eq!(config.skip_nix, false);
+        assert_eq!(config.no_nix, false);
     }
 }

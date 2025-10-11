@@ -89,8 +89,8 @@ cargo run -- create my-agent --agent-configs --git-gpg
 # Create jail with custom workspace path
 cargo run -- create my-agent --workspace-path /app
 
-# Create jail ignoring flake.nix file (skip nix layer)
-cargo run -- create my-agent --no-nix-flake
+# Create jail skipping nix layer (when flake.nix is present, use other detected languages instead)
+cargo run -- create my-agent --no-nix
 
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
@@ -119,9 +119,9 @@ cargo run -- jules --jules-dir -- --help
 cargo run -- claude -p 5432:5432 -- chat "help me with database queries"
 cargo run -- claude -p 8080:80 -p 5432:5432 -- chat "debug my web app and database"
 
-# AI Agent commands ignoring flake.nix file (skip nix layer)
-cargo run -- claude --no-nix-flake -- chat "help me debug this code"
-cargo run -- copilot --no-nix-flake --copilot-dir -- suggest "write tests"
+# AI Agent commands skipping nix layer (use other detected languages instead)
+cargo run -- claude --no-nix -- chat "help me debug this code"
+cargo run -- copilot --no-nix --copilot-dir -- suggest "write tests"
 
 # Codex CLI with manual authentication (interactive shell)
 cargo run -- codex --codex-dir --shell
@@ -220,7 +220,7 @@ cargo run -- claude --upgrade
 
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, and Codex CLI pre-installed
-- **Nix Flakes Support**: Automatic detection and loading of Nix flakes when `flake.nix` is present in the workspace (use `--no-nix-flake` to disable)
+- **Nix Flakes Support**: When `flake.nix` is detected, Nix takes precedence and only base + nix + agent layers are used (excluding rust/node/etc). Use `--no-nix` to skip nix and activate other language layers instead
 - **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks for outdated layers and container image mismatches, prompting you to rebuild. This ensures a smooth experience after upgrading the jail-ai binary.
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available

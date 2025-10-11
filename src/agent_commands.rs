@@ -36,7 +36,7 @@ pub struct AgentCommandParams {
     pub isolated: bool,
     pub verbose: bool,
     pub auth: bool,
-    pub skip_nix: bool,
+    pub no_nix: bool,
     pub args: Vec<String>,
 }
 
@@ -160,6 +160,7 @@ async fn check_container_upgrade_needed(
     workspace_path: &Path,
     agent_name: &str,
     isolated: bool,
+    no_nix: bool,
 ) -> Result<(bool, String, String)> {
     // Get the current image used by the container
     let backend = crate::backend::podman::PodmanBackend::new();
@@ -167,7 +168,7 @@ async fn check_container_upgrade_needed(
 
     // Determine what image should be used now based on current project state
     let expected_image =
-        crate::image_layers::get_expected_image_name(workspace_path, Some(agent_name), isolated)
+        crate::image_layers::get_expected_image_name(workspace_path, Some(agent_name), isolated, no_nix)
             .await?;
 
     // Check if images differ
@@ -296,6 +297,7 @@ pub async fn run_ai_agent_command(
         let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
             &workspace_dir,
             Some(normalized_agent),
+            params.no_nix,
         )
         .await
         {
@@ -312,6 +314,7 @@ pub async fn run_ai_agent_command(
             &workspace_dir,
             normalized_agent,
             params.isolated,
+            params.no_nix,
         )
         .await
         {
@@ -558,8 +561,8 @@ pub async fn run_ai_agent_command(
         // Set verbose flag
         builder = builder.verbose(params.verbose);
 
-        // Set skip_nix flag
-        builder = builder.skip_nix(params.skip_nix);
+        // Set no_nix flag
+        builder = builder.no_nix(params.no_nix);
 
         let jail = builder.build();
         jail.create().await?;

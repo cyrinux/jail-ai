@@ -145,7 +145,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 upgrade,
                 layers,
                 isolated,
-                no_nix_flake,
+                no_nix,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -272,8 +272,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     // Set verbose flag
                     builder = builder.verbose(verbose);
 
-                    // Set skip_nix flag
-                    builder = builder.skip_nix(no_nix_flake);
+                    // Set no_nix flag
+                    builder = builder.no_nix(no_nix);
 
                     builder.build()
                 };
@@ -594,7 +594,7 @@ async fn run_agent_command(
             isolated: common.isolated,
             verbose,
             auth: common.auth,
-            skip_nix: common.no_nix_flake,
+            no_nix: common.no_nix,
             args,
         },
     )

@@ -1,6 +1,6 @@
 use crate::error::{JailError, Result};
 use crate::project_detection::{
-    detect_project_type, detect_project_type_with_options, has_custom_containerfile, ProjectType,
+    detect_project_type_with_options, has_custom_containerfile, ProjectType,
     CUSTOM_CONTAINERFILE_NAME,
 };
 use indicatif::{ProgressBar, ProgressStyle};
@@ -206,9 +206,10 @@ pub async fn get_expected_image_name(
     workspace_path: &Path,
     agent_name: Option<&str>,
     isolated: bool,
+    no_nix: bool,
 ) -> Result<String> {
     let project_hash = generate_project_hash(workspace_path);
-    let project_type = detect_project_type(workspace_path);
+    let project_type = detect_project_type_with_options(workspace_path, no_nix);
     let has_custom = has_custom_containerfile(workspace_path);
 
     if let Some(agent) = agent_name {
@@ -297,8 +298,9 @@ async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool>
 pub async fn check_layers_need_rebuild(
     workspace_path: &Path,
     agent_name: Option<&str>,
+    no_nix: bool,
 ) -> Result<Vec<String>> {
-    let project_type = detect_project_type(workspace_path);
+    let project_type = detect_project_type_with_options(workspace_path, no_nix);
     let mut outdated_layers = Vec::new();
 
     // Check base layer
@@ -591,7 +593,7 @@ pub async fn build_project_image(
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
-    skip_nix: bool,
+    no_nix: bool,
 ) -> Result<String> {
     // Generate project-specific identifier (for isolated mode)
     let project_hash = generate_project_hash(workspace_path);
@@ -636,7 +638,7 @@ pub async fn build_project_image(
         }
     } else {
         // Auto-detect project type
-        let detected = detect_project_type_with_options(workspace_path, skip_nix);
+        let detected = detect_project_type_with_options(workspace_path, no_nix);
         info!("Detected project type: {:?}", detected);
         detected
     };
@@ -820,7 +822,7 @@ pub async fn ensure_layered_image_available(
     force_layers: &[String],
     isolated: bool,
     verbose: bool,
-    skip_nix: bool,
+    no_nix: bool,
 ) -> Result<String> {
     build_project_image(
         workspace_path,
@@ -829,7 +831,7 @@ pub async fn ensure_layered_image_available(
         force_layers,
         isolated,
         verbose,
-        skip_nix,
+        no_nix,
     )
     .await
 }

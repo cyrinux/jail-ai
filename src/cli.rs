@@ -100,9 +100,9 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub auth: bool,
 
-    /// Ignore flake.nix file and skip nix layer if present
+    /// Skip nix layer (by default, nix takes precedence over other language layers)
     #[arg(long)]
-    pub no_nix_flake: bool,
+    pub no_nix: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -216,9 +216,9 @@ pub enum Commands {
         #[arg(long)]
         isolated: bool,
 
-        /// Ignore flake.nix file and skip nix layer if present
+        /// Skip nix layer (by default, nix takes precedence over other language layers)
         #[arg(long)]
-        no_nix_flake: bool,
+        no_nix: bool,
     },
 
     /// Remove a jail

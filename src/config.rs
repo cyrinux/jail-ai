@@ -52,9 +52,9 @@ pub struct JailConfig {
     /// Directories to create in container before mounting (for worktrees)
     #[serde(default)]
     pub pre_create_dirs: Vec<PathBuf>,
-    /// Ignore flake.nix file and skip nix layer if present
+    /// Skip nix layer (by default, nix takes precedence over other language layers)
     #[serde(default)]
-    pub skip_nix: bool,
+    pub no_nix: bool,
 }
 
 fn default_true() -> bool {
@@ -156,7 +156,7 @@ impl Default for JailConfig {
             isolated: false,
             verbose: false,
             pre_create_dirs: Vec::new(),
-            skip_nix: false,
+            no_nix: false,
         }
     }
 }

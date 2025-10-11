@@ -51,8 +51,17 @@ pub fn detect_project_type(path: &Path) -> ProjectType {
 }
 
 /// Detect project type based on files in the directory with options
-pub fn detect_project_type_with_options(path: &Path, skip_nix: bool) -> ProjectType {
+pub fn detect_project_type_with_options(path: &Path, no_nix: bool) -> ProjectType {
     let mut detected_types = Vec::new();
+
+    // Check for Nix project first (unless skipped with --no-nix)
+    // When Nix is detected, it takes precedence over other language layers
+    if !no_nix && path.join("flake.nix").exists() {
+        debug!("Detected Nix project (flake.nix) - will use only base + nix + agent layers");
+        return ProjectType::Nix;
+    } else if no_nix && path.join("flake.nix").exists() {
+        debug!("Skipping Nix project detection due to --no-nix flag");
+    }
 
     // Check for Rust project
     if path.join("Cargo.toml").exists() {
@@ -90,14 +99,6 @@ pub fn detect_project_type_with_options(path: &Path, skip_nix: bool) -> ProjectT
     {
         debug!("Detected Java project");
         detected_types.push(ProjectType::Java);
-    }
-
-    // Check for Nix project (unless skipped)
-    if !skip_nix && path.join("flake.nix").exists() {
-        debug!("Detected Nix project (flake.nix)");
-        detected_types.push(ProjectType::Nix);
-    } else if skip_nix && path.join("flake.nix").exists() {
-        debug!("Skipping Nix project detection due to --no-nix-flake flag");
     }
 
     // Check for PHP project
@@ -301,17 +302,42 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_nix_project_with_skip_nix() {
+    fn test_detect_nix_project_with_no_nix() {
         let temp_dir = TempDir::new().unwrap();
         let flake_nix = temp_dir.path().join("flake.nix");
         File::create(flake_nix).unwrap();
 
-        // With skip_nix = true, should not detect Nix project
+        // With no_nix = true, should not detect Nix project
         let project_type = detect_project_type_with_options(temp_dir.path(), true);
         assert_eq!(project_type, ProjectType::Generic);
 
-        // With skip_nix = false, should detect Nix project
+        // With no_nix = false, should detect Nix project
         let project_type = detect_project_type_with_options(temp_dir.path(), false);
         assert_eq!(project_type, ProjectType::Nix);
+    }
+
+    #[test]
+    fn test_nix_takes_precedence() {
+        let temp_dir = TempDir::new().unwrap();
+        let flake_nix = temp_dir.path().join("flake.nix");
+        File::create(flake_nix).unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        File::create(cargo_toml).unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        File::create(package_json).unwrap();
+
+        // Even with Rust and NodeJS files present, Nix should take precedence
+        let project_type = detect_project_type_with_options(temp_dir.path(), false);
+        assert_eq!(project_type, ProjectType::Nix);
+
+        // With --no-nix flag, should detect multiple project types
+        let project_type = detect_project_type_with_options(temp_dir.path(), true);
+        if let ProjectType::Multi(types) = project_type {
+            assert_eq!(types.len(), 2);
+            assert!(types.contains(&ProjectType::Rust));
+            assert!(types.contains(&ProjectType::NodeJS));
+        } else {
+            panic!("Expected Multi project type when Nix is skipped");
+        }
     }
 }
