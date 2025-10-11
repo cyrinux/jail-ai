@@ -24,6 +24,12 @@ pub trait JailBackend: Send + Sync {
 
     /// Inspect jail and return its configuration
     async fn inspect(&self, name: &str) -> Result<JailConfig>;
+
+    /// Check if container is running
+    async fn is_running(&self, name: &str) -> Result<bool>;
+
+    /// Start a stopped container
+    async fn start(&self, name: &str) -> Result<()>;
 }
 
 pub mod podman;

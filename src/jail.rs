@@ -109,6 +109,18 @@ impl JailBuilder {
         self
     }
 
+    /// Configure host networking for the jail (--network=host)
+    /// This is less secure and should only be used for OAuth authentication
+    pub fn host_network(mut self, host: bool) -> Self {
+        self.config.network.host = host;
+        if host {
+            // When using host network, ensure network is enabled
+            self.config.network.enabled = true;
+            self.config.network.private = false;
+        }
+        self
+    }
+
     pub fn port_mapping(
         mut self,
         host_port: u16,

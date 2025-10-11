@@ -82,6 +82,10 @@ pub struct NetworkConfig {
     /// When true with enabled=true: provides internet access without exposing host services
     /// Port forwarding works correctly with private networking for OAuth callbacks
     pub private: bool,
+    /// Use host networking (--network=host) for OAuth authentication
+    /// When true: container shares host's network namespace (less secure, use only for auth)
+    #[serde(default)]
+    pub host: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,6 +143,7 @@ impl Default for JailConfig {
             network: NetworkConfig {
                 enabled: true,
                 private: true,
+                host: false,
             },
             port_mappings: Vec::new(),
             limits: ResourceLimits {
