@@ -217,8 +217,8 @@ pub async fn run_ai_agent_command(
     };
 
     // Check if we need to create/recreate the jail
-    // Force recreation if --upgrade, --layers, or --auth is specified
-    // (--auth requires host networking for OAuth callbacks)
+    // --upgrade and --layers force layer rebuilding + container recreation
+    // --auth only forces container recreation (for host networking) without rebuilding layers
     
     // Auto-detect if agent needs authentication (first run - credentials missing or empty)
     if !params.auth {
@@ -237,12 +237,6 @@ pub async fn run_ai_agent_command(
         }
     }
     
-    // When --auth is used, enable upgrade to force container recreation with host networking
-    if params.auth {
-        params.upgrade = true;
-        info!("Authentication mode enabled - container will be recreated with host networking");
-    }
-    
     let temp_config = JailConfig {
         name: jail_name.clone(),
         backend: backend_type,
@@ -250,7 +244,10 @@ pub async fn run_ai_agent_command(
     };
     let temp_jail = JailManager::new(temp_config);
     let jail_exists = temp_jail.exists().await?;
-    let mut should_recreate = params.upgrade || !params.force_layers.is_empty();
+    
+    // Track container recreation separately from layer rebuilding
+    // --auth should force container recreation (for networking) but not layer rebuilding
+    let mut should_recreate = params.upgrade || !params.force_layers.is_empty() || params.auth;
 
     // Check for network mode mismatch when container exists
     if jail_exists && !should_recreate {
@@ -273,7 +270,8 @@ pub async fn run_ai_agent_command(
                     info!("Container will be recreated to restore secure network isolation");
                 }
                 should_recreate = true;
-                params.upgrade = true; // Enable upgrade to ensure proper recreation
+                // Note: We don't set params.upgrade = true here because we only need to
+                // recreate the container, not rebuild the image layers
             }
         }
     }
@@ -376,9 +374,10 @@ pub async fn run_ai_agent_command(
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            if params.auth {
+            if params.auth && !params.upgrade && params.force_layers.is_empty() {
+                // Auth-only recreation (no layer rebuilding)
                 info!(
-                    "Recreating jail '{}' with host networking for authentication...",
+                    "Recreating jail '{}' with host networking for authentication (layers will not be rebuilt)...",
                     jail_name
                 );
             } else if params.upgrade || !params.force_layers.is_empty() {
@@ -392,6 +391,12 @@ pub async fn run_ai_agent_command(
                     strings::format_string(strings::RECREATING_JAIL_DETECTED_UPDATES, &jail_name)
                 );
             }
+            
+            // Manually remove the container before recreating
+            // This allows us to avoid setting upgrade=true when we only want to recreate
+            // the container (e.g., for network mode changes) without rebuilding layers
+            info!("Stopping and removing existing container '{}'...", jail_name);
+            temp_jail.remove(false).await?; // false = don't remove volume (preserve data)
         }
 
         // Only use custom image if explicitly provided (not default)
@@ -540,7 +545,8 @@ pub async fn run_ai_agent_command(
             builder = builder.cpu_quota(cpu_quota);
         }
 
-        // Set upgrade flag
+        // Set upgrade flag - this controls whether layers are rebuilt
+        // Container removal is handled manually above when should_recreate is true
         builder = builder.upgrade(params.upgrade);
 
         // Set force layers
