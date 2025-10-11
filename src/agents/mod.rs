@@ -183,32 +183,18 @@ impl fmt::Display for Agent {
 }
 
 /// Extract agent from jail name
-/// Jail name format: jail-{project}-{hash}-{agent}
+/// Jail name format: jail__{project}__{hash}__{agent}
 pub fn extract_agent_from_jail_name(jail_name: &str) -> Option<Agent> {
-    if !jail_name.starts_with("jail-") {
+    if !jail_name.starts_with("jail__") {
         return None;
     }
 
-    // The format is: jail-{project}-{hash}-{agent}
-    // The hash is always 8 characters (hexadecimal)
-    let parts: Vec<&str> = jail_name.split('-').collect();
-
-    // Look for a part that is exactly 8 characters and all hex digits (the hash)
-    for (i, part) in parts.iter().enumerate() {
-        if part.len() == 8 && part.chars().all(|c| c.is_ascii_hexdigit()) {
-            // Found the hash at index i, agent starts after it
-            if i + 1 < parts.len() {
-                // Join remaining parts in case agent name has hyphens
-                let agent_str = parts[i + 1..].join("-");
-                return Agent::from_str(&agent_str);
-            }
-        }
-    }
-
-    // Fallback: check last part
-    parts
-        .last()
-        .and_then(|&agent_str| Agent::from_str(agent_str))
+    // The format is: jail__{project}__{hash}__{agent}
+    // Simply get the last segment after __
+    jail_name
+        .rsplit("__")
+        .next()
+        .and_then(|agent_str| Agent::from_str(agent_str))
 }
 
 /// Get a friendly display name for an agent extracted from a jail name
@@ -255,19 +241,19 @@ mod tests {
     #[test]
     fn test_extract_agent_from_jail_name() {
         assert_eq!(
-            extract_agent_from_jail_name("jail-myproject-abc12345-claude"),
+            extract_agent_from_jail_name("jail__myproject__abc12345__claude"),
             Some(Agent::Claude)
         );
         assert_eq!(
-            extract_agent_from_jail_name("jail-test-def67890-cursor"),
+            extract_agent_from_jail_name("jail__test__def67890__cursor"),
             Some(Agent::Cursor)
         );
         assert_eq!(
-            extract_agent_from_jail_name("jail-foo-12ab34cd-copilot"),
+            extract_agent_from_jail_name("jail__foo__12ab34cd__copilot"),
             Some(Agent::Copilot)
         );
         assert_eq!(extract_agent_from_jail_name("not-a-jail"), None);
-        assert_eq!(extract_agent_from_jail_name("jail-invalid"), None);
+        assert_eq!(extract_agent_from_jail_name("jail__invalid"), None);
     }
 
     #[test]

@@ -59,6 +59,22 @@ impl PodmanBackend {
         Ok(output.trim().to_string())
     }
 
+    /// Extract base name by stripping agent suffix
+    /// Jail name format: jail__{project}__{hash}__{agent}
+    /// Returns: jail__{project}__{hash}
+    ///
+    /// Simply strips the last segment after __ (the agent name).
+    /// If there's no __, returns the name as-is (e.g., test names).
+    fn extract_base_name(name: &str) -> String {
+        if let Some(pos) = name.rfind("__") {
+            // Strip the last segment (agent name)
+            name[..pos].to_string()
+        } else {
+            // No __ found, return as-is (simple test names like "test")
+            name.to_string()
+        }
+    }
+
     fn build_run_args(&self, config: &JailConfig) -> Vec<String> {
         let mut args = vec![
             "run".to_string(),
@@ -72,17 +88,23 @@ impl PodmanBackend {
             "--userns=keep-id".to_string(),
         ]);
 
+        // Extract base name (strip agent suffix if present)
+        // jail__project__abc123__claude -> jail__project__abc123
+        let base_name = Self::extract_base_name(&config.name);
+
         // Persistent volume for /home/agent to preserve data across upgrades
-        let home_volume = format!("{}-home", config.name);
+        // Shared across all agents working on the same project
+        let home_volume = format!("{}__home", base_name);
         args.push("-v".to_string());
         args.push(format!("{home_volume}:/home/agent"));
 
-        // Shared Nix store volume for containers using Nix
-        // This avoids duplicating Nix packages across containers
+        // Per-jail Nix store volume for containers using Nix
+        // Shared across all agents working on the same project
         if Self::image_uses_nix(&config.base_image) {
-            debug!("Detected Nix in image, mounting shared Nix store volume");
+            let nix_volume = format!("{}__nix", base_name);
+            debug!("Detected Nix in image, mounting per-jail Nix store volume: {}", nix_volume);
             args.push("-v".to_string());
-            args.push("jail-ai-nix-store:/nix".to_string());
+            args.push(format!("{nix_volume}:/nix"));
         }
 
         // Network settings
@@ -325,15 +347,41 @@ impl JailBackend for PodmanBackend {
         run_command(&mut cmd).await?;
 
         if remove_volume {
+            // Extract base name (strip agent suffix if present)
+            let base_name = Self::extract_base_name(name);
+
             // Remove associated home volume
-            let home_volume = format!("{name}-home");
+            let home_volume = format!("{base_name}__home");
             let mut vol_cmd = Command::new("podman");
             vol_cmd.arg("volume").arg("rm").arg(&home_volume);
 
-            // Ignore errors if volume doesn't exist
-            let _ = run_command(&mut vol_cmd).await;
+            // Attempt removal but ignore errors (volume may be in use by other agents or not exist)
+            match run_command(&mut vol_cmd).await {
+                Ok(_) => debug!("Volume {} removed", home_volume),
+                Err(e) => debug!(
+                    "Could not remove volume {} (may be in use by other agents or not exist): {}",
+                    home_volume, e
+                ),
+            }
 
-            info!("Jail {} removed (including volume {})", name, home_volume);
+            // Remove associated nix volume (if it exists)
+            let nix_volume = format!("{base_name}__nix");
+            let mut nix_vol_cmd = Command::new("podman");
+            nix_vol_cmd.arg("volume").arg("rm").arg(&nix_volume);
+
+            // Attempt removal but ignore errors (volume may be in use by other agents or not exist)
+            match run_command(&mut nix_vol_cmd).await {
+                Ok(_) => debug!("Volume {} removed", nix_volume),
+                Err(e) => debug!(
+                    "Could not remove volume {} (may be in use by other agents or not exist): {}",
+                    nix_volume, e
+                ),
+            }
+
+            info!(
+                "Jail {} removed (attempted to remove volumes {}, {})",
+                name, home_volume, nix_volume
+            );
         } else {
             info!("Jail {} removed", name);
         }
@@ -431,10 +479,10 @@ impl JailBackend for PodmanBackend {
 
         let output = run_command(&mut cmd).await?;
 
-        // Filter containers that start with "jail-"
+        // Filter containers that start with "jail__"
         let jails: Vec<String> = output
             .lines()
-            .filter(|line| line.starts_with("jail-"))
+            .filter(|line| line.starts_with("jail__"))
             .map(|line| line.to_string())
             .collect();
 
@@ -616,8 +664,10 @@ mod tests {
     #[test]
     fn test_build_run_args() {
         let backend = PodmanBackend::new();
+
+        // Test with simple jail name (no __ suffix)
         let config = JailConfig {
-            name: "test-jail".to_string(),
+            name: "test".to_string(),
             backend: crate::config::BackendType::Podman,
             base_image: "alpine:latest".to_string(),
             bind_mounts: vec![],
@@ -645,13 +695,27 @@ mod tests {
 
         assert!(args.contains(&"run".to_string()));
         assert!(args.contains(&"--name".to_string()));
-        assert!(args.contains(&"test-jail".to_string()));
+        assert!(args.contains(&"test".to_string()));
         assert!(args.contains(&"-m".to_string()));
         assert!(args.contains(&"512m".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"TEST=value".to_string()));
         // Verify persistent home volume is included
-        assert!(args.contains(&"test-jail-home:/home/agent".to_string()));
+        // test -> test (no __ to strip, returns as-is)
+        assert!(args.contains(&"test__home:/home/agent".to_string()));
+
+        // Test with agent-specific jail name (8-char hash)
+        let config_agent = JailConfig {
+            name: "jail__project__abc12345__claude".to_string(),
+            ..config.clone()
+        };
+
+        let args_agent = backend.build_run_args(&config_agent);
+
+        // Verify volume uses base name without agent suffix
+        // jail__project__abc12345__claude -> jail__project__abc12345
+        assert!(args_agent.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        assert!(!args_agent.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
     }
 
     #[test]
@@ -744,44 +808,154 @@ mod tests {
     fn test_list_all_filters_jail_prefix() {
         // This is a unit test that verifies the filtering logic would work
         let names = vec![
-            "jail-test-abc123",
-            "jail-project-def456",
+            "jail__project__def67890__claude",
             "other-container",
-            "jail-another-xyz789",
+            "jail__another__xyz12345__copilot",
             "my-container",
         ];
 
         let filtered: Vec<String> = names
             .into_iter()
-            .filter(|name| name.starts_with("jail-"))
+            .filter(|name| name.starts_with("jail__"))
             .map(|s| s.to_string())
             .collect();
 
-        assert_eq!(filtered.len(), 3);
-        assert!(filtered.contains(&"jail-test-abc123".to_string()));
-        assert!(filtered.contains(&"jail-project-def456".to_string()));
-        assert!(filtered.contains(&"jail-another-xyz789".to_string()));
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.contains(&"jail__project__def67890__claude".to_string()));
+        assert!(filtered.contains(&"jail__another__xyz12345__copilot".to_string()));
     }
 
     #[test]
     fn test_image_uses_nix() {
         // Test Nix base image
         assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-nix:latest"));
-        
+
         // Test agent images with Nix in layer tag
         assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix"));
         assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix-rust"));
         assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nix"));
         assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-jules:base-rust-nix-nodejs"));
-        
+
         // Test images without Nix
         assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base"));
         assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust"));
         assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nodejs"));
         assert!(!PodmanBackend::image_uses_nix("alpine:latest"));
-        
+
         // Test that "nix" substring in other words doesn't trigger false positive
         assert!(!PodmanBackend::image_uses_nix("localhost/phoenix-app:latest"));
         assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-unix"));
+    }
+
+    #[test]
+    fn test_extract_base_name() {
+        // Test extracting base name from agent-specific jail names
+        // Hash is always 8 hex characters (as per generate_jail_name)
+        // Works for any agent name (future-proof)
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__project__abc12345__claude"),
+            "jail__project__abc12345"
+        );
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__project__abc12345__copilot"),
+            "jail__project__abc12345"
+        );
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__project__def67890__cursor"),
+            "jail__project__def67890"
+        );
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__project__12345678__gemini"),
+            "jail__project__12345678"
+        );
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__myproject__abcdef12__jules"),
+            "jail__myproject__abcdef12"
+        );
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__test__fedcba98__codex"),
+            "jail__test__fedcba98"
+        );
+
+        // Test with any future agent name (strips last segment after __)
+        assert_eq!(
+            PodmanBackend::extract_base_name("jail__project__abc12345__newagent"),
+            "jail__project__abc12345"
+        );
+
+        // Test simple name without double underscores (test names)
+        assert_eq!(
+            PodmanBackend::extract_base_name("test"),
+            "test"
+        );
+    }
+
+    #[test]
+    fn test_build_run_args_with_nix_volume() {
+        let backend = PodmanBackend::new();
+
+        // Test with Nix-enabled image and agent-specific jail name (8-char hash)
+        let config_with_nix = JailConfig {
+            name: "jail__project__abc12345__claude".to_string(),
+            backend: crate::config::BackendType::Podman,
+            base_image: "localhost/jail-ai-agent-claude:base-nix-rust".to_string(),
+            bind_mounts: vec![],
+            environment: vec![],
+            network: crate::config::NetworkConfig {
+                enabled: true,
+                private: true,
+                host: false,
+            },
+            port_mappings: vec![],
+            limits: crate::config::ResourceLimits {
+                memory_mb: None,
+                cpu_quota: None,
+            },
+            upgrade: false,
+            force_layers: Vec::new(),
+            use_layered_images: true,
+            isolated: false,
+            verbose: false,
+            skip_nix: false,
+            pre_create_dirs: Vec::new(),
+        };
+
+        let args = backend.build_run_args(&config_with_nix);
+
+        // Verify both home and nix volumes use base name (without agent suffix)
+        // jail__project__abc12345__claude -> jail__project__abc12345
+        assert!(args.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        assert!(args.contains(&"jail__project__abc12345__nix:/nix".to_string()));
+
+        // Verify agent-specific volume names are NOT used
+        assert!(!args.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+        assert!(!args.contains(&"jail__project__abc12345__claude__nix:/nix".to_string()));
+
+        // Test with different agent but same project (should share volumes)
+        let config_with_copilot = JailConfig {
+            name: "jail__project__abc12345__copilot".to_string(),
+            ..config_with_nix.clone()
+        };
+
+        let args_copilot = backend.build_run_args(&config_with_copilot);
+
+        // Verify both agents use the same base volume names
+        assert!(args_copilot.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        assert!(args_copilot.contains(&"jail__project__abc12345__nix:/nix".to_string()));
+
+        // Test without Nix image
+        let config_without_nix = JailConfig {
+            base_image: "alpine:latest".to_string(),
+            ..config_with_nix
+        };
+
+        let args = backend.build_run_args(&config_without_nix);
+
+        // Verify only home volume is mounted (no nix volume)
+        assert!(args.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        assert!(!args.contains(&"jail__project__abc12345__nix:/nix".to_string()));
+
+        // Verify the old shared volume name is NOT used
+        assert!(!args.iter().any(|arg| arg.contains("jail-ai-nix-store")));
     }
 }

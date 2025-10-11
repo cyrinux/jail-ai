@@ -499,6 +499,8 @@ impl Commands {
     }
 
     /// Generate a reproducible container name from a directory path
+    /// Format: jail__{project}__{hash}
+    /// Using double underscores for consistency with volume naming
     pub fn generate_jail_name(path: &std::path::Path) -> String {
         // Get the absolute path and canonicalize it
         let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -519,7 +521,8 @@ impl Commands {
         let sanitized_name = Self::sanitize_jail_name(dir_name);
 
         // Use first 8 characters of hash for uniqueness
-        format!("jail-{}-{}", sanitized_name, &hash_hex[..8])
+        // Using double underscores for consistency
+        format!("jail__{}__{}", sanitized_name, &hash_hex[..8])
     }
 }
 
@@ -620,11 +623,11 @@ mod tests {
         let path = PathBuf::from("/tmp/test-project");
         let name = Commands::generate_jail_name(&path);
 
-        // Should start with "jail-"
-        assert!(name.starts_with("jail-"));
+        // Should start with "jail__"
+        assert!(name.starts_with("jail__"));
 
-        // Should contain sanitized directory name
-        assert!(name.contains("test-project"));
+        // Should contain sanitized directory name (hyphen is preserved)
+        assert!(name.contains("test-project__"));
 
         // Should be reproducible - same path generates same name
         let name2 = Commands::generate_jail_name(&path);
@@ -644,8 +647,9 @@ mod tests {
         let path = PathBuf::from("/tmp/my-project@2024");
         let name = Commands::generate_jail_name(&path);
 
-        // Special characters should be sanitized to hyphens
-        assert!(name.contains("my-project-2024"));
+        // Special characters like @ should be sanitized to hyphens (in the project name part)
+        // Format: jail__{sanitized-name}__{hash}
+        assert!(name.contains("my-project-2024__"));
     }
 
     #[test]

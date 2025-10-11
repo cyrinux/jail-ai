@@ -205,7 +205,7 @@ pub async fn run_ai_agent_command(
     // Normalize agent name for jail naming and image building
     let normalized_agent = normalize_agent_name(agent_command);
     let agent_suffix = Commands::sanitize_jail_name(normalized_agent);
-    let jail_name = format!("{base_name}-{agent_suffix}");
+    let jail_name = format!("{base_name}__{agent_suffix}");
 
     info!("Using jail: {} for agent: {}", jail_name, agent_command);
 

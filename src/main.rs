@@ -93,7 +93,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 // No jails exist, create a default one
                 let base_name = cli::Commands::generate_jail_name(&workspace_dir);
                 info!("No jail found for this directory, creating default jail...");
-                let jail_name = format!("{base_name}-default");
+                let jail_name = format!("{base_name}__default");
 
                 info!("Creating jail '{}'...", jail_name);
                 let jail = create_default_jail(&jail_name, &workspace_dir, verbose).await?;
@@ -330,9 +330,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 let jail = jail::JailManager::new(config);
                 let exists = jail.exists().await?;
                 if exists {
-                    info!("Jail '{}' exists", jail_name);
+                    println!("✓ Jail '{}' exists", jail_name);
                 } else {
-                    info!("Jail '{}' does not exist", jail_name);
+                    println!("✗ Jail '{}' does not exist", jail_name);
                 }
             }
 
@@ -877,10 +877,10 @@ mod tests {
 
         // Simulate jail names returned by backend
         let all_jails = vec![
-            format!("{}-claude", base_name),
-            format!("{}-copilot", base_name),
-            format!("{}-cursor", base_name),
-            "jail-other-12345678-claude".to_string(),
+            format!("{base_name}__claude"),
+            format!("{base_name}__copilot"),
+            format!("{base_name}__cursor"),
+            "jail__other__12345678__claude".to_string(),
         ];
 
         // Filter logic from find_jails_for_directory
@@ -891,9 +891,9 @@ mod tests {
 
         // Should match only the jails with the correct base pattern
         assert_eq!(matching_jails.len(), 3);
-        assert!(matching_jails.contains(&format!("{}-claude", base_name)));
-        assert!(matching_jails.contains(&format!("{}-copilot", base_name)));
-        assert!(matching_jails.contains(&format!("{}-cursor", base_name)));
+        assert!(matching_jails.contains(&format!("{base_name}__claude")));
+        assert!(matching_jails.contains(&format!("{base_name}__copilot")));
+        assert!(matching_jails.contains(&format!("{base_name}__cursor")));
     }
 
     #[test]
@@ -905,13 +905,13 @@ mod tests {
         let base_name = cli::Commands::generate_jail_name(&path);
 
         // This should NOT include agent suffix
-        assert!(!base_name.ends_with("-claude"));
-        assert!(!base_name.ends_with("-copilot"));
-        assert!(!base_name.ends_with("-cursor"));
+        assert!(!base_name.ends_with("__claude"));
+        assert!(!base_name.ends_with("__copilot"));
+        assert!(!base_name.ends_with("__cursor"));
 
-        // The base name should be in format "jail-{dir}-{hash}"
-        assert!(base_name.starts_with("jail-"));
-        assert!(base_name.contains("test-project"));
+        // The base name should be in format "jail__{dir}__{hash}"
+        assert!(base_name.starts_with("jail__"));
+        assert!(base_name.contains("test-project__"));
     }
 
     #[tokio::test]
