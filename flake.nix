@@ -26,6 +26,7 @@
           buildInputs = [
             zsh
             # Build tools
+            cargo
             cargo-bloat
             cargo-bump
             cargo-deny
