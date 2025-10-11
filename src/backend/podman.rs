@@ -88,15 +88,15 @@ impl PodmanBackend {
             "--userns=keep-id".to_string(),
         ]);
 
-        // Extract base name (strip agent suffix if present)
-        // jail__project__abc123__claude -> jail__project__abc123
-        let base_name = Self::extract_base_name(&config.name);
-
         // Persistent volume for /home/agent to preserve data across upgrades
-        // Shared across all agents working on the same project
-        let home_volume = format!("{}__home", base_name);
+        // Agent-specific (not shared across different agents)
+        let home_volume = format!("{}__home", config.name);
         args.push("-v".to_string());
         args.push(format!("{home_volume}:/home/agent"));
+
+        // Extract base name (strip agent suffix if present) for nix volume
+        // jail__project__abc123__claude -> jail__project__abc123
+        let base_name = Self::extract_base_name(&config.name);
 
         // Per-jail Nix store volume for containers using Nix
         // Shared across all agents working on the same project
@@ -347,22 +347,22 @@ impl JailBackend for PodmanBackend {
         run_command(&mut cmd).await?;
 
         if remove_volume {
-            // Extract base name (strip agent suffix if present)
-            let base_name = Self::extract_base_name(name);
-
-            // Remove associated home volume
-            let home_volume = format!("{base_name}__home");
+            // Remove associated agent-specific home volume
+            let home_volume = format!("{name}__home");
             let mut vol_cmd = Command::new("podman");
             vol_cmd.arg("volume").arg("rm").arg(&home_volume);
 
-            // Attempt removal but ignore errors (volume may be in use by other agents or not exist)
+            // Attempt removal but ignore errors (volume may not exist)
             match run_command(&mut vol_cmd).await {
                 Ok(_) => debug!("Volume {} removed", home_volume),
                 Err(e) => debug!(
-                    "Could not remove volume {} (may be in use by other agents or not exist): {}",
+                    "Could not remove volume {} (may not exist): {}",
                     home_volume, e
                 ),
             }
+
+            // Extract base name (strip agent suffix if present) for nix volume
+            let base_name = Self::extract_base_name(name);
 
             // Remove associated nix volume (if it exists)
             let nix_volume = format!("{base_name}__nix");
@@ -700,8 +700,7 @@ mod tests {
         assert!(args.contains(&"512m".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"TEST=value".to_string()));
-        // Verify persistent home volume is included
-        // test -> test (no __ to strip, returns as-is)
+        // Verify persistent home volume is included (agent-specific)
         assert!(args.contains(&"test__home:/home/agent".to_string()));
 
         // Test with agent-specific jail name (8-char hash)
@@ -712,10 +711,20 @@ mod tests {
 
         let args_agent = backend.build_run_args(&config_agent);
 
-        // Verify volume uses base name without agent suffix
-        // jail__project__abc12345__claude -> jail__project__abc12345
-        assert!(args_agent.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
-        assert!(!args_agent.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+        // Verify volume is agent-specific (includes agent suffix)
+        assert!(args_agent.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+
+        // Test with different agent to verify volumes are agent-specific
+        let config_copilot = JailConfig {
+            name: "jail__project__abc12345__copilot".to_string(),
+            ..config.clone()
+        };
+
+        let args_copilot = backend.build_run_args(&config_copilot);
+
+        // Verify each agent has its own home volume
+        assert!(args_copilot.contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
+        assert!(!args_copilot.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
     }
 
     #[test]
@@ -922,16 +931,11 @@ mod tests {
 
         let args = backend.build_run_args(&config_with_nix);
 
-        // Verify both home and nix volumes use base name (without agent suffix)
-        // jail__project__abc12345__claude -> jail__project__abc12345
-        assert!(args.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        // Verify home volume is agent-specific, nix volume uses base name (shared)
+        assert!(args.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
         assert!(args.contains(&"jail__project__abc12345__nix:/nix".to_string()));
 
-        // Verify agent-specific volume names are NOT used
-        assert!(!args.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
-        assert!(!args.contains(&"jail__project__abc12345__claude__nix:/nix".to_string()));
-
-        // Test with different agent but same project (should share volumes)
+        // Test with different agent but same project
         let config_with_copilot = JailConfig {
             name: "jail__project__abc12345__copilot".to_string(),
             ..config_with_nix.clone()
@@ -939,9 +943,12 @@ mod tests {
 
         let args_copilot = backend.build_run_args(&config_with_copilot);
 
-        // Verify both agents use the same base volume names
-        assert!(args_copilot.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        // Verify each agent has its own home volume, but shares nix volume
+        assert!(args_copilot.contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
         assert!(args_copilot.contains(&"jail__project__abc12345__nix:/nix".to_string()));
+
+        // Verify agents don't share home volumes
+        assert!(!args_copilot.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
 
         // Test without Nix image
         let config_without_nix = JailConfig {
@@ -951,8 +958,8 @@ mod tests {
 
         let args = backend.build_run_args(&config_without_nix);
 
-        // Verify only home volume is mounted (no nix volume)
-        assert!(args.contains(&"jail__project__abc12345__home:/home/agent".to_string()));
+        // Verify only home volume is mounted (no nix volume), and it's agent-specific
+        assert!(args.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
         assert!(!args.contains(&"jail__project__abc12345__nix:/nix".to_string()));
 
         // Verify the old shared volume name is NOT used
