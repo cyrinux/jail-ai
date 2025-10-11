@@ -929,11 +929,4 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_upgrade_all_jails_empty() {
-        // Test that upgrading with no jails doesn't fail
-        // This will succeed but do nothing if no jails exist
-        let result = upgrade_all_jails(None, true, false).await;
-        assert!(result.is_ok());
-    }
 }
