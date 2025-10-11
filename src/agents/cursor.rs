@@ -21,3 +21,6 @@ pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[
     (".cursor", "/home/agent/.cursor"),
     (".config/cursor", "/home/agent/.config/cursor"),
 ];
+
+/// Supports OAuth authentication workflow with network=host
+pub const SUPPORTS_AUTH_WORKFLOW: bool = false;

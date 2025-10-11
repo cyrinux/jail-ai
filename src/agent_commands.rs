@@ -217,7 +217,15 @@ pub async fn run_ai_agent_command(
     };
 
     // Check if we need to create/recreate the jail
-    // Force recreation if --upgrade or --layers is specified
+    // Force recreation if --upgrade, --layers, or --auth is specified
+    // (--auth requires host networking for OAuth callbacks)
+    
+    // When --auth is used, enable upgrade to force container recreation with host networking
+    if params.auth {
+        params.upgrade = true;
+        info!("Authentication mode enabled - container will be recreated with host networking");
+    }
+    
     let temp_config = JailConfig {
         name: jail_name.clone(),
         backend: backend_type,
@@ -325,7 +333,12 @@ pub async fn run_ai_agent_command(
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            if params.upgrade || !params.force_layers.is_empty() {
+            if params.auth {
+                info!(
+                    "Recreating jail '{}' with host networking for authentication...",
+                    jail_name
+                );
+            } else if params.upgrade || !params.force_layers.is_empty() {
                 info!(
                     "{}",
                     strings::format_string(strings::RECREATING_JAIL_UPGRADE, &jail_name)
@@ -343,14 +356,16 @@ pub async fn run_ai_agent_command(
         let use_custom_image = params.image != crate::cli::DEFAULT_IMAGE;
 
         let mut builder = JailBuilder::new(&jail_name)
-            .backend(backend_type)
-            .network(!params.no_network, true);
+            .backend(backend_type);
 
-        // Agent OAuth callbacks work with private networking + port forwarding
-        // Private network provides: secure internet access, isolated from host services
-        // Port forwarding allows OAuth callbacks from host browser to reach the agent
-        if normalized_agent == "codex" {
-            info!("Using secure private networking with port forwarding for {} (OAuth callbacks)", normalized_agent);
+        // Configure network mode based on flags
+        if params.auth {
+            // OAuth authentication requires host networking for callbacks
+            builder = builder.host_network(true);
+            info!("Using host networking for OAuth authentication");
+        } else {
+            // Normal operation: use private or shared networking
+            builder = builder.network(!params.no_network, true);
         }
 
         // Set image: use custom if provided, otherwise let layered system auto-detect
@@ -451,13 +466,6 @@ pub async fn run_ai_agent_command(
             builder = setup_git_gpg_config(builder, &cwd, &home_path)?;
         }
 
-
-        // Auto-forward port 1455 for Codex CLI OAuth callbacks
-        if normalized_agent == "codex" && !params.port.iter().any(|p| p.contains("1455")) {
-            info!("Auto-forwarding port 1455 for Codex CLI OAuth callbacks");
-            builder = builder.port_mapping(1455, 1455, "tcp");
-        }
-
         // Parse mounts
         for mount_str in params.mount {
             let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
@@ -540,43 +548,9 @@ pub async fn run_ai_agent_command(
         return Ok(());
     }
 
-    // Handle socat bridge setup if --auth flag is provided
-    // This is a utility command to set up OAuth callbacks, not to run the agent
+    // Handle OAuth authentication workflow if --auth flag is provided
     if params.auth {
-        if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
-            match agent {
-                crate::agents::Agent::Codex => {
-                    info!("Setting up socat bridge for Codex OAuth callbacks...");
-                    
-                    // Start socat bridge to forward traffic from container eth0 IP:1455 -> 127.0.0.1:1455
-                    // This enables OAuth callbacks to work with private networking
-                    // The socat bridge binds to the eth0 interface IP instead of 0.0.0.0 for better security
-                    let socat_cmd = vec![
-                        "sh".to_string(),
-                        "-c".to_string(),
-                        // Get eth0 IP (main container network interface), kill existing socat on port 1455, then start new one in background
-                        "CONTAINER_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){3}' | head -n1); \
-                         pkill -f 'socat.*1455' 2>/dev/null || true; \
-                         socat TCP-LISTEN:1455,bind=${CONTAINER_IP:-0.0.0.0},fork,reuseaddr TCP:127.0.0.1:1455 </dev/null >/dev/null 2>&1 & \
-                         sleep 0.1".to_string(),
-                    ];
-                    
-                    if let Err(e) = jail.exec(&socat_cmd, false).await {
-                        warn!("Failed to start socat bridge (OAuth may not work): {}", e);
-                        return Err(e);
-                    } else {
-                        info!("Socat bridge started successfully for OAuth callbacks");
-                    }
-                }
-                _ => {
-                    warn!("--auth flag is currently only supported for Codex agent");
-                }
-            }
-        }
-        
-        // Return immediately after setting up the bridge, do not start the agent
-        info!("Socat bridge setup complete, exiting without starting agent");
-        return Ok(());
+        return handle_auth_workflow(agent_command, &jail_name, backend_type).await;
     }
     
     info!("about to run");
@@ -644,6 +618,121 @@ pub async fn find_jails_for_directory(workspace_dir: &Path) -> Result<Vec<String
         .collect();
 
     Ok(matching_jails)
+}
+
+/// Handle OAuth authentication workflow for agents that support it
+/// This opens an interactive shell in the container with network=host for OAuth callbacks
+async fn handle_auth_workflow(
+    agent_command: &str,
+    jail_name: &str,
+    backend_type: crate::config::BackendType,
+) -> Result<()> {
+    // Check if this agent supports the auth workflow
+    let agent = crate::agents::Agent::from_str(agent_command)
+        .ok_or_else(|| error::JailError::Config(format!("Unknown agent: {}", agent_command)))?;
+
+    if !agent.supports_auth_workflow() {
+        return Err(error::JailError::Config(format!(
+            "Agent '{}' does not support the --auth workflow. Only Codex and Jules agents support this feature.",
+            agent.display_name()
+        )));
+    }
+
+    info!("Starting OAuth authentication workflow for {}", agent.display_name());
+
+    // Get agent-specific auth command
+    let auth_command = match agent {
+        crate::agents::Agent::Codex => "codex auth login",
+        crate::agents::Agent::Jules => "jules auth",
+        _ => "auth command", // Fallback for future agents
+    };
+
+    // Create backend to check container state
+    let temp_config = crate::config::JailConfig {
+        name: jail_name.to_string(),
+        backend: backend_type,
+        ..Default::default()
+    };
+    let backend = crate::backend::create_backend(&temp_config);
+
+    // Check if container exists
+    let container_exists = backend.exists(jail_name).await?;
+
+    if !container_exists {
+        return Err(error::JailError::NotFound(format!(
+            "Container '{}' does not exist. Please create it first by running: jail-ai {} [options]",
+            jail_name, agent_command
+        )));
+    }
+
+    // Check if container is running
+    let is_running = backend.is_running(jail_name).await?;
+
+    // Note: Container should already have been recreated with host networking
+    // by the main flow when --auth flag was detected
+    
+    if is_running {
+        // Container is already running, just join it with an interactive shell
+        info!("Container is running with host networking. Opening shell for authentication...");
+        println!("\n🔐 Authentication Mode - {}", agent.display_name());
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Opening interactive shell in container with host networking.");
+        println!();
+        println!("To authenticate, run:");
+        println!("  {}", auth_command);
+        println!();
+        println!("After authentication is complete:");
+        println!("  1. Exit the shell with 'exit' or Ctrl+D");
+        println!("  2. Restart the container with: jail-ai {}", agent_command);
+        println!("     (This will restore secure network isolation)");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        let jail = crate::jail::JailBuilder::new(jail_name)
+            .backend(backend_type)
+            .build();
+
+        let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+        if !output.is_empty() {
+            print!("{}", output);
+        }
+
+        println!("\n⚠️  Remember to restart the container to restore secure networking:");
+        println!("   jail-ai {}", agent_command);
+    } else {
+        // Container is stopped, we need to start it
+        info!("Container is stopped. Starting it for authentication...");
+        
+        println!("\n🔐 Authentication Mode - {}", agent.display_name());
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Starting container with host networking for OAuth authentication.");
+        println!();
+        println!("To authenticate, run:");
+        println!("  {}", auth_command);
+        println!();
+        println!("After authentication is complete:");
+        println!("  1. Exit the shell with 'exit' or Ctrl+D");
+        println!("  2. Restart the container with: jail-ai {}", agent_command);
+        println!("     (This will restore secure network isolation)");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        // Start the container
+        backend.start(jail_name).await?;
+
+        // Open interactive shell
+        let jail = crate::jail::JailBuilder::new(jail_name)
+            .backend(backend_type)
+            .build();
+
+        let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+        if !output.is_empty() {
+            print!("{}", output);
+        }
+
+        println!("\n⚠️  Remember to restart the container to restore secure networking:");
+        println!("   jail-ai {}", agent_command);
+    }
+
+    Ok(())
 }
 
 /// Extract agent name from jail name for display purposes

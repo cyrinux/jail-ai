@@ -96,7 +96,7 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub isolated: bool,
 
-    /// Setup socat bridge for OAuth callbacks in the running container and exit (does not start the agent)
+    /// Open interactive shell for OAuth authentication (joins running container or starts stopped one)
     #[arg(long)]
     pub auth: bool,
 

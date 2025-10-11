@@ -17,3 +17,6 @@ pub const HAS_AUTO_CREDENTIALS: bool = false;
 
 /// Config directory paths: (host_path, container_path)
 pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".config/jules", "/home/agent/.config/jules")];
+
+/// Supports OAuth authentication workflow with network=host
+pub const SUPPORTS_AUTH_WORKFLOW: bool = true;

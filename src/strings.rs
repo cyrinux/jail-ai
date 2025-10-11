@@ -1,7 +1,6 @@
 /// User-facing strings for jail-ai
 ///
 /// This module contains all user-facing strings as constants.
-
 /// Update and upgrade related messages
 pub const UPDATE_AVAILABLE: &str = "\n🔄 Update available for your jail environment!";
 pub const OUTDATED_LAYERS_DETECTED: &str = "\n📦 Outdated layers detected:";

@@ -17,3 +17,6 @@ pub const HAS_AUTO_CREDENTIALS: bool = true;
 
 /// Config directory paths: (host_path, container_path)
 pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".claude", "/home/agent/.claude")];
+
+/// Supports OAuth authentication workflow with network=host
+pub const SUPPORTS_AUTH_WORKFLOW: bool = false;

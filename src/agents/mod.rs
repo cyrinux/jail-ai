@@ -118,6 +118,18 @@ impl Agent {
             Self::Jules => jules::CONFIG_DIR_PATHS.to_vec(),
         }
     }
+
+    /// Check if this agent supports the OAuth authentication workflow with network=host
+    pub fn supports_auth_workflow(&self) -> bool {
+        match self {
+            Self::Claude => claude::SUPPORTS_AUTH_WORKFLOW,
+            Self::Copilot => copilot::SUPPORTS_AUTH_WORKFLOW,
+            Self::Cursor => cursor::SUPPORTS_AUTH_WORKFLOW,
+            Self::Gemini => gemini::SUPPORTS_AUTH_WORKFLOW,
+            Self::Codex => codex::SUPPORTS_AUTH_WORKFLOW,
+            Self::Jules => jules::SUPPORTS_AUTH_WORKFLOW,
+        }
+    }
 }
 
 impl fmt::Display for Agent {

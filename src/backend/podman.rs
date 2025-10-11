@@ -23,6 +23,30 @@ impl PodmanBackend {
         }
     }
 
+    /// Check if an image uses Nix by examining its name/tag
+    /// Images with Nix will have "nix" in their layer tag or be the nix base image
+    fn image_uses_nix(image: &str) -> bool {
+        // Check if it's the Nix base image
+        if image.contains("jail-ai-nix:") {
+            return true;
+        }
+        
+        // Check if it's an agent/project image with nix in the tag
+        // Format: localhost/jail-ai-agent-claude:base-nix-rust or base-rust-nix
+        if let Some(tag_part) = image.split(':').nth(1) {
+            // Check if "nix" appears as a layer component
+            // Valid: "base-nix", "base-nix-rust", "base-rust-nix"
+            // Invalid: "phoenix" (contains "nix" but not as a separate layer)
+            for component in tag_part.split('-') {
+                if component == "nix" {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+
     /// Get the image currently used by a container
     pub async fn get_container_image(&self, name: &str) -> Result<String> {
         let mut cmd = Command::new("podman");
@@ -53,12 +77,23 @@ impl PodmanBackend {
         args.push("-v".to_string());
         args.push(format!("{home_volume}:/home/agent"));
 
+        // Shared Nix store volume for containers using Nix
+        // This avoids duplicating Nix packages across containers
+        if Self::image_uses_nix(&config.base_image) {
+            debug!("Detected Nix in image, mounting shared Nix store volume");
+            args.push("-v".to_string());
+            args.push("jail-ai-nix-store:/nix/store".to_string());
+        }
+
         // Network settings
-        // We always use either no network (--network=none) or private network (slirp4netns)
-        // Private networking provides secure isolation while allowing internet access
+        // Supports: no network, host network, private network (slirp4netns), or default bridge
         if !config.network.enabled {
             // Complete network isolation
             args.push("--network=none".to_string());
+        } else if config.network.host {
+            // Host networking: container shares host's network namespace
+            // Used for OAuth authentication to allow callbacks to localhost
+            args.push("--network=host".to_string());
         } else if config.network.private {
             // Private networking with slirp4netns: secure, isolated, supports port forwarding
             args.push("--network=slirp4netns".to_string());
@@ -407,6 +442,31 @@ impl JailBackend for PodmanBackend {
         Ok(jails)
     }
 
+    async fn is_running(&self, name: &str) -> Result<bool> {
+        let mut cmd = Command::new("podman");
+        cmd.arg("ps")
+            .arg("--filter")
+            .arg(format!("name={name}"))
+            .arg("--format")
+            .arg("{{.Names}}");
+
+        match run_command(&mut cmd).await {
+            Ok(output) => Ok(output.trim() == name),
+            Err(_) => Ok(false),
+        }
+    }
+
+    async fn start(&self, name: &str) -> Result<()> {
+        info!("Starting container: {}", name);
+
+        let mut cmd = Command::new("podman");
+        cmd.arg("start").arg(name);
+
+        run_command(&mut cmd).await?;
+        info!("Container {} started successfully", name);
+        Ok(())
+    }
+
     async fn inspect(&self, name: &str) -> Result<JailConfig> {
         debug!("Inspecting jail: {}", name);
 
@@ -480,6 +540,7 @@ impl JailBackend for PodmanBackend {
             // Check for both "slirp4netns" and "private" for backward compatibility
             // (older versions incorrectly used "private" which isn't a standard mode)
             private: network_mode == "slirp4netns" || network_mode == "private",
+            host: network_mode == "host",
         };
 
         // Extract port mappings
@@ -564,6 +625,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
+                host: false,
             },
             port_mappings: vec![],
             limits: crate::config::ResourceLimits {
@@ -604,6 +666,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: true,
                 private: true,
+                host: false,
             },
             port_mappings: vec![
                 crate::config::PortMapping {
@@ -627,6 +690,7 @@ mod tests {
             isolated: false,
             verbose: false,
             skip_nix: false,
+            pre_create_dirs: Vec::new(),
         };
 
         let args = backend.build_run_args(&config);
@@ -649,6 +713,7 @@ mod tests {
             network: crate::config::NetworkConfig {
                 enabled: false,
                 private: true,
+                host: false,
             },
             port_mappings: vec![crate::config::PortMapping {
                 host_port: 8080,
@@ -665,6 +730,7 @@ mod tests {
             isolated: false,
             verbose: false,
             skip_nix: false,
+            pre_create_dirs: Vec::new(),
         };
 
         let args = backend.build_run_args(&config);
@@ -695,5 +761,27 @@ mod tests {
         assert!(filtered.contains(&"jail-test-abc123".to_string()));
         assert!(filtered.contains(&"jail-project-def456".to_string()));
         assert!(filtered.contains(&"jail-another-xyz789".to_string()));
+    }
+
+    #[test]
+    fn test_image_uses_nix() {
+        // Test Nix base image
+        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-nix:latest"));
+        
+        // Test agent images with Nix in layer tag
+        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix"));
+        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix-rust"));
+        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nix"));
+        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-jules:base-rust-nix-nodejs"));
+        
+        // Test images without Nix
+        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base"));
+        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust"));
+        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nodejs"));
+        assert!(!PodmanBackend::image_uses_nix("alpine:latest"));
+        
+        // Test that "nix" substring in other words doesn't trigger false positive
+        assert!(!PodmanBackend::image_uses_nix("localhost/phoenix-app:latest"));
+        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-unix"));
     }
 }
