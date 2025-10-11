@@ -82,7 +82,7 @@ impl PodmanBackend {
         if Self::image_uses_nix(&config.base_image) {
             debug!("Detected Nix in image, mounting shared Nix store volume");
             args.push("-v".to_string());
-            args.push("jail-ai-nix-store:/nix/store".to_string());
+            args.push("jail-ai-nix-store:/nix".to_string());
         }
 
         // Network settings
@@ -96,7 +96,7 @@ impl PodmanBackend {
             args.push("--network=host".to_string());
         } else if config.network.private {
             // Private networking with slirp4netns: secure, isolated, supports port forwarding
-            args.push("--network=slirp4netns".to_string());
+            args.push("--network=private".to_string());
         } else {
             // Shared networking (uses default bridge network)
             // Note: This mode is less isolated but allows container-to-container communication
@@ -539,7 +539,7 @@ impl JailBackend for PodmanBackend {
             enabled: network_mode != "none",
             // Check for both "slirp4netns" and "private" for backward compatibility
             // (older versions incorrectly used "private" which isn't a standard mode)
-            private: network_mode == "slirp4netns" || network_mode == "private",
+            private: network_mode == "slirp4netns" || network_mode == "private" || network_mode == "bridge",
             host: network_mode == "host",
         };
 
