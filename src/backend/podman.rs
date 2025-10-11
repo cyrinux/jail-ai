@@ -226,26 +226,13 @@ impl JailBackend for PodmanBackend {
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
                 });
 
-            // Try to detect agent from jail name (format: jail-{project}-{hash}-{agent})
+            // Try to detect agent from jail name (format: jail__{project}__{hash}__{agent})
             let agent_name = config
                 .name
-                .rsplit('-')
+                .rsplit("__")
                 .next()
                 .and_then(|suffix| match suffix {
                     "claude" | "copilot" | "cursor" | "gemini" | "jules" | "codex" => Some(suffix),
-                    "agent" => {
-                        // Handle legacy jail names with format: ...-cursor-agent
-                        // Look at the second-to-last segment
-                        let parts: Vec<&str> = config.name.rsplitn(3, '-').collect();
-                        if parts.len() >= 2 {
-                            match parts[1] {
-                                "cursor" => Some("cursor"),
-                                _ => None,
-                            }
-                        } else {
-                            None
-                        }
-                    }
                     _ => None,
                 });
 
