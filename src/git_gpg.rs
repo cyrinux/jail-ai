@@ -254,19 +254,22 @@ pub fn handle_ssh_allowed_signers_mounting(
             if let Some(allowedsigners_file) = config_map.get("gpg.ssh.allowedsignersfile") {
                 // Handle both quoted and unquoted values: "~/.ssh/allowed_signers" or ~/.ssh/allowed_signers
                 let file_path = allowedsigners_file.trim_matches('"');
-                // Expand ~ to home directory
+                // Expand ~ to home directory for host path
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                 let expanded_path = file_path.replace("~", &home);
                 let signers_path = std::path::PathBuf::from(&expanded_path);
 
                 if signers_path.exists() {
+                    // Use the same path in container (with ~ expanded to /home/agent)
+                    let container_path = file_path.replace("~", "/home/agent");
                     info!(
-                        "Mounting SSH allowed signers file: {} to /home/agent/.ssh/allowed_signers",
-                        signers_path.display()
+                        "Mounting SSH allowed signers file: {} to {}",
+                        signers_path.display(),
+                        container_path
                     );
                     let updated_builder = builder.clone().bind_mount(
                         &signers_path,
-                        "/home/agent/.ssh/allowed_signers",
+                        container_path,
                         false,
                     );
                     return Ok((updated_builder, true));
