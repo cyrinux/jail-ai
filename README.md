@@ -64,14 +64,11 @@ jail-ai cursor --cursor-dir -- analyze
 # Gemini CLI with full config
 jail-ai gemini --gemini-dir -- --model gemini-pro "explain this"
 
-# Codex CLI - Setup OAuth bridge (does not start agent)
+# Codex CLI - Open interactive shell for OAuth authentication
 jail-ai codex --codex-dir --auth
 
-# Codex CLI - Run agent with authentication
+# Codex CLI - Run agent after authentication is complete
 jail-ai codex --codex-dir -- generate "create a REST API"
-
-# Codex CLI with manual authentication (interactive shell)
-jail-ai codex --codex-dir --shell
 
 # Start interactive shell in Claude jail (without running Claude)
 jail-ai claude --shell
@@ -148,7 +145,7 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `--cursor-dir`: Mount `~/.cursor` and `~/.config/cursor` directories
 - `--gemini-dir`: Mount `~/.gemini` directory
 - `--codex-dir`: Mount `~/.codex` directory
-  - Use `--auth` to setup socat bridge for OAuth callbacks (exits without starting agent)
+  - Use `--auth` to open interactive shell for OAuth authentication (joins running container or starts stopped one)
 - `--agent-configs`: Mount all of the above
 
 ### Git and GPG Configuration

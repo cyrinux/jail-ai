@@ -107,10 +107,10 @@ cargo run -- claude -- --help
 cargo run -- claude -- --version
 cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
-# Codex CLI - Setup socat bridge for OAuth callbacks (does not start agent, only sets up bridge)
+# Codex CLI - Open interactive shell for OAuth authentication
 cargo run -- codex --codex-dir --auth
 
-# Codex CLI - Run agent with authentication
+# Codex CLI - Run agent after authentication is complete
 cargo run -- codex --codex-dir -- generate "create a REST API"
 cargo run -- jules --jules-dir -- chat "help me debug this code"
 cargo run -- jules --jules-dir -- --help
@@ -336,19 +336,21 @@ The AI coding agents require authentication.
 - `--cursor-dir`: Mount `~/.cursor` → `/home/agent/.cursor` and `~/.config/cursor` → `/home/agent/.config/cursor` directories (Cursor Agent authentication, settings, and config)
 - `--gemini-dir`: Mount `~/.gemini` → `/home/agent/.gemini` directory (Gemini CLI authentication and settings)
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
-  - **Authentication**: Run `jail-ai codex --codex-dir --shell` and manually run `codex auth login` inside the jail
-  - **OAuth Bridge**: Use `--auth` flag to set up socat bridge for OAuth callbacks in the running container (exits immediately without starting agent)
-    - Example: `jail-ai codex --codex-dir --auth` sets up the bridge and exits
-  - **Automatic Port Forwarding**: Port 1455 is automatically forwarded from host to container for Codex CLI (required for OAuth callbacks)
-  - **Secure Networking**: Uses private networking with socat bridge (container eth0 IP:1455 → 127.0.0.1:1455) for OAuth callback support, providing secure internet access and localhost binding without exposing host services
+  - **Authentication**: Use `--auth` flag to open interactive shell for OAuth authentication
+    - `jail-ai codex --codex-dir --auth` opens a shell for running `codex auth login`
+    - If container is running: joins the running container
+    - If container is stopped: starts the container and opens a shell
+  - **Security Note**: After authentication, restart the container with `jail-ai codex` to restore secure network isolation
 - `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
-  - **Authentication**: Run `jail-ai jules --jules-dir --shell` and manually run `jules auth` inside the jail
-  - **Note**: Jules uses a random port for local communication, so no static port forwarding is needed
+  - **Authentication**: Use `--auth` flag to open interactive shell for OAuth authentication
+    - `jail-ai jules --jules-dir --auth` opens a shell for running `jules auth`
+    - If container is running: joins the running container
+    - If container is stopped: starts the container and opens a shell
+  - **Security Note**: After authentication, restart the container with `jail-ai jules` to restore secure network isolation
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--codex-dir`, `--jules-dir`)
 
 **Note**:
-- **Codex CLI** automatically forwards port 1455 (TCP) for OAuth callbacks. The `--auth` flag sets up a socat bridge inside the container to forward traffic from the container's eth0 interface IP (port 1455) to `127.0.0.1:1455`, then exits without starting the agent. This enables OAuth callbacks to work with private networking, providing secure internet access and localhost binding without exposing host services. Binding to the eth0 IP provides better security compared to binding to 0.0.0.0. You don't need to manually specify `-p 1455:1455` when using the `codex` command.
-- **Jules CLI** uses a random port for local agent communication, so no static port forwarding is needed. Jules works directly with private networking without requiring special socat bridge setup.
+- **OAuth Authentication**: The `--auth` flag provides a convenient way to authenticate agents (Codex, Jules) that require OAuth workflows. It opens an interactive shell in the container where you can run the agent's authentication command. After authentication is complete, restart the container without `--auth` to restore secure network isolation.
 
 Example aliases for different security levels:
 

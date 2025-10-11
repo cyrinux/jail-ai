@@ -14,6 +14,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Install base tools and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ## Network debug
+    # iputils-ping \
+    # iproute2 \
+    # socat \
     # Core utilities
     bash \
     zsh \
@@ -23,16 +27,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     tig \
     vim \
-    iputils-ping \
-    iproute2 \
-    socat \
     tree \
     file \
-    buildah \
-    podman \
     less \
     openssh-client \
     kitty-terminfo \
+    # Containers tooling
+    buildah \
+    podman \
     # Build essentials
     build-essential \
     pkg-config \
