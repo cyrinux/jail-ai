@@ -130,6 +130,50 @@ impl Agent {
             Self::Jules => jules::SUPPORTS_AUTH_WORKFLOW,
         }
     }
+
+    /// Get the auth credential path to check for first run
+    /// Returns relative path from user's home directory
+    pub fn auth_credential_path(&self) -> &'static str {
+        match self {
+            Self::Claude => claude::AUTH_CREDENTIAL_PATH,
+            Self::Copilot => copilot::AUTH_CREDENTIAL_PATH,
+            Self::Cursor => cursor::AUTH_CREDENTIAL_PATH,
+            Self::Gemini => gemini::AUTH_CREDENTIAL_PATH,
+            Self::Codex => codex::AUTH_CREDENTIAL_PATH,
+            Self::Jules => jules::AUTH_CREDENTIAL_PATH,
+        }
+    }
+
+    /// Check if authentication credentials exist and are not empty
+    /// Returns true if credentials are missing or empty (first run)
+    pub fn needs_auth(&self, home_dir: &std::path::Path) -> bool {
+        let cred_path = home_dir.join(self.auth_credential_path());
+        
+        // Check if path exists
+        if !cred_path.exists() {
+            return true;
+        }
+        
+        // Check if it's a file and is empty
+        if cred_path.is_file() {
+            if let Ok(metadata) = std::fs::metadata(&cred_path) {
+                if metadata.len() == 0 {
+                    return true;
+                }
+            }
+        }
+        
+        // Check if it's a directory and is empty
+        if cred_path.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&cred_path) {
+                if entries.count() == 0 {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
 }
 
 impl fmt::Display for Agent {
@@ -240,5 +284,49 @@ mod tests {
     fn test_agent_layer_name() {
         assert_eq!(Agent::Claude.layer_name(), "agent-claude");
         assert_eq!(Agent::Cursor.layer_name(), "agent-cursor");
+    }
+
+    #[test]
+    fn test_agent_auth_credential_path() {
+        assert_eq!(Agent::Claude.auth_credential_path(), ".claude/.credentials.json");
+        assert_eq!(Agent::Copilot.auth_credential_path(), ".config/.copilot");
+        assert_eq!(Agent::Cursor.auth_credential_path(), ".cursor");
+        assert_eq!(Agent::Gemini.auth_credential_path(), ".gemini");
+        assert_eq!(Agent::Codex.auth_credential_path(), ".codex");
+        assert_eq!(Agent::Jules.auth_credential_path(), ".config/jules");
+    }
+
+    #[test]
+    fn test_agent_needs_auth() {
+        use std::fs;
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let home_path = temp_dir.path();
+
+        // Test 1: Missing credentials directory - should need auth
+        assert!(Agent::Codex.needs_auth(home_path));
+
+        // Test 2: Empty credentials directory - should need auth
+        let codex_dir = home_path.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        assert!(Agent::Codex.needs_auth(home_path));
+
+        // Test 3: Non-empty credentials directory - should not need auth
+        let cred_file = codex_dir.join("credentials.json");
+        fs::write(cred_file, "{}").unwrap();
+        assert!(!Agent::Codex.needs_auth(home_path));
+
+        // Test 4: Empty file - should need auth
+        let claude_creds = home_path.join(".claude/.credentials.json");
+        fs::create_dir_all(claude_creds.parent().unwrap()).unwrap();
+        fs::write(&claude_creds, "").unwrap();
+        assert!(Agent::Claude.needs_auth(home_path));
+
+        // Test 5: Non-empty file - should not need auth
+        fs::write(&claude_creds, r#"{"api_key": "test"}"#).unwrap();
+        assert!(!Agent::Claude.needs_auth(home_path));
     }
 }

@@ -20,3 +20,7 @@ pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".codex", "/home/agent/.codex")
 
 /// Supports OAuth authentication workflow with network=host
 pub const SUPPORTS_AUTH_WORKFLOW: bool = true;
+
+/// Path to the auth credential file/directory to check for first run
+/// Relative to user's home directory
+pub const AUTH_CREDENTIAL_PATH: &str = ".codex";

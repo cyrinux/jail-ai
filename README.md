@@ -145,7 +145,11 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `--cursor-dir`: Mount `~/.cursor` and `~/.config/cursor` directories
 - `--gemini-dir`: Mount `~/.gemini` directory
 - `--codex-dir`: Mount `~/.codex` directory
-  - Use `--auth` to open interactive shell for OAuth authentication (joins running container or starts stopped one)
+  - **First Run**: Automatically enters auth mode when credentials are missing
+  - **Manual Auth**: Use `--auth` to re-authenticate or update credentials (joins running container or starts stopped one)
+- `--jules-dir`: Mount `~/.config/jules` directory
+  - **First Run**: Automatically enters auth mode when credentials are missing
+  - **Manual Auth**: Use `--auth` to re-authenticate or update credentials
 - `--agent-configs`: Mount all of the above
 
 ### Git and GPG Configuration

@@ -220,6 +220,23 @@ pub async fn run_ai_agent_command(
     // Force recreation if --upgrade, --layers, or --auth is specified
     // (--auth requires host networking for OAuth callbacks)
     
+    // Auto-detect if agent needs authentication (first run - credentials missing or empty)
+    if !params.auth {
+        if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
+            // Only auto-enable auth for agents that support the auth workflow
+            if agent.supports_auth_workflow() {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                let home_path = PathBuf::from(&home);
+                
+                if agent.needs_auth(&home_path) {
+                    info!("First run detected - {} credentials not found or empty", agent.display_name());
+                    info!("Automatically enabling authentication mode");
+                    params.auth = true;
+                }
+            }
+        }
+    }
+    
     // When --auth is used, enable upgrade to force container recreation with host networking
     if params.auth {
         params.upgrade = true;
@@ -234,6 +251,32 @@ pub async fn run_ai_agent_command(
     let temp_jail = JailManager::new(temp_config);
     let jail_exists = temp_jail.exists().await?;
     let mut should_recreate = params.upgrade || !params.force_layers.is_empty();
+
+    // Check for network mode mismatch when container exists
+    if jail_exists && !should_recreate {
+        // Inspect existing container to get its network configuration
+        if let Ok(existing_config) = temp_jail.inspect().await {
+            // Determine desired network mode based on --auth flag
+            let desired_host_network = params.auth;
+            let current_host_network = existing_config.network.host;
+            
+            // If network mode has changed, force recreation
+            if desired_host_network != current_host_network {
+                if desired_host_network {
+                    info!(
+                        "Network mode mismatch detected: container has private networking but --auth requires host networking"
+                    );
+                } else {
+                    info!(
+                        "Network mode mismatch detected: container has host networking but normal mode requires private networking"
+                    );
+                    info!("Container will be recreated to restore secure network isolation");
+                }
+                should_recreate = true;
+                params.upgrade = true; // Enable upgrade to ensure proper recreation
+            }
+        }
+    }
 
     if !jail_exists {
         info!(
