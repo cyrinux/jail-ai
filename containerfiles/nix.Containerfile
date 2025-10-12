@@ -59,7 +59,8 @@ RUN mkdir -p /home/agent/.config/nix && \
     echo '' >> /home/agent/.zshrc && \
     echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.zshrc && \
     echo '# Only load for interactive shells, not for command execution' >> /home/agent/.zshrc && \
-    echo 'if [[ $- == *i* ]] && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.zshrc && \
+    echo '# Check if nix binary is available first (handles shared home volumes)' >> /home/agent/.zshrc && \
+    echo 'if [[ $- == *i* ]] && command -v nix >/dev/null 2>&1 && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.zshrc && \
     echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.zshrc && \
     echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.zshrc && \
     echo '  cd /workspace && exec nix develop' >> /home/agent/.zshrc && \
@@ -74,7 +75,8 @@ RUN mkdir -p /home/agent/.config/nix && \
     echo '' >> /home/agent/.bashrc && \
     echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.bashrc && \
     echo '# Only load for interactive shells, not for command execution' >> /home/agent/.bashrc && \
-    echo 'if [[ $- == *i* ]] && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.bashrc && \
+    echo '# Check if nix binary is available first (handles shared home volumes)' >> /home/agent/.bashrc && \
+    echo 'if [[ $- == *i* ]] && command -v nix >/dev/null 2>&1 && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.bashrc && \
     echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.bashrc && \
     echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.bashrc && \
     echo '  cd /workspace && exec nix develop' >> /home/agent/.bashrc && \
