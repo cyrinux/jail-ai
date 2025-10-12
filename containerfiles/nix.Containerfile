@@ -14,73 +14,70 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create /nix directory with proper permissions for single-user install
 RUN mkdir -p /nix && chown -R agent:agent /nix
 
+# Create directory to store nix-profile with proper permissions for single-user install
+RUN mkdir -p /usr/local/nix-state && chown -R agent:agent /usr/local/nix-state
+
 # Create Nix wrapper script in /usr/local/bin (as root)
-RUN echo '#!/usr/bin/env bash' > /usr/local/bin/nix-wrapper && \
-    echo '# Nix environment wrapper for jail-ai' >> /usr/local/bin/nix-wrapper && \
-    echo '' >> /usr/local/bin/nix-wrapper && \
-    echo '# Source Nix environment' >> /usr/local/bin/nix-wrapper && \
-    echo 'if [ -e /home/agent/.nix-profile/etc/profile.d/nix.sh ]; then' >> /usr/local/bin/nix-wrapper && \
-    echo '  . /home/agent/.nix-profile/etc/profile.d/nix.sh' >> /usr/local/bin/nix-wrapper && \
-    echo 'fi' >> /usr/local/bin/nix-wrapper && \
-    echo '' >> /usr/local/bin/nix-wrapper && \
-    echo '# Ensure Nix paths are in PATH' >> /usr/local/bin/nix-wrapper && \
-    echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /usr/local/bin/nix-wrapper && \
-    echo '' >> /usr/local/bin/nix-wrapper && \
-    echo '# If flake.nix exists and we are not already in a nix develop shell, enter it' >> /usr/local/bin/nix-wrapper && \
-    echo 'if [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /usr/local/bin/nix-wrapper && \
-    echo '  echo "🔵 Nix flake detected, loading development environment..." >&2' >> /usr/local/bin/nix-wrapper && \
-    echo '  cd /workspace' >> /usr/local/bin/nix-wrapper && \
-    echo '  # Set marker to prevent re-entry and use --command to run inside nix develop' >> /usr/local/bin/nix-wrapper && \
-    echo '  export JAIL_AI_NIX_LOADED=1' >> /usr/local/bin/nix-wrapper && \
-    echo '  exec nix develop --command "$@"' >> /usr/local/bin/nix-wrapper && \
-    echo 'else' >> /usr/local/bin/nix-wrapper && \
-    echo '  # No flake or already in nix shell, just execute the command' >> /usr/local/bin/nix-wrapper && \
-    echo '  exec "$@"' >> /usr/local/bin/nix-wrapper && \
-    echo 'fi' >> /usr/local/bin/nix-wrapper && \
-    chmod +x /usr/local/bin/nix-wrapper
+RUN cat > /usr/local/bin/nix-wrapper <<'EOFWRAPPER' && chmod +x /usr/local/bin/nix-wrapper
+#!/usr/bin/env bash
+# Nix environment wrapper for jail-ai
+
+# Source Nix environment
+if [ -e /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh ]; then
+  . /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh
+fi
+
+# Ensure Nix paths are in PATH
+export PATH="/usr/local/nix-state/nix/profiles/profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+
+# If flake.nix exists and we are not already in a nix develop shell, enter it
+if [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then
+  echo "🔵 Nix flake detected, loading development environment..." >&2
+  cd /workspace
+  # Set marker to prevent re-entry and use --command to run inside nix develop
+  export JAIL_AI_NIX_LOADED=1
+  exec nix develop --command "$@"
+else
+  # No flake or already in nix shell, just execute the command
+  exec "$@"
+fi
+EOFWRAPPER
+
+# Enable Nix flakes and other experimental features
+RUN mkdir -p /etc/nix && \
+    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
+
+# Create nix.zsh configuration script
+RUN cat > /usr/local/share/jail-ai/nix.zsh <<'EOFZSH'
+# jail-ai nix shell configuration
+
+# Source Nix environment
+if [ -e /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh ]; then
+  . /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh
+fi
+
+# Ensure Nix paths are in PATH (fallback if sourcing fails)
+export PATH="/usr/local/nix-state/nix/profiles/profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+EOFZSH
+
+# Create nix.bash configuration script
+RUN cat > /usr/local/share/jail-ai/nix.bash <<'EOFBASH'
+# jail-ai nix bash configuration
+
+# Source Nix environment
+if [ -e /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh ]; then
+  . /usr/local/nix-state/nix/profiles/profile/etc/profile.d/nix.sh
+fi
+
+# Ensure Nix paths are in PATH (fallback if sourcing fails)
+export PATH="/usr/local/nix-state/nix/profiles/profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+EOFBASH
 
 USER agent
 
 # Install Nix package manager (single-user installation for containers)
 # Single-user mode doesn't require a daemon service to be running
-RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
-
-# Enable Nix flakes and other experimental features
-# Also setup shell configs in one layer to minimize layer count
-RUN mkdir -p /home/agent/.config/nix && \
-    echo "experimental-features = nix-command flakes" > /home/agent/.config/nix/nix.conf && \
-    echo '' >> /home/agent/.zshrc && \
-    echo '# Nix environment' >> /home/agent/.zshrc && \
-    echo 'if [ -e /home/agent/.nix-profile/etc/profile.d/nix.sh ]; then' >> /home/agent/.zshrc && \
-    echo '  . /home/agent/.nix-profile/etc/profile.d/nix.sh' >> /home/agent/.zshrc && \
-    echo 'fi' >> /home/agent/.zshrc && \
-    echo '# Ensure Nix paths are in PATH (fallback if sourcing fails)' >> /home/agent/.zshrc && \
-    echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.zshrc && \
-    echo '' >> /home/agent/.zshrc && \
-    echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.zshrc && \
-    echo '# Only load for interactive shells, not for command execution' >> /home/agent/.zshrc && \
-    echo '# Check if nix binary is available first (handles shared home volumes)' >> /home/agent/.zshrc && \
-    echo 'if [[ $- == *i* ]] && command -v nix >/dev/null 2>&1 && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.zshrc && \
-    echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.zshrc && \
-    echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.zshrc && \
-    echo '  cd /workspace && exec nix develop' >> /home/agent/.zshrc && \
-    echo 'fi' >> /home/agent/.zshrc && \
-    echo '' >> /home/agent/.bashrc && \
-    echo '# Nix environment' >> /home/agent/.bashrc && \
-    echo 'if [ -e /home/agent/.nix-profile/etc/profile.d/nix.sh ]; then' >> /home/agent/.bashrc && \
-    echo '  . /home/agent/.nix-profile/etc/profile.d/nix.sh' >> /home/agent/.bashrc && \
-    echo 'fi' >> /home/agent/.bashrc && \
-    echo '# Ensure Nix paths are in PATH (fallback if sourcing fails)' >> /home/agent/.bashrc && \
-    echo 'export PATH="${HOME}/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"' >> /home/agent/.bashrc && \
-    echo '' >> /home/agent/.bashrc && \
-    echo '# Auto-load Nix flake development environment if flake.nix exists in workspace' >> /home/agent/.bashrc && \
-    echo '# Only load for interactive shells, not for command execution' >> /home/agent/.bashrc && \
-    echo '# Check if nix binary is available first (handles shared home volumes)' >> /home/agent/.bashrc && \
-    echo 'if [[ $- == *i* ]] && command -v nix >/dev/null 2>&1 && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then' >> /home/agent/.bashrc && \
-    echo '  export JAIL_AI_NIX_LOADED=1' >> /home/agent/.bashrc && \
-    echo '  echo "🔵 Nix flake detected in /workspace, loading development environment..."' >> /home/agent/.bashrc && \
-    echo '  cd /workspace && exec nix develop' >> /home/agent/.bashrc && \
-    echo 'fi' >> /home/agent/.bashrc
+RUN curl -L https://nixos.org/nix/install | env XDG_STATE_HOME=/usr/local/nix-state sh -s -- --no-daemon --no-modify-profile
 
 WORKDIR /workspace
 

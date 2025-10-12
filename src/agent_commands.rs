@@ -282,6 +282,33 @@ pub async fn run_ai_agent_command(
             "{}",
             strings::format_string(strings::CREATING_NEW_JAIL, &jail_name)
         );
+
+        // Check if layers need rebuilding even for new jails
+        // (e.g., after upgrading jail-ai binary, old cached layers may be outdated)
+        let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
+        let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
+            &workspace_dir,
+            Some(normalized_agent),
+            params.no_nix,
+        )
+        .await
+        {
+            Ok(layers) => layers,
+            Err(e) => {
+                warn!("Failed to check for outdated layers: {}", e);
+                Vec::new()
+            }
+        };
+
+        if !outdated_layers.is_empty() {
+            info!("Outdated layers detected during jail creation:");
+            for layer in &outdated_layers {
+                info!("  • {}", layer);
+            }
+            info!("Layers will be rebuilt automatically");
+            // Enable upgrade to ensure layers are rebuilt
+            params.upgrade = true;
+        }
     } else if should_recreate {
         info!(
             "Jail exists but recreation requested (upgrade={}, layers={:?})",

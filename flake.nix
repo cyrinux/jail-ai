@@ -24,7 +24,6 @@
         };
         devShell = with pkgs; mkShell {
           buildInputs = [
-            zsh
             # Build tools
             cargo
             cargo-bloat

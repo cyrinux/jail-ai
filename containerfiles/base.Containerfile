@@ -88,66 +88,112 @@ RUN npm install -g yarn pnpm
 # Install Powerlevel10k to system location
 RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /usr/share/powerlevel10k
 
+# Create jail-ai configuration directory and base.zsh script
+RUN mkdir -p /usr/local/share/jail-ai && \
+    cat > /usr/local/share/jail-ai/base.zsh <<'EOFZSH'
+# jail-ai base shell configuration
+
+# # Enable Powerlevel10k instant prompt
+# causes weird issue when switching from --no-nix to with nix
+# if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+#   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+# fi
+
+# Load Powerlevel10k theme
+source /usr/share/powerlevel10k/powerlevel10k.zsh-theme
+
+# Add user-local bin directories to PATH
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+
+# Aliases
+alias ll="ls -lah"
+alias rg="rg --color=auto"
+
+# FZF integration
+source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true
+source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true
+
+# History settings
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_ALL_DUPS
+
+# Load Powerlevel10k config if exists
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+EOFZSH
+
 # Set up default shell configs in /etc/skel (will be copied to new users)
-# Configure zsh with Powerlevel10k
-RUN mkdir -p /etc/skel \
-    && echo 'source /usr/share/powerlevel10k/powerlevel10k.zsh-theme' > /etc/skel/.zshrc \
-    && echo '# Enable Powerlevel10k instant prompt' >> /etc/skel/.zshrc \
-    && echo 'if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then' >> /etc/skel/.zshrc \
-    && echo '  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"' >> /etc/skel/.zshrc \
-    && echo 'fi' >> /etc/skel/.zshrc \
-    && echo '' >> /etc/skel/.zshrc \
-    && echo '# Add user-local bin directories to PATH' >> /etc/skel/.zshrc \
-    && echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"' >> /etc/skel/.zshrc \
-    && echo '' >> /etc/skel/.zshrc \
-    && echo '# Aliases' >> /etc/skel/.zshrc \
-    && echo 'alias ll="ls -lah"' >> /etc/skel/.zshrc \
-    && echo 'alias rg="rg --color=auto"' >> /etc/skel/.zshrc \
-    && echo '' >> /etc/skel/.zshrc \
-    && echo '# FZF integration' >> /etc/skel/.zshrc \
-    && echo 'source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
-    && echo 'source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true' >> /etc/skel/.zshrc \
-    && echo '' >> /etc/skel/.zshrc \
-    && echo '# History settings' >> /etc/skel/.zshrc \
-    && echo 'HISTFILE=~/.zsh_history' >> /etc/skel/.zshrc \
-    && echo 'HISTSIZE=10000' >> /etc/skel/.zshrc \
-    && echo 'SAVEHIST=10000' >> /etc/skel/.zshrc \
-    && echo 'setopt SHARE_HISTORY' >> /etc/skel/.zshrc \
-    && echo 'setopt HIST_IGNORE_ALL_DUPS' >> /etc/skel/.zshrc \
-    && echo '' >> /etc/skel/.zshrc \
-    && echo '# Load Powerlevel10k config if exists' >> /etc/skel/.zshrc \
-    && echo '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' >> /etc/skel/.zshrc
+RUN mkdir -p /etc/skel && cat > /etc/skel/.zshrc <<'EOFZSHRC'
+source /usr/local/share/jail-ai/base.zsh
+source /usr/local/share/jail-ai/nix.zsh 2>/dev/null || true
+
+# Auto-load Nix flake development environment if available
+# Only for interactive shells, not for command execution
+if command -v nix >/dev/null 2>&1 && [[ $- == *i* ]] && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then
+  export JAIL_AI_NIX_LOADED=1
+  echo "🔵 Nix flake detected in /workspace, loading development environment..."
+  cd /workspace
+  exec nix develop --command zsh
+fi
+EOFZSHRC
 
 # Create a minimal p10k config in /etc/skel with custom jail_agent segment
-RUN echo '# Powerlevel10k configuration' > /etc/skel/.p10k.zsh \
-    && echo '' >> /etc/skel/.p10k.zsh \
-    && echo '# Custom segment for jail-ai agent identification' >> /etc/skel/.p10k.zsh \
-    && echo 'function prompt_jail_agent() {' >> /etc/skel/.p10k.zsh \
-    && echo '  if [[ -n "${JAIL_AI_AGENT}" ]]; then' >> /etc/skel/.p10k.zsh \
-    && echo '    p10k segment -f 15 -b 4 -t "${JAIL_AI_AGENT}"' >> /etc/skel/.p10k.zsh \
-    && echo '  fi' >> /etc/skel/.p10k.zsh \
-    && echo '}' >> /etc/skel/.p10k.zsh \
-    && echo '' >> /etc/skel/.p10k.zsh \
-    && echo '# Enable instant prompt (must be near the top)' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet' >> /etc/skel/.p10k.zsh \
-    && echo '' >> /etc/skel/.p10k.zsh \
-    && echo '# Prompt elements' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(jail_agent dir vcs)' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)' >> /etc/skel/.p10k.zsh \
-    && echo '' >> /etc/skel/.p10k.zsh \
-    && echo '# Prompt formatting' >> /etc/skel/.p10k.zsh \
-    && echo 'typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true' >> /etc/skel/.p10k.zsh
+RUN cat > /etc/skel/.p10k.zsh <<'EOFP10K'
+# Powerlevel10k configuration
+
+# Custom segment for jail-ai agent identification
+function prompt_jail_agent() {
+  if [[ -n "${JAIL_AI_AGENT}" ]]; then
+    p10k segment -f 15 -b 4 -t "${JAIL_AI_AGENT}"
+  fi
+}
+
+# Enable instant prompt (must be near the top)
+typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
+
+# Prompt elements
+typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(jail_agent dir vcs)
+typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time background_jobs)
+
+# Prompt formatting
+typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
+EOFP10K
+
+# Create base.bash script for bash users
+RUN cat > /usr/local/share/jail-ai/base.bash <<'EOFBASH'
+# jail-ai base bash configuration
+
+# Add user-local bin directories to PATH
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+
+# Custom PS1 with agent identification
+if [ -n "$JAIL_AI_AGENT" ]; then
+  export PS1="\[\033[01;34m\]${JAIL_AI_AGENT}\[\033[00m\] \[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
+else
+  export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
+fi
+
+# Aliases
+alias ll="ls -lah"
+alias rg="rg --color=auto"
+EOFBASH
 
 # Set up bash environment in /etc/skel (for compatibility)
-RUN echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"' >> /etc/skel/.bashrc \
-    && echo '# Custom PS1 with agent identification' >> /etc/skel/.bashrc \
-    && echo 'if [ -n "$JAIL_AI_AGENT" ]; then' >> /etc/skel/.bashrc \
-    && echo '  export PS1="\[\033[01;34m\]${JAIL_AI_AGENT}\[\033[00m\] \[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc \
-    && echo 'else' >> /etc/skel/.bashrc \
-    && echo '  export PS1="\[\033[01;32m\]jail-ai\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc \
-    && echo 'fi' >> /etc/skel/.bashrc \
-    && echo 'alias ll="ls -lah"' >> /etc/skel/.bashrc \
-    && echo 'alias rg="rg --color=auto"' >> /etc/skel/.bashrc
+RUN cat > /etc/skel/.bashrc <<'EOFBASHRC'
+source /usr/local/share/jail-ai/base.bash
+source /usr/local/share/jail-ai/nix.bash 2>/dev/null || true
+
+# Auto-load Nix flake development environment if available
+# Only for interactive shells, not for command execution
+if command -v nix >/dev/null 2>&1 && [[ $- == *i* ]] && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then
+  export JAIL_AI_NIX_LOADED=1
+  echo "🔵 Nix flake detected in /workspace, loading development environment..."
+  cd /workspace
+  exec nix develop --command zsh
+fi
+EOFBASHRC
 
 # Create agent user with configurable UID/GID
 RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
