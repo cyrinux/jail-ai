@@ -65,14 +65,15 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: release-assets
+          merge-multiple: true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+        run: |
+          gh release create ${{ github.ref_name }} \
+            -t "Release ${{ github.ref_name }}" \
+            --generate-notes \
+            ${{ contains(github.ref_name, 'rc') && '--prerelease' || '--latest' }} \
+            release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
