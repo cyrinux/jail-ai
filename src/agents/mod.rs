@@ -194,7 +194,7 @@ pub fn extract_agent_from_jail_name(jail_name: &str) -> Option<Agent> {
     jail_name
         .rsplit("__")
         .next()
-        .and_then(|agent_str| Agent::from_str(agent_str))
+        .and_then(Agent::from_str)
 }
 
 /// Get a friendly display name for an agent extracted from a jail name

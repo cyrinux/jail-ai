@@ -45,11 +45,6 @@ impl ProjectType {
     }
 }
 
-/// Detect project type based on files in the directory
-pub fn detect_project_type(path: &Path) -> ProjectType {
-    detect_project_type_with_options(path, false)
-}
-
 /// Detect project type based on files in the directory with options
 pub fn detect_project_type_with_options(path: &Path, no_nix: bool) -> ProjectType {
     let mut detected_types = Vec::new();
