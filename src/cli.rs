@@ -103,6 +103,10 @@ pub struct AgentCommandOptions {
     /// Skip nix layer (by default, nix takes precedence over other language layers)
     #[arg(long)]
     pub no_nix: bool,
+
+    /// Enable eBPF-based host blocking (blocks connections to host IPs)
+    #[arg(long)]
+    pub block_host: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -219,6 +223,10 @@ pub enum Commands {
         /// Skip nix layer (by default, nix takes precedence over other language layers)
         #[arg(long)]
         no_nix: bool,
+
+        /// Enable eBPF-based host blocking (blocks connections to host IPs)
+        #[arg(long)]
+        block_host: bool,
     },
 
     /// Remove a jail
@@ -231,7 +239,7 @@ pub enum Commands {
         force: bool,
 
         /// Remove associated volume (persistent data)
-        #[arg(short, long)]
+        #[arg(long)]
         volume: bool,
     },
 
@@ -345,7 +353,7 @@ pub enum Commands {
         force: bool,
 
         /// Remove associated volumes (persistent data)
-        #[arg(short, long)]
+        #[arg(long)]
         volume: bool,
     },
 

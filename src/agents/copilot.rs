@@ -16,11 +16,12 @@ pub const DISPLAY_NAME: &str = "GitHub Copilot";
 pub const HAS_AUTO_CREDENTIALS: bool = false;
 
 /// Config directory paths: (host_path, container_path)
-pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".copilot", "/home/agent/.copilot")];
+pub const CONFIG_DIR_PATHS: &[(&str, &str)] =
+    &[(".config/.copilot", "/home/agent/.config/.copilot")];
 
 /// Supports OAuth authentication workflow with network=host
 pub const SUPPORTS_AUTH_WORKFLOW: bool = false;
 
 /// Path to the auth credential file/directory to check for first run
 /// Relative to user's home directory
-pub const AUTH_CREDENTIAL_PATH: &str = ".copilot";
+pub const AUTH_CREDENTIAL_PATH: &str = ".config/.copilot";

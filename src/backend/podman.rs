@@ -3,8 +3,19 @@ use crate::config::JailConfig;
 use crate::error::{JailError, Result};
 use crate::image;
 use async_trait::async_trait;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::process::Command;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+// Global registry to store eBPF blockers for active containers
+// This prevents them from being dropped (which would detach the eBPF programs)
+static EBPF_BLOCKERS: OnceLock<Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBlocker>>>> =
+    OnceLock::new();
+
+fn ebpf_blockers() -> &'static Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBlocker>>> {
+    EBPF_BLOCKERS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+}
 
 pub struct PodmanBackend;
 
@@ -30,7 +41,7 @@ impl PodmanBackend {
         if image.contains("jail-ai-nix:") {
             return true;
         }
-        
+
         // Check if it's an agent/project image with nix in the tag
         // Format: localhost/jail-ai-agent-claude:base-nix-rust or base-rust-nix
         if let Some(tag_part) = image.split(':').nth(1) {
@@ -43,7 +54,7 @@ impl PodmanBackend {
                 }
             }
         }
-        
+
         false
     }
 
@@ -86,6 +97,9 @@ impl PodmanBackend {
         args.extend(vec![
             // Preserve user ID mapping from host to avoid permission issues with bind mounts
             "--userns=keep-id".to_string(),
+            // Add BPF capabilities for eBPF host blocking
+            // "--cap-add=CAP_BPF".to_string(),
+            // "--cap-add=CAP_NET_ADMIN".to_string(),
         ]);
 
         // Persistent volume for /home/agent to preserve data across upgrades
@@ -102,7 +116,10 @@ impl PodmanBackend {
         // Shared across all agents working on the same project
         if Self::image_uses_nix(&config.base_image) {
             let nix_volume = format!("{}__nix", base_name);
-            debug!("Detected Nix in image, mounting per-jail Nix store volume: {}", nix_volume);
+            debug!(
+                "Detected Nix in image, mounting per-jail Nix store volume: {}",
+                nix_volume
+            );
             args.push("-v".to_string());
             args.push(format!("{nix_volume}:/nix"));
         }
@@ -171,6 +188,137 @@ impl PodmanBackend {
         args.push("infinity".to_string());
 
         args
+    }
+
+    /// Get the PID of the container's main process
+    ///
+    /// # Arguments
+    /// * `name` - Name of the container
+    ///
+    /// # Returns
+    /// Container PID (process ID on the host)
+    ///
+    /// # Errors
+    /// Returns Err if container doesn't exist or PID cannot be retrieved
+    pub async fn get_container_pid(&self, name: &str) -> Result<u32> {
+        let mut cmd = Command::new("podman");
+        cmd.arg("inspect")
+            .arg(name)
+            .arg("--format")
+            .arg("{{.State.Pid}}");
+
+        let output = run_command(&mut cmd).await?;
+        let pid = output
+            .trim()
+            .parse::<u32>()
+            .map_err(|e| JailError::Backend(format!("Failed to parse PID: {}", e)))?;
+
+        if pid == 0 {
+            return Err(JailError::Backend(format!(
+                "Container '{}' is not running (PID is 0)",
+                name
+            )));
+        }
+
+        debug!("Container '{}' PID: {}", name, pid);
+        Ok(pid)
+    }
+
+    /// Get the cgroup path for the container
+    ///
+    /// This reads /proc/<pid>/cgroup to find the cgroup path.
+    /// Supports both cgroup v1 and v2.
+    ///
+    /// # Arguments
+    /// * `name` - Name of the container
+    ///
+    /// # Returns
+    /// Cgroup path (e.g., "/sys/fs/cgroup/user.slice/...")
+    ///
+    /// # Errors
+    /// Returns Err if container doesn't exist, is not running, or cgroup path cannot be determined
+    pub async fn get_container_cgroup_path(&self, name: &str) -> Result<String> {
+        // Get container PID first
+        let pid = self.get_container_pid(name).await?;
+
+        // Read /proc/<pid>/cgroup
+        let cgroup_file = format!("/proc/{}/cgroup", pid);
+        let content = tokio::fs::read_to_string(&cgroup_file)
+            .await
+            .map_err(|e| JailError::Backend(format!("Failed to read {}: {}", cgroup_file, e)))?;
+
+        // Parse cgroup file
+        // Format (cgroup v2): "0::/system.slice/containerd.service"
+        // Format (cgroup v1): "12:memory:/user.slice/user-1000.slice/session-1.scope"
+
+        let cgroup_path = content
+            .lines()
+            .next()
+            .ok_or_else(|| JailError::Backend(format!("Empty cgroup file for PID {}", pid)))?;
+
+        // Extract the path part (after the second colon for v1, or after :: for v2)
+        let path_part = if cgroup_path.contains("::") {
+            // cgroup v2: "0::/path"
+            cgroup_path
+                .split("::")
+                .nth(1)
+                .ok_or_else(|| JailError::Backend("Invalid cgroup v2 format".to_string()))?
+        } else {
+            // cgroup v1: "12:subsystem:/path"
+            cgroup_path
+                .split(':')
+                .nth(2)
+                .ok_or_else(|| JailError::Backend("Invalid cgroup v1 format".to_string()))?
+        };
+
+        // For cgroup v2, the base is /sys/fs/cgroup
+        // For cgroup v1, it's /sys/fs/cgroup/<subsystem>
+        // We'll use v2 path format for now
+        let full_path = format!("/sys/fs/cgroup{}", path_part);
+
+        debug!("Container '{}' cgroup path: {}", name, full_path);
+        Ok(full_path)
+    }
+
+    /// Apply eBPF host blocking to a container
+    ///
+    /// This method:
+    /// 1. Gets the container's cgroup path
+    /// 2. Detects host IPs to block
+    /// 3. Attaches an eBPF program to intercept connect() syscalls
+    /// 4. Stores the blocker instance to prevent early detachment
+    ///
+    /// # Arguments
+    /// * `name` - Name of the container
+    ///
+    /// # Returns
+    /// Ok(()) if successful
+    ///
+    /// # Errors
+    /// Returns Err if container is not running, cgroup path cannot be determined,
+    /// or eBPF program cannot be attached
+    async fn apply_ebpf_host_blocking(&self, name: &str) -> Result<()> {
+        // Get container's cgroup path
+        let cgroup_path = self.get_container_cgroup_path(name).await?;
+
+        // Get host IPs to block
+        let host_ips = crate::ebpf::get_host_ips()?;
+        info!("Detected {} host IPs to block", host_ips.len());
+
+        // Create eBPF blocker and attach to cgroup
+        let mut blocker = crate::ebpf::EbpfHostBlocker::new();
+        blocker.attach_to_cgroup(&cgroup_path, &host_ips).await?;
+
+        // Store the blocker instance to prevent it from being dropped
+        // When dropped, the eBPF programs would be detached
+        let blockers = ebpf_blockers();
+        let mut blockers_map = blockers.lock().map_err(|e| {
+            JailError::Backend(format!("Failed to lock eBPF blockers registry: {}", e))
+        })?;
+        blockers_map.insert(name.to_string(), blocker);
+        debug!("Stored eBPF blocker for container '{}' in registry", name);
+
+        Ok(())
     }
 }
 
@@ -285,6 +433,30 @@ impl JailBackend for PodmanBackend {
         debug!("Creating container with args: {:?}", args);
         run_command(&mut cmd).await?;
 
+        // Apply eBPF host blocking if requested
+        // Skip eBPF when using host networking (container shares host's network namespace)
+        if config.block_host {
+            if config.network.host {
+                info!(
+                    "Skipping eBPF host blocking for container '{}' (using --network=host)",
+                    config.name
+                );
+                info!("Host networking mode provides direct host network access, eBPF filtering is not applicable");
+            } else {
+                info!(
+                    "Applying eBPF host blocking for container '{}'",
+                    config.name
+                );
+                match self.apply_ebpf_host_blocking(&config.name).await {
+                    Ok(_) => info!("eBPF host blocking applied successfully"),
+                    Err(e) => {
+                        warn!("Failed to apply eBPF host blocking: {}", e);
+                        warn!("Container will run without host blocking");
+                    }
+                }
+            }
+        }
+
         // Pre-create directories if needed (for worktree support)
         if !config.pre_create_dirs.is_empty() {
             info!(
@@ -302,10 +474,7 @@ impl JailBackend for PodmanBackend {
                     .arg("mkdir")
                     .arg("-p")
                     .arg(dir.to_str().ok_or_else(|| {
-                        JailError::Backend(format!(
-                            "Invalid directory path: {}",
-                            dir.display()
-                        ))
+                        JailError::Backend(format!("Invalid directory path: {}", dir.display()))
                     })?);
 
                 run_command(&mut mkdir_cmd).await.map_err(|e| {
@@ -326,6 +495,17 @@ impl JailBackend for PodmanBackend {
 
     async fn remove(&self, name: &str, remove_volume: bool) -> Result<()> {
         info!("Removing podman jail: {}", name);
+
+        // Remove eBPF blocker if it exists
+        let blockers = ebpf_blockers();
+        if let Ok(mut blockers_map) = blockers.lock() {
+            if blockers_map.remove(name).is_some() {
+                debug!(
+                    "Removed eBPF blocker for container '{}' from registry",
+                    name
+                );
+            }
+        }
 
         // Remove container (with force flag to stop if running)
         let mut cmd = Command::new("podman");
@@ -574,7 +754,9 @@ impl JailBackend for PodmanBackend {
             enabled: network_mode != "none",
             // Check for both "slirp4netns" and "private" for backward compatibility
             // (older versions incorrectly used "private" which isn't a standard mode)
-            private: network_mode == "slirp4netns" || network_mode == "private" || network_mode == "bridge",
+            private: network_mode == "slirp4netns"
+                || network_mode == "private"
+                || network_mode == "bridge",
             host: network_mode == "host",
         };
 
@@ -640,6 +822,7 @@ impl JailBackend for PodmanBackend {
             verbose: false,
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
             no_nix: false,
+            block_host: false, // Not persisted in container metadata
         })
     }
 }
@@ -676,6 +859,7 @@ mod tests {
             verbose: false,
             pre_create_dirs: Vec::new(),
             no_nix: false,
+            block_host: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -699,7 +883,9 @@ mod tests {
         let args_agent = backend.build_run_args(&config_agent);
 
         // Verify volume is agent-specific (includes agent suffix)
-        assert!(args_agent.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+        assert!(
+            args_agent.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string())
+        );
 
         // Test with different agent to verify volumes are agent-specific
         let config_copilot = JailConfig {
@@ -710,8 +896,10 @@ mod tests {
         let args_copilot = backend.build_run_args(&config_copilot);
 
         // Verify each agent has its own home volume
-        assert!(args_copilot.contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
-        assert!(!args_copilot.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+        assert!(args_copilot
+            .contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
+        assert!(!args_copilot
+            .contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
     }
 
     #[test]
@@ -751,6 +939,7 @@ mod tests {
             verbose: false,
             no_nix: false,
             pre_create_dirs: Vec::new(),
+            block_host: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -791,6 +980,7 @@ mod tests {
             verbose: false,
             no_nix: false,
             pre_create_dirs: Vec::new(),
+            block_host: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -824,23 +1014,43 @@ mod tests {
     #[test]
     fn test_image_uses_nix() {
         // Test Nix base image
-        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-nix:latest"));
+        assert!(PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-nix:latest"
+        ));
 
         // Test agent images with Nix in layer tag
-        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix"));
-        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-nix-rust"));
-        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nix"));
-        assert!(PodmanBackend::image_uses_nix("localhost/jail-ai-agent-jules:base-rust-nix-nodejs"));
+        assert!(PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-nix"
+        ));
+        assert!(PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-nix-rust"
+        ));
+        assert!(PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-rust-nix"
+        ));
+        assert!(PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-jules:base-rust-nix-nodejs"
+        ));
 
         // Test images without Nix
-        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base"));
-        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust"));
-        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-rust-nodejs"));
+        assert!(!PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base"
+        ));
+        assert!(!PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-rust"
+        ));
+        assert!(!PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-rust-nodejs"
+        ));
         assert!(!PodmanBackend::image_uses_nix("alpine:latest"));
 
         // Test that "nix" substring in other words doesn't trigger false positive
-        assert!(!PodmanBackend::image_uses_nix("localhost/phoenix-app:latest"));
-        assert!(!PodmanBackend::image_uses_nix("localhost/jail-ai-agent-claude:base-unix"));
+        assert!(!PodmanBackend::image_uses_nix(
+            "localhost/phoenix-app:latest"
+        ));
+        assert!(!PodmanBackend::image_uses_nix(
+            "localhost/jail-ai-agent-claude:base-unix"
+        ));
     }
 
     #[test]
@@ -880,10 +1090,7 @@ mod tests {
         );
 
         // Test simple name without double underscores (test names)
-        assert_eq!(
-            PodmanBackend::extract_base_name("test"),
-            "test"
-        );
+        assert_eq!(PodmanBackend::extract_base_name("test"), "test");
     }
 
     #[test]
@@ -914,6 +1121,7 @@ mod tests {
             verbose: false,
             no_nix: false,
             pre_create_dirs: Vec::new(),
+            block_host: false,
         };
 
         let args = backend.build_run_args(&config_with_nix);
@@ -931,11 +1139,13 @@ mod tests {
         let args_copilot = backend.build_run_args(&config_with_copilot);
 
         // Verify each agent has its own home volume, but shares nix volume
-        assert!(args_copilot.contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
+        assert!(args_copilot
+            .contains(&"jail__project__abc12345__copilot__home:/home/agent".to_string()));
         assert!(args_copilot.contains(&"jail__project__abc12345__nix:/nix".to_string()));
 
         // Verify agents don't share home volumes
-        assert!(!args_copilot.contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
+        assert!(!args_copilot
+            .contains(&"jail__project__abc12345__claude__home:/home/agent".to_string()));
 
         // Test without Nix image
         let config_without_nix = JailConfig {

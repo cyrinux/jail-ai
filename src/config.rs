@@ -55,6 +55,10 @@ pub struct JailConfig {
     /// Skip nix layer (by default, nix takes precedence over other language layers)
     #[serde(default)]
     pub no_nix: bool,
+
+    /// Enable eBPF-based host blocking (blocks connections to host IPs)
+    #[serde(default)]
+    pub block_host: bool,
 }
 
 fn default_true() -> bool {
@@ -157,6 +161,7 @@ impl Default for JailConfig {
             verbose: false,
             pre_create_dirs: Vec::new(),
             no_nix: false,
+            block_host: false,
         }
     }
 }

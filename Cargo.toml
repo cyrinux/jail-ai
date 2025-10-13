@@ -1,6 +1,23 @@
+[workspace]
+members = ["jail-ai-ebpf"]
+# members = ["xtask", "jail-ai-ebpf"]
+resolver = "2"
+
+[workspace.dependencies]
+aya = { version = "0.12", features = ["async_tokio"] }
+aya-ebpf = "0.1"
+
+# eBPF-specific profile overrides
+[profile.dev.package.jail-ai-ebpf]
+opt-level = 3
+
+[profile.release.package.jail-ai-ebpf]
+opt-level = 3
+codegen-units = 1
+
 [package]
 name = "jail-ai"
-version = "0.41.1"
+version = "0.43.1"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"
@@ -27,3 +44,4 @@ sha2 = "0.10.9"
 hex = "0.4"
 similar = "2.6"
 indicatif = "0.18.0"
+aya = { workspace = true }
