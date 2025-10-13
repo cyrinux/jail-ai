@@ -148,12 +148,12 @@ impl Agent {
     /// Returns true if credentials are missing or empty (first run)
     pub fn needs_auth(&self, home_dir: &std::path::Path) -> bool {
         let cred_path = home_dir.join(self.auth_credential_path());
-        
+
         // Check if path exists
         if !cred_path.exists() {
             return true;
         }
-        
+
         // Check if it's a file and is empty
         if cred_path.is_file() {
             if let Ok(metadata) = std::fs::metadata(&cred_path) {
@@ -162,7 +162,7 @@ impl Agent {
                 }
             }
         }
-        
+
         // Check if it's a directory and is empty
         if cred_path.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&cred_path) {
@@ -171,9 +171,82 @@ impl Agent {
                 }
             }
         }
-        
+
         false
     }
+
+    /// Get the specific config flag name for this agent (e.g., "claude-dir", "copilot-dir")
+    pub fn config_flag_name(&self) -> &'static str {
+        match self {
+            Self::Claude => "claude-dir",
+            Self::Copilot => "copilot-dir",
+            Self::Cursor => "cursor-dir",
+            Self::Gemini => "gemini-dir",
+            Self::Codex => "codex-dir",
+            Self::Jules => "jules-dir",
+        }
+    }
+
+    /// Validate that only compatible agent config flags are being used
+    /// Returns an error message if incompatible flags are detected
+    pub fn validate_config_flags(&self, flags: &AgentConfigFlags) -> Result<(), String> {
+        // Build a list of all specified flags
+        let mut specified_flags = Vec::new();
+
+        if flags.claude_dir {
+            specified_flags.push(("claude-dir", Agent::Claude));
+        }
+        if flags.copilot_dir {
+            specified_flags.push(("copilot-dir", Agent::Copilot));
+        }
+        if flags.cursor_dir {
+            specified_flags.push(("cursor-dir", Agent::Cursor));
+        }
+        if flags.gemini_dir {
+            specified_flags.push(("gemini-dir", Agent::Gemini));
+        }
+        if flags.codex_dir {
+            specified_flags.push(("codex-dir", Agent::Codex));
+        }
+        if flags.jules_dir {
+            specified_flags.push(("jules-dir", Agent::Jules));
+        }
+
+        // If --agent-configs is specified, allow all flags
+        if flags.agent_configs {
+            return Ok(());
+        }
+
+        // Check if any incompatible flags are specified
+        let incompatible_flags: Vec<&str> = specified_flags
+            .iter()
+            .filter(|(_, agent)| agent != self)
+            .map(|(flag_name, _)| *flag_name)
+            .collect();
+
+        if !incompatible_flags.is_empty() {
+            let flags_list = incompatible_flags.join(", ");
+            return Err(format!(
+                "Cannot use --{} with {} agent. Use --{} instead, or use --agent-configs to mount all agent directories.",
+                flags_list,
+                self.display_name(),
+                self.config_flag_name()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/// Agent configuration flags structure for validation
+pub struct AgentConfigFlags {
+    pub claude_dir: bool,
+    pub copilot_dir: bool,
+    pub cursor_dir: bool,
+    pub gemini_dir: bool,
+    pub codex_dir: bool,
+    pub jules_dir: bool,
+    pub agent_configs: bool,
 }
 
 impl fmt::Display for Agent {
@@ -313,5 +386,118 @@ mod tests {
         // Test 5: Non-empty file - should not need auth
         fs::write(&claude_creds, r#"{"api_key": "test"}"#).unwrap();
         assert!(!Agent::Claude.needs_auth(home_path));
+    }
+
+    #[test]
+    fn test_agent_config_flag_name() {
+        assert_eq!(Agent::Claude.config_flag_name(), "claude-dir");
+        assert_eq!(Agent::Copilot.config_flag_name(), "copilot-dir");
+        assert_eq!(Agent::Cursor.config_flag_name(), "cursor-dir");
+        assert_eq!(Agent::Gemini.config_flag_name(), "gemini-dir");
+        assert_eq!(Agent::Codex.config_flag_name(), "codex-dir");
+        assert_eq!(Agent::Jules.config_flag_name(), "jules-dir");
+    }
+
+    #[test]
+    fn test_validate_config_flags_matching_agent() {
+        // Test that matching flags pass validation
+        let flags = AgentConfigFlags {
+            claude_dir: true,
+            copilot_dir: false,
+            cursor_dir: false,
+            gemini_dir: false,
+            codex_dir: false,
+            jules_dir: false,
+            agent_configs: false,
+        };
+        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
+
+        let flags = AgentConfigFlags {
+            claude_dir: false,
+            copilot_dir: true,
+            cursor_dir: false,
+            gemini_dir: false,
+            codex_dir: false,
+            jules_dir: false,
+            agent_configs: false,
+        };
+        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
+    }
+
+    #[test]
+    fn test_validate_config_flags_mismatched_agent() {
+        // Test that mismatched flags fail validation
+        let flags = AgentConfigFlags {
+            claude_dir: false,
+            copilot_dir: false,
+            cursor_dir: false,
+            gemini_dir: true, // Wrong flag for Cursor agent
+            codex_dir: false,
+            jules_dir: false,
+            agent_configs: false,
+        };
+        let result = Agent::Cursor.validate_config_flags(&flags);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("gemini-dir"));
+        assert!(error_msg.contains("Cursor agent"));
+        assert!(error_msg.contains("cursor-dir"));
+    }
+
+    #[test]
+    fn test_validate_config_flags_multiple_wrong_flags() {
+        // Test that multiple mismatched flags are all reported
+        let flags = AgentConfigFlags {
+            claude_dir: true,
+            copilot_dir: true,
+            cursor_dir: false,
+            gemini_dir: true,
+            codex_dir: false,
+            jules_dir: false,
+            agent_configs: false,
+        };
+        let result = Agent::Cursor.validate_config_flags(&flags);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("claude-dir"));
+        assert!(error_msg.contains("copilot-dir"));
+        assert!(error_msg.contains("gemini-dir"));
+    }
+
+    #[test]
+    fn test_validate_config_flags_with_agent_configs() {
+        // Test that --agent-configs allows all flags
+        let flags = AgentConfigFlags {
+            claude_dir: true,
+            copilot_dir: true,
+            cursor_dir: true,
+            gemini_dir: true,
+            codex_dir: true,
+            jules_dir: true,
+            agent_configs: true, // This should allow everything
+        };
+        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Cursor.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Gemini.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Codex.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Jules.validate_config_flags(&flags).is_ok());
+    }
+
+    #[test]
+    fn test_validate_config_flags_no_flags() {
+        // Test that having no flags always passes
+        let flags = AgentConfigFlags {
+            claude_dir: false,
+            copilot_dir: false,
+            cursor_dir: false,
+            gemini_dir: false,
+            codex_dir: false,
+            jules_dir: false,
+            agent_configs: false,
+        };
+        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
+        assert!(Agent::Cursor.validate_config_flags(&flags).is_ok());
     }
 }
