@@ -147,7 +147,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 layers,
                 isolated,
                 no_nix,
-                block_host,
+                no_block_host,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -277,8 +277,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     // Set no_nix flag
                     builder = builder.no_nix(no_nix);
 
-                    // Set block_host flag
-                    builder = builder.block_host(block_host);
+                    // Set block_host flag (inverted: !no_block_host means blocking is enabled)
+                    builder = builder.block_host(!no_block_host);
 
                     builder.build()
                 };
@@ -615,7 +615,7 @@ async fn run_agent_command(
             verbose,
             auth: common.auth,
             no_nix: common.no_nix,
-            block_host: common.block_host,
+            no_block_host: common.no_block_host,
             args,
         },
     )
