@@ -107,6 +107,10 @@ pub struct AgentCommandOptions {
     /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
     #[arg(long)]
     pub no_block_host: bool,
+
+    /// Enable eBPF-based exec syscall monitoring (traces all commands executed in container)
+    #[arg(long)]
+    pub monitor: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -227,6 +231,10 @@ pub enum Commands {
         /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
         #[arg(long)]
         no_block_host: bool,
+
+        /// Enable eBPF-based exec syscall monitoring (traces all commands executed in container)
+        #[arg(long)]
+        monitor: bool,
     },
 
     /// Remove a jail

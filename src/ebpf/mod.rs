@@ -1,4 +1,5 @@
 mod host_ips;
+pub mod monitor;
 
 use crate::error::{JailError, Result};
 use aya::{
@@ -17,6 +18,7 @@ use tracing::{debug, info};
 use tracing::warn;
 
 pub use host_ips::get_host_ips;
+pub use monitor::ExecMonitor;
 
 /// Detect the appropriate eBPF target based on host architecture
 /// Only used in debug builds for dynamic path construction

@@ -17,7 +17,7 @@ codegen-units = 1
 
 [package]
 name = "jail-ai"
-version = "0.44.0"
+version = "0.45.2"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"
@@ -45,3 +45,4 @@ hex = "0.4"
 similar = "2.6"
 indicatif = "0.18.0"
 aya = { workspace = true }
+bytes = "1"

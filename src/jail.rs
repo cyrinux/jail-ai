@@ -179,6 +179,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn monitor(mut self, monitor: bool) -> Self {
+        self.config.monitor = monitor;
+        self
+    }
+
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }
@@ -212,11 +217,11 @@ mod tests {
         let manager = JailBuilder::new("test-jail").no_nix(true).build();
 
         let config = manager.config();
-        assert_eq!(config.no_nix, true);
+        assert!(config.no_nix);
 
         let manager = JailBuilder::new("test-jail").no_nix(false).build();
 
         let config = manager.config();
-        assert_eq!(config.no_nix, false);
+        assert!(!config.no_nix);
     }
 }

@@ -59,6 +59,10 @@ pub struct JailConfig {
     /// Enable eBPF-based host blocking (blocks connections to host IPs)
     #[serde(default)]
     pub block_host: bool,
+
+    /// Enable eBPF-based exec syscall monitoring (traces all commands executed in container)
+    #[serde(default)]
+    pub monitor: bool,
 }
 
 fn default_true() -> bool {
@@ -162,6 +166,7 @@ impl Default for JailConfig {
             pre_create_dirs: Vec::new(),
             no_nix: false,
             block_host: false,
+            monitor: false,
         }
     }
 }

@@ -17,6 +17,15 @@ fn ebpf_blockers() -> &'static Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBl
     EBPF_BLOCKERS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
 }
 
+// Global registry to store eBPF monitors for active containers
+// This prevents them from being dropped (which would stop the monitoring)
+static EBPF_MONITORS: OnceLock<Arc<Mutex<HashMap<String, crate::ebpf::ExecMonitor>>>> =
+    OnceLock::new();
+
+fn ebpf_monitors() -> &'static Arc<Mutex<HashMap<String, crate::ebpf::ExecMonitor>>> {
+    EBPF_MONITORS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+}
+
 pub struct PodmanBackend;
 
 impl PodmanBackend {
@@ -320,6 +329,40 @@ impl PodmanBackend {
 
         Ok(())
     }
+
+    /// Apply eBPF exec monitoring to a container
+    ///
+    /// This method:
+    /// 1. Creates an eBPF monitor instance
+    /// 2. Attaches a tracepoint to sched_process_exec
+    /// 3. Stores the monitor instance to prevent early detachment
+    ///
+    /// # Arguments
+    /// * `name` - Name of the container
+    ///
+    /// # Returns
+    /// Ok(()) if successful
+    ///
+    /// # Errors
+    /// Returns Err if eBPF program cannot be attached
+    pub async fn apply_ebpf_monitoring(&self, name: &str) -> Result<()> {
+        info!("Applying eBPF exec monitoring for container '{}'", name);
+
+        // Create eBPF monitor and attach
+        let mut monitor = crate::ebpf::ExecMonitor::new();
+        monitor.attach().await?;
+
+        // Store the monitor instance to prevent it from being dropped
+        // When dropped, the eBPF programs would be detached
+        let monitors = ebpf_monitors();
+        let mut monitors_map = monitors.lock().map_err(|e| {
+            JailError::Backend(format!("Failed to lock eBPF monitors registry: {}", e))
+        })?;
+        monitors_map.insert(name.to_string(), monitor);
+        debug!("Stored eBPF monitor for container '{}' in registry", name);
+
+        Ok(())
+    }
 }
 
 impl Default for PodmanBackend {
@@ -457,6 +500,18 @@ impl JailBackend for PodmanBackend {
             }
         }
 
+        // Apply eBPF exec monitoring if requested
+        if config.monitor {
+            info!("Applying eBPF exec monitoring for container '{}'", config.name);
+            match self.apply_ebpf_monitoring(&config.name).await {
+                Ok(_) => info!("eBPF exec monitoring applied successfully"),
+                Err(e) => {
+                    warn!("Failed to apply eBPF exec monitoring: {}", e);
+                    warn!("Container will run without exec monitoring");
+                }
+            }
+        }
+
         // Pre-create directories if needed (for worktree support)
         if !config.pre_create_dirs.is_empty() {
             info!(
@@ -502,6 +557,17 @@ impl JailBackend for PodmanBackend {
             if blockers_map.remove(name).is_some() {
                 debug!(
                     "Removed eBPF blocker for container '{}' from registry",
+                    name
+                );
+            }
+        }
+
+        // Remove eBPF monitor if it exists
+        let monitors = ebpf_monitors();
+        if let Ok(mut monitors_map) = monitors.lock() {
+            if monitors_map.remove(name).is_some() {
+                debug!(
+                    "Removed eBPF monitor for container '{}' from registry",
                     name
                 );
             }
@@ -823,6 +889,7 @@ impl JailBackend for PodmanBackend {
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
             no_nix: false,
             block_host: false, // Not persisted in container metadata
+            monitor: false,    // Not persisted in container metadata
         })
     }
 }
@@ -860,6 +927,7 @@ mod tests {
             pre_create_dirs: Vec::new(),
             no_nix: false,
             block_host: false,
+            monitor: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -940,6 +1008,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            monitor: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -981,6 +1050,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            monitor: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -1122,6 +1192,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            monitor: false,
         };
 
         let args = backend.build_run_args(&config_with_nix);

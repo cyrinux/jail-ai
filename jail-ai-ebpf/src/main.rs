@@ -2,10 +2,29 @@
 #![no_main]
 
 use aya_ebpf::{
-    macros::{cgroup_skb, map},
-    maps::HashMap,
-    programs::SkBuffContext,
+    macros::{cgroup_skb, map, tracepoint},
+    maps::{HashMap, PerCpuArray, PerfEventArray},
+    programs::{SkBuffContext, TracePointContext},
+    EbpfContext,
 };
+
+/// Event structure for exec syscalls
+/// This structure is sent from kernel to userspace via perf buffer
+#[repr(C)]
+pub struct ExecEvent {
+    /// Process ID
+    pub pid: u32,
+    /// Parent process ID
+    pub ppid: u32,
+    /// User ID
+    pub uid: u32,
+    /// Timestamp (nanoseconds)
+    pub timestamp: u64,
+    /// Command name (truncated to 16 bytes)
+    pub comm: [u8; 16],
+    /// Filename being executed (truncated to 256 bytes)
+    pub filename: [u8; 256],
+}
 
 /// Map storing blocked IPv4 addresses
 /// Key: u32 (IPv4 address in network byte order)
@@ -20,6 +39,16 @@ static BLOCKED_IPV4: HashMap<u32, u8> = HashMap::with_max_entries(1024, 0);
 /// Note: Increased from 256 to 1024 to handle systems with many network interfaces
 #[map]
 static BLOCKED_IPV6: HashMap<[u32; 4], u8> = HashMap::with_max_entries(1024, 0);
+
+/// Perf event array for sending exec events to userspace
+#[map]
+static EXEC_EVENTS: PerfEventArray<ExecEvent> = PerfEventArray::new(0);
+
+/// Per-CPU array for temporary ExecEvent storage (avoids stack limit)
+/// Using a single-entry array accessed by CPU ID to store events during construction
+#[map]
+static EXEC_EVENT_STORAGE: PerCpuArray<ExecEvent> =
+    PerCpuArray::with_max_entries(1, 0);
 
 // IPv4 header offsets (no Ethernet header in cgroup_skb)
 const IPV4_DST_OFFSET: usize = 16; // Destination address at byte 16 in IP header
@@ -152,6 +181,80 @@ fn try_block_ipv6(ctx: &SkBuffContext) -> Result<i32, ()> {
 
     // IP is not blocked, allow the packet
     Ok(1)
+}
+
+/// Tracepoint for sched_process_exec
+///
+/// This tracepoint is triggered whenever a process executes a new program.
+/// It captures the process information and sends it to userspace via perf buffer.
+///
+/// Tracepoint: /sys/kernel/debug/tracing/events/sched/sched_process_exec
+#[tracepoint(category = "sched", name = "sched_process_exec")]
+pub fn trace_exec(ctx: TracePointContext) -> u32 {
+    match try_trace_exec(&ctx) {
+        Ok(_) => 0,
+        Err(_) => 1,
+    }
+}
+
+fn try_trace_exec(ctx: &TracePointContext) -> Result<(), ()> {
+    // Get a pointer to the per-CPU event storage (avoids stack overflow)
+    let event = EXEC_EVENT_STORAGE
+        .get_ptr_mut(0)
+        .ok_or(())?;
+
+    // Read process information using eBPF helpers
+    let pid = ctx.pid(); // Get PID as u32
+    let uid = ctx.uid();
+
+    // Get timestamp in nanoseconds
+    let timestamp = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
+
+    // Initialize event fields
+    unsafe {
+        (*event).pid = pid;
+        (*event).ppid = 0; // We'll get this in userspace if needed
+        (*event).uid = uid;
+        (*event).timestamp = timestamp;
+    }
+
+    // Get command name and write to event
+    let comm = aya_ebpf::helpers::bpf_get_current_comm()
+        .unwrap_or([0u8; 16]);
+    unsafe {
+        (*event).comm = comm;
+    }
+
+    // Read filename from tracepoint args
+    // The filename is at a specific offset in the tracepoint context
+    // For sched_process_exec, the filename is passed as an argument
+    // Try to read the filename pointer from tracepoint args
+    // offset 16 bytes into the tracepoint args is the filename pointer
+    let filename_ptr: *const u8 = unsafe {
+        ctx.read_at::<u64>(16).map_err(|_| ())? as *const u8
+    };
+
+    // Initialize filename to zeros
+    unsafe {
+        (*event).filename = [0u8; 256];
+    }
+
+    // Read the filename string from the pointer
+    if !filename_ptr.is_null() {
+        unsafe {
+            let _ = aya_ebpf::helpers::bpf_probe_read_kernel_str_bytes(
+                filename_ptr as *const u8,
+                &mut (*event).filename,
+            );
+        }
+    }
+
+    // Send event to userspace via perf buffer
+    unsafe {
+        EXEC_EVENTS.output(ctx, &*event, 0);
+    }
+
+    Ok(())
 }
 
 #[cfg(not(test))]

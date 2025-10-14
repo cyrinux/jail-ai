@@ -38,6 +38,7 @@ pub struct AgentCommandParams {
     pub auth: bool,
     pub no_nix: bool,
     pub no_block_host: bool,
+    pub monitor: bool,
     pub args: Vec<String>,
 }
 
@@ -606,6 +607,9 @@ pub async fn run_ai_agent_command(
         // Set block_host flag (inverted: !no_block_host means blocking is enabled)
         builder = builder.block_host(!params.no_block_host);
 
+        // Set monitor flag
+        builder = builder.monitor(params.monitor);
+
         let jail = builder.build();
         jail.create().await?;
 
@@ -624,6 +628,46 @@ pub async fn run_ai_agent_command(
                 tracing::warn!("Failed to create .gitconfig in container: {}", e);
             }
         }
+    }
+
+    // If --monitor flag is set, ensure eBPF monitoring is attached (even for existing containers)
+    if params.monitor {
+        info!("Ensuring eBPF monitoring is attached for container '{}'", jail_name);
+
+        // Create backend instance to call apply_ebpf_monitoring
+        let backend = crate::backend::podman::PodmanBackend::new();
+
+        // Apply eBPF monitoring (this will replace any existing monitor)
+        match backend.apply_ebpf_monitoring(&jail_name).await {
+            Ok(_) => info!("eBPF exec monitoring attached successfully"),
+            Err(e) => {
+                warn!("Failed to attach eBPF exec monitoring: {}", e);
+                warn!("Monitor mode will continue but events may not be displayed");
+            }
+        }
+    }
+
+    // If --monitor flag is set, don't run the agent - just wait and display exec events
+    if params.monitor {
+        info!("Monitor mode: displaying exec events from container '{}'", jail_name);
+        println!("\n🔍 Monitoring exec syscalls in container '{}'", jail_name);
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Displaying all commands executed in the container.");
+        println!("Press Ctrl+C to stop monitoring.");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        // Wait indefinitely, monitoring events (the eBPF monitor is already attached)
+        // Use tokio::signal to handle Ctrl+C gracefully
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                info!("Received Ctrl+C, stopping monitor");
+                println!("\n⚠️  Monitoring stopped. Container '{}' is still running.", jail_name);
+            }
+            Err(e) => {
+                warn!("Error waiting for Ctrl+C: {}", e);
+            }
+        }
+        return Ok(());
     }
 
     // Execute AI agent command (use the same backend type determined earlier)

@@ -148,6 +148,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 isolated,
                 no_nix,
                 no_block_host,
+                monitor,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -280,6 +281,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     // Set block_host flag (inverted: !no_block_host means blocking is enabled)
                     builder = builder.block_host(!no_block_host);
 
+                    // Set monitor flag
+                    builder = builder.monitor(monitor);
+
                     builder.build()
                 };
 
@@ -293,7 +297,31 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     }
                 }
 
-                info!("Jail created: {}", jail.config().name);
+                let jail_name = jail.config().name.clone();
+
+                // If --monitor flag is set, don't exit - wait and display exec events
+                if monitor {
+                    info!("Monitor mode: displaying exec events from container '{}'", jail_name);
+                    println!("\n🔍 Monitoring exec syscalls in container '{}'", jail_name);
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    println!("Displaying all commands executed in the container.");
+                    println!("Press Ctrl+C to stop monitoring.");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+                    // Wait indefinitely, monitoring events (the eBPF monitor is already attached)
+                    // Use tokio::signal to handle Ctrl+C gracefully
+                    match tokio::signal::ctrl_c().await {
+                        Ok(()) => {
+                            info!("Received Ctrl+C, stopping monitor");
+                            println!("\n⚠️  Monitoring stopped. Container '{}' is still running.", jail_name);
+                        }
+                        Err(e) => {
+                            warn!("Error waiting for Ctrl+C: {}", e);
+                        }
+                    }
+                } else {
+                    info!("Jail created: {}", jail_name);
+                }
             }
 
             Commands::Remove {
@@ -616,6 +644,7 @@ async fn run_agent_command(
             auth: common.auth,
             no_nix: common.no_nix,
             no_block_host: common.no_block_host,
+            monitor: common.monitor,
             args,
         },
     )
