@@ -6,6 +6,8 @@ use std::net::IpAddr;
 /// Request from jail-ai to load eBPF program
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoadRequest {
+    /// Name of the container (for lock file)
+    pub container_name: String,
     /// Path to the container's cgroup
     pub cgroup_path: String,
     /// List of IP addresses to block

@@ -3,7 +3,7 @@ mod loader_client;
 
 use crate::error::Result;
 use std::net::IpAddr;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 pub use host_ips::get_host_ips;
 use loader_client::load_ebpf_via_helper;
@@ -81,21 +81,37 @@ impl EbpfHostBlocker {
             blocked_ips.len()
         );
 
+        // Extract container name from cgroup path
+        // Format: /sys/fs/cgroup/.../libpod-CONTAINER_NAME.scope/...
+        let container_name = cgroup_path
+            .split('/')
+            .find(|s| s.starts_with("libpod-") && s.ends_with(".scope"))
+            .and_then(|s| s.strip_prefix("libpod-"))
+            .and_then(|s| s.strip_suffix(".scope"))
+            .unwrap_or("unknown");
+        
+        debug!("Extracted container name: {} from cgroup path: {}", container_name, cgroup_path);
+        
         // Call the helper binary to do the privileged work
-        match load_ebpf_via_helper(cgroup_path, blocked_ips).await {
+        match load_ebpf_via_helper(container_name, cgroup_path, blocked_ips).await {
             Ok(link_ids) => {
                 self._link_ids = link_ids;
                 info!("✓ eBPF host blocking active for cgroup {}", cgroup_path);
                 Ok(())
             }
             Err(e) => {
+                let error_msg = e.to_string();
+                // If loader is already running, that's fine - don't fail
+                if error_msg.contains("Loader already running") {
+                    debug!("eBPF loader already running for this container");
+                    return Ok(());
+                }
+                
                 warn!("⚠️  Failed to load eBPF via helper: {}", e);
                 warn!("   Host blocking will not be enforced");
                 warn!("   To enable eBPF blocking:");
                 warn!("   1. Build loader: cargo build --release -p jail-ai-ebpf-loader");
-                warn!(
-                    "   2. Install loader: cargo install --path jail-ai-ebpf-loader --force"
-                );
+                warn!("   2. Install loader: cargo install --path jail-ai-ebpf-loader --force");
                 warn!("   3. Grant capabilities: sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)");
                 Err(e)
             }

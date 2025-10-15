@@ -238,7 +238,7 @@ pub async fn run_ai_agent_command(
                     crate::agents::Agent::Jules => params.jules_dir || params.agent_configs,
                     _ => false, // Other agents don't use this auto-detection
                 };
-                
+
                 // Only check for credentials if the config directory will be mounted
                 if config_dir_mounted {
                     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
