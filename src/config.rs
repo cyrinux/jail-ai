@@ -57,7 +57,7 @@ pub struct JailConfig {
     pub no_nix: bool,
 
     /// Enable eBPF-based host blocking (blocks connections to host IPs)
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub block_host: bool,
 }
 
@@ -161,7 +161,7 @@ impl Default for JailConfig {
             verbose: false,
             pre_create_dirs: Vec::new(),
             no_nix: false,
-            block_host: false,
+            block_host: true,
         }
     }
 }

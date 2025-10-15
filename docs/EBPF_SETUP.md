@@ -111,42 +111,54 @@ cargo xtask build --release
 
 ## Permissions
 
-eBPF programs require elevated privileges to load:
+**IMPORTANT**: jail-ai now uses a **privileged helper binary** architecture for improved security.
 
-### Option 1: Run with sudo (Simplest)
+### Recommended: Privileged Helper Binary (Most Secure)
+
+The main `jail-ai` binary runs **without** any elevated privileges. Only the small helper binary (`jail-ai-ebpf-loader`) requires capabilities.
 
 ```bash
+# 1. Build the helper binary
+cargo build --release -p jail-ai-ebpf-loader
+
+# 2. Install helper binary
+cargo install --path jail-ai-ebpf-loader --force
+
+# 3. Grant capabilities ONLY to helper (NOT to main binary)
+sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)
+
+# 4. Verify main binary has NO capabilities
+getcap $(which jail-ai)
+# Should show: nothing
+
+# 5. Run jail-ai without any special permissions
+jail-ai create my-jail --block-host
+```
+
+**Security Benefits**:
+- ✅ Main binary runs unprivileged (no capabilities needed)
+- ✅ Helper is < 500 LOC and easy to audit
+- ✅ Helper drops capabilities after loading
+- ✅ Minimal attack surface
+
+See [EBPF_SECURITY.md](./EBPF_SECURITY.md) for detailed security architecture.
+
+### Alternative: Run with sudo
+
+```bash
+# Helper will be invoked with sudo automatically
 sudo jail-ai create my-jail --block-host
 ```
 
-### Option 2: Grant CAP_BPF Capability (Recommended)
+### Legacy: Grant Capabilities to Main Binary (Not Recommended)
 
 ```bash
-# Grant CAP_BPF to the jail-ai binary
-sudo setcap cap_bpf+ep target/release/jail-ai
-
-# Now you can run without sudo
-./target/release/jail-ai create my-jail --block-host
+# OLD METHOD - Less secure, not recommended
+# This grants capabilities to the entire jail-ai binary
+sudo setcap cap_bpf,cap_net_admin+ep target/release/jail-ai
 ```
 
-### Option 3: Use a systemd Service
-
-Create `/etc/systemd/system/jail-ai.service`:
-
-```ini
-[Unit]
-Description=jail-ai Container Manager
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/jail-ai create %i --block-host
-RemainAfterExit=yes
-AmbientCapabilities=CAP_BPF CAP_NET_ADMIN
-
-[Install]
-WantedBy=multi-user.target
-```
+**Why not recommended**: This gives elevated privileges to the entire ~5000 LOC jail-ai binary instead of just the ~400 LOC helper.
 
 ## Verification
 

@@ -1,4 +1,4 @@
-.PHONY: help build-image push-image test-image clean build build-ebpf clean-ebpf run test clippy fmt install-man uninstall-man view-man
+.PHONY: help build-image push-image test-image clean build build-ebpf build-loader install-loader build-all clean-ebpf run test clippy fmt install-man uninstall-man view-man
 
 IMAGE_NAME ?= localhost/jail-ai-env
 IMAGE_TAG ?= latest
@@ -54,9 +54,32 @@ clean: ## Remove built container images and eBPF build container
 build: ## Build the jail-ai binary
 	cargo build --release
 
+build-loader: ## Build the eBPF loader helper binary
+	@echo "Building jail-ai-ebpf-loader..."
+	cargo build --release -p jail-ai-ebpf-loader
+	@echo "✓ Helper binary built at: target/release/jail-ai-ebpf-loader"
+
+install-loader: build-loader ## Install the eBPF loader helper binary with capabilities
+	@echo "Installing jail-ai-ebpf-loader..."
+	cargo install --path jail-ai-ebpf-loader --force
+	@echo "✓ Helper binary installed"
+	@echo ""
+	@echo "⚠️  SECURITY NOTICE: Granting capabilities to helper binary"
+	@echo "This gives CAP_BPF and CAP_NET_ADMIN to the small (~400 LOC) helper binary."
+	@echo "The main jail-ai binary remains unprivileged."
+	@echo ""
+	sudo setcap cap_bpf,cap_net_admin+ep $$(which jail-ai-ebpf-loader)
+	@echo "✓ Capabilities granted to helper binary"
+	@echo ""
+	@echo "Verification:"
+	@echo "  Helper capabilities: $$(getcap $$(which jail-ai-ebpf-loader))"
+	@echo "  Main binary caps:    $$(getcap $$(which jail-ai) 2>/dev/null || echo 'none (secure!)')"
+
 build-ebpf: ## Build eBPF programs in a container (reuses container if exists)
 	@echo "Building eBPF programs..."
 	./build-ebpf.sh
+
+build-all: build-ebpf build build-loader ## Build everything (eBPF programs, main binary, and loader)
 
 clean-ebpf: ## Remove the eBPF build container
 	@echo "Removing eBPF build container..."
