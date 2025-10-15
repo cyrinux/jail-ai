@@ -31,7 +31,42 @@ use aya::include_bytes_aligned;
 use std::fs::File;
 use std::io::{self, Read};
 use std::net::{IpAddr, Ipv6Addr};
-use tracing::{debug, error, info, warn};
+
+// Simple logging macros - output to stderr only (stdout is for JSON response)
+macro_rules! error {
+    ($($arg:tt)*) => {
+        eprintln!("[ERROR] {}", format!($($arg)*))
+    };
+}
+
+macro_rules! warn {
+    ($($arg:tt)*) => {
+        if is_verbose() {
+            eprintln!("[WARN] {}", format!($($arg)*))
+        }
+    };
+}
+
+macro_rules! info {
+    ($($arg:tt)*) => {
+        eprintln!("[INFO] {}", format!($($arg)*))
+    };
+}
+
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        if is_verbose() {
+            eprintln!("[DEBUG] {}", format!($($arg)*))
+        }
+    };
+}
+
+// Check if verbose logging is enabled via RUST_LOG
+fn is_verbose() -> bool {
+    std::env::var("RUST_LOG")
+        .map(|v| v.contains("debug") || v.contains("trace"))
+        .unwrap_or(false)
+}
 
 mod protocol;
 use protocol::{LoadRequest, LoadResponse};
@@ -60,17 +95,7 @@ fn get_ebpf_program_path() -> String {
     )
 }
 
-#[tokio::main]
-async fn main() {
-    // Initialize logging to stderr only (stdout is used for JSON response)
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
-
+fn main() {
     info!("jail-ai-ebpf-loader starting");
 
     // Verify we have the required capabilities
@@ -159,7 +184,7 @@ async fn main() {
     let cgroup_path_for_monitoring = request.cgroup_path.clone();
 
     // Load and attach eBPF program
-    match load_and_attach_ebpf(request).await {
+    match load_and_attach_ebpf(request) {
         Ok(_) => {
             info!("Successfully loaded and attached eBPF programs");
             send_response(LoadResponse {
@@ -181,8 +206,8 @@ async fn main() {
             // and holds the link file descriptor
             let lock_file_clone = lock_file.clone();
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                
+                std::thread::sleep(std::time::Duration::from_secs(5));
+
                 // Check if cgroup still exists
                 if !std::path::Path::new(&cgroup_path_for_monitoring).exists() {
                     info!("Cgroup {} no longer exists, exiting", cgroup_path_for_monitoring);
@@ -293,7 +318,7 @@ fn validate_request(request: &LoadRequest) -> Result<(), String> {
 
 /// Load eBPF program and attach to cgroup
 /// Returns () on success - the link is kept alive by not dropping the Bpf instance
-async fn load_and_attach_ebpf(request: LoadRequest) -> Result<(), String> {
+fn load_and_attach_ebpf(request: LoadRequest) -> Result<(), String> {
     // Load eBPF program
     let mut ebpf = load_ebpf_program()?;
 

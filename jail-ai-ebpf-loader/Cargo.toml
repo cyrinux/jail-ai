@@ -4,14 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aya = { version = "0.12", features = ["async_tokio"] }
-tokio = { version = "1.36", features = ["rt", "rt-multi-thread", "macros", "fs", "time"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+aya = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 caps = "0.5"  # For dropping capabilities
-libc = "0.2"  # For euid check after loading
+libc = "0.2"  # For euid check
 
 [profile.release]
 opt-level = "z"  # Optimize for size

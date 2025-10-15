@@ -465,7 +465,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jail-ai"
-version = "0.44.4"
+version = "0.44.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -501,9 +501,6 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
