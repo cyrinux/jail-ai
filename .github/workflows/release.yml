@@ -66,9 +66,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build eBPF loader
-        run: cargo build --release --package jail-ai-ebpf-loader
-
       - name: Setup cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
