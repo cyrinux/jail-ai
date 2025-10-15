@@ -114,7 +114,7 @@ pub async fn load_ebpf_via_helper(
     .map_err(|e| JailError::Backend(format!("Failed to read loader output: {}", e)))?;
 
     // Parse response
-    let response: LoadResponse = serde_json::from_str(&response_str.trim()).map_err(|e| {
+    let response: LoadResponse = serde_json::from_str(response_str.trim()).map_err(|e| {
         JailError::Backend(format!(
             "Failed to parse LoadResponse JSON: {}\nOutput: {}",
             e, response_str
