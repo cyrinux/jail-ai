@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build eBPF programs in a clean Docker/Podman container
 # This avoids LLVM compatibility issues on the host system
 

@@ -37,7 +37,7 @@ jobs:
 
       - name: Build with cross
         run: |
-          cross build --release --target ${{ matrix.target }}
+          cross build --release --package jail-ai --target ${{ matrix.target }}
           strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
 
       - name: Package binary
