@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,49 +13,49 @@ jobs:
   build-ebpf:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust nightly
-      uses: dtolnay/rust-toolchain@nightly
-      with:
-        components: rust-src
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
 
-    - name: Install bpf-linker
-      run: cargo install bpf-linker
+      - name: Install bpf-linker
+        run: cargo install bpf-linker
 
-    - name: Build eBPF programs
-      run: |
-        cd jail-ai-ebpf
-        cargo +nightly build --release --target=bpfel-unknown-none -Z build-std=core
+      - name: Build eBPF programs
+        run: |
+          cd jail-ai-ebpf
+          cargo +nightly build --release --target=bpfel-unknown-none -Z build-std=core
 
-    - name: Upload eBPF artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ebpf-programs
-        path: jail-ai-ebpf/target/bpfel-unknown-none/release/jail-ai-ebpf
-        retention-days: 1
+      - name: Upload eBPF artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebpf-programs
+          path: target/bpfel-unknown-none/release/jail-ai-ebpf
+          retention-days: 1
 
   build:
     needs: build-ebpf
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Download eBPF artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: ebpf-programs
-        path: jail-ai-ebpf/target/bpfel-unknown-none/release/
+      - name: Download eBPF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ebpf-programs
+          path: target/bpfel-unknown-none/release/
 
-    - name: Build eBPF loader
-      run: cargo build --verbose --package jail-ai-ebpf-loader
+      - name: Build eBPF loader
+        run: cargo build --verbose --package jail-ai-ebpf-loader
 
-    - name: Build
-      run: cargo build --verbose
+      - name: Build
+        run: cargo build --verbose
 
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Run tests
+        run: cargo test --verbose
 
-    - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
