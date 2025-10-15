@@ -37,7 +37,7 @@ pub struct AgentCommandParams {
     pub verbose: bool,
     pub auth: bool,
     pub no_nix: bool,
-    pub block_host: bool,
+    pub no_block_host: bool,
     pub args: Vec<String>,
 }
 
@@ -603,8 +603,8 @@ pub async fn run_ai_agent_command(
         // Set no_nix flag
         builder = builder.no_nix(params.no_nix);
 
-        // Set block_host flag
-        builder = builder.block_host(params.block_host);
+        // Set block_host flag (inverted: !no_block_host means blocking is enabled)
+        builder = builder.block_host(!params.no_block_host);
 
         let jail = builder.build();
         jail.create().await?;
