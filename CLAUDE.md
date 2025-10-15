@@ -351,7 +351,7 @@ The AI coding agents require authentication.
 
 **Note**:
 - **OAuth Authentication**: The `--auth` flag provides a convenient way to authenticate agents (Codex, Jules) that require OAuth workflows. It opens an interactive shell in the container where you can run the agent's authentication command. After authentication is complete, restart the container without `--auth` to restore secure network isolation.
-- **Automatic Auth Detection**: For agents that support OAuth workflows (Codex, Jules), jail-ai automatically detects when credentials are missing or empty (first run) and enables auth mode automatically. This means you don't need to manually specify `--auth` on first run - the system will detect the need for authentication and guide you through the process.
+- **Automatic Auth Detection**: For agents that support OAuth workflows (Codex, Jules), jail-ai automatically detects when credentials are missing or empty (first run) and enables auth mode automatically **if you've specified the appropriate config directory flag** (`--codex-dir`, `--jules-dir`, or `--agent-configs`). This means on first run with these flags, you don't need to manually specify `--auth` - the system will detect the need for authentication and guide you through the process.
 
 Example aliases for different security levels:
 
