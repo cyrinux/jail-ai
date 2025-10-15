@@ -104,9 +104,9 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub no_nix: bool,
 
-    /// Enable eBPF-based host blocking (blocks connections to host IPs)
+    /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
     #[arg(long)]
-    pub block_host: bool,
+    pub no_block_host: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -224,9 +224,9 @@ pub enum Commands {
         #[arg(long)]
         no_nix: bool,
 
-        /// Enable eBPF-based host blocking (blocks connections to host IPs)
+        /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
         #[arg(long)]
-        block_host: bool,
+        no_block_host: bool,
     },
 
     /// Remove a jail
