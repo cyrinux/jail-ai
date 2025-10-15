@@ -397,9 +397,7 @@ async fn build_custom_layer(
     // Read custom Containerfile content for hashing
     let containerfile_content = tokio::fs::read_to_string(&custom_containerfile_path)
         .await
-        .map_err(|e| {
-            JailError::Backend(format!("Failed to read custom Containerfile: {}", e))
-        })?;
+        .map_err(|e| JailError::Backend(format!("Failed to read custom Containerfile: {}", e)))?;
 
     // Generate hash of Containerfile content
     let containerfile_hash = hash_containerfile(&containerfile_content);
@@ -413,7 +411,8 @@ async fn build_custom_layer(
         .arg(format!("ai.jail.containerfile.hash={}", containerfile_hash));
 
     // Add base image build arg
-    cmd.arg("--build-arg").arg(format!("BASE_IMAGE={}", base_image));
+    cmd.arg("--build-arg")
+        .arg(format!("BASE_IMAGE={}", base_image));
 
     // Use the custom Containerfile from workspace
     cmd.arg("-f")

@@ -1,4 +1,4 @@
-.PHONY: help build-image push-image test-image clean build run test clippy fmt install-man uninstall-man view-man
+.PHONY: help build-image push-image test-image clean build build-ebpf clean-ebpf run test clippy fmt install-man uninstall-man view-man
 
 IMAGE_NAME ?= localhost/jail-ai-env
 IMAGE_TAG ?= latest
@@ -46,12 +46,26 @@ test-image: ## Test the container image
 	@podman run --rm --user agent $(IMAGE_FULL) jules --version || echo "Jules CLI installed (requires auth)"
 	@echo "All tools verified successfully!"
 
-clean: ## Remove built container images
+clean: ## Remove built container images and eBPF build container
 	@echo "Removing image: $(IMAGE_FULL)"
 	-podman rmi $(IMAGE_FULL)
+	@$(MAKE) clean-ebpf
 
 build: ## Build the jail-ai binary
 	cargo build --release
+
+build-ebpf: ## Build eBPF programs in a container (reuses container if exists)
+	@echo "Building eBPF programs..."
+	./build-ebpf.sh
+
+clean-ebpf: ## Remove the eBPF build container
+	@echo "Removing eBPF build container..."
+	@if command -v podman &> /dev/null; then \
+		podman rm -f build-ebpf 2>/dev/null || true; \
+	elif command -v docker &> /dev/null; then \
+		docker rm -f build-ebpf 2>/dev/null || true; \
+	fi
+	@echo "eBPF build container removed."
 
 run: ## Run jail-ai (use ARGS="..." to pass arguments)
 	cargo run -- $(ARGS)
