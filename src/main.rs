@@ -567,6 +567,21 @@ async fn run_agent_command(
     args: Vec<String>,
     verbose: bool,
 ) -> error::Result<()> {
+    // Validate agent-specific config flags before proceeding
+    let config_flags = agents::AgentConfigFlags {
+        claude_dir: common.claude_dir,
+        copilot_dir: common.copilot_dir,
+        cursor_dir: common.cursor_dir,
+        gemini_dir: common.gemini_dir,
+        codex_dir: common.codex_dir,
+        jules_dir: common.jules_dir,
+        agent_configs: common.agent_configs,
+    };
+
+    agent
+        .validate_config_flags(&config_flags)
+        .map_err(error::JailError::Config)?;
+
     agent_commands::run_ai_agent_command(
         agent.command_name(),
         agent_commands::AgentCommandParams {

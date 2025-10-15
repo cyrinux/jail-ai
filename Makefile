@@ -14,12 +14,14 @@ help: ## Show this help message
 
 build-image: ## Build the AI agent environment container image (optional - jail-ai auto-builds)
 	@echo "Building container image: $(IMAGE_FULL)"
-	@echo "Note: jail-ai will automatically build the default image when needed."
-	@echo "This target is useful for testing image builds before they are needed."
-	podman build -t $(IMAGE_FULL) -f Containerfile \
+	@echo "Note: jail-ai now uses a layered image system and auto-builds images when needed."
+	@echo "This target is kept for backward compatibility but may not reflect the layered architecture."
+	@echo "The layered system automatically detects your project type and builds appropriate images."
+	@echo "To force rebuild layers, use: cargo run -- <agent> --upgrade"
+	podman build -t $(IMAGE_FULL) -f containerfiles/base.Containerfile \
 		--build-arg PUID=$$(id -u) \
 		--build-arg PGID=$$(id -g) \
-		.
+		containerfiles/
 	@echo "Image built successfully: $(IMAGE_FULL)"
 
 push-image: ## Push the container image to a registry
@@ -39,6 +41,9 @@ test-image: ## Test the container image
 	@podman run --rm --user agent $(IMAGE_FULL) claude --version
 	@podman run --rm --user agent $(IMAGE_FULL) copilot --version || echo "Copilot CLI installed (requires auth)"
 	@podman run --rm --user agent $(IMAGE_FULL) cursor-agent --version || echo "Cursor Agent installed (requires auth)"
+	@podman run --rm --user agent $(IMAGE_FULL) gemini --version || echo "Gemini CLI installed (requires auth)"
+	@podman run --rm --user agent $(IMAGE_FULL) codex --version || echo "Codex CLI installed (requires auth)"
+	@podman run --rm --user agent $(IMAGE_FULL) jules --version || echo "Jules CLI installed (requires auth)"
 	@echo "All tools verified successfully!"
 
 clean: ## Remove built container images
@@ -61,19 +66,84 @@ fmt: ## Format code
 	cargo fmt
 
 dev-jail: ## Create a development jail (image auto-built if needed)
-	cargo run -- create dev-agent --backend podman --image $(IMAGE_FULL) --no-network
+	cargo run -- create dev-agent --no-network
 
 # Example usage targets
-.PHONY: example-create example-exec example-remove
+.PHONY: example-create example-exec example-remove example-claude example-copilot example-cursor example-gemini example-codex example-jules
 
 example-create: ## Example: Create a jail (image auto-built if needed)
-	cargo run -- create my-agent --backend podman --image $(IMAGE_FULL)
+	cargo run -- create my-agent
 
 example-exec: ## Example: Execute a command in the jail
 	cargo run -- exec my-agent -- ls -la /workspace
 
 example-remove: ## Example: Remove the jail
 	cargo run -- remove my-agent --force
+
+example-claude: ## Example: Run Claude agent
+	cargo run -- claude -- chat "help me debug this code"
+
+example-copilot: ## Example: Run Copilot agent
+	cargo run -- copilot --copilot-dir -- suggest "write tests"
+
+example-cursor: ## Example: Run Cursor agent
+	cargo run -- cursor --cursor-dir -- --help
+
+example-gemini: ## Example: Run Gemini agent
+	cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
+
+example-codex: ## Example: Run Codex agent (use --auth for first-time setup)
+	cargo run -- codex --codex-dir -- generate "create a REST API"
+
+example-jules: ## Example: Run Jules agent (use --auth for first-time setup)
+	cargo run -- jules --jules-dir -- chat "help with this code"
+
+# Advanced feature examples
+.PHONY: example-upgrade example-isolated example-shell example-auth example-git-gpg example-agent-configs example-no-nix
+
+example-upgrade: ## Example: Upgrade jail with latest image layers
+	cargo run -- claude --upgrade
+
+example-isolated: ## Example: Create isolated project-specific jail
+	cargo run -- claude --isolated
+
+example-shell: ## Example: Open interactive shell in jail
+	cargo run -- claude --shell
+
+example-auth: ## Example: Authenticate Codex (OAuth workflow)
+	cargo run -- codex --codex-dir --auth
+
+example-git-gpg: ## Example: Create jail with git and GPG config
+	cargo run -- claude --git-gpg
+
+example-agent-configs: ## Example: Mount all agent config directories
+	cargo run -- claude --agent-configs
+
+example-no-nix: ## Example: Skip nix layer and use other language layers
+	cargo run -- claude --no-nix
+
+# Quick test targets
+.PHONY: test-claude test-copilot test-cursor test-gemini test-codex test-jules test-all-agents
+
+test-claude: ## Quick test: Claude agent
+	cargo run -- claude -- --version
+
+test-copilot: ## Quick test: Copilot agent
+	cargo run -- copilot --copilot-dir -- --version
+
+test-cursor: ## Quick test: Cursor agent
+	cargo run -- cursor --cursor-dir -- --version
+
+test-gemini: ## Quick test: Gemini agent
+	cargo run -- gemini --gemini-dir -- --version
+
+test-codex: ## Quick test: Codex agent
+	cargo run -- codex --codex-dir -- --version
+
+test-jules: ## Quick test: Jules agent
+	cargo run -- jules --jules-dir -- --version
+
+test-all-agents: test-claude test-copilot test-cursor test-gemini test-codex test-jules ## Test all agents
 
 # Man page targets
 .PHONY: install-man uninstall-man view-man

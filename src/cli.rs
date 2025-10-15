@@ -52,7 +52,7 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub claude_dir: bool,
 
-    /// Mount entire ~/.config directory for GitHub Copilot
+    /// Mount entire ~/.copilot directory for GitHub Copilot
     #[arg(long)]
     pub copilot_dir: bool,
 
@@ -176,7 +176,7 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
-        /// Mount entire ~/.config directory for GitHub Copilot
+        /// Mount entire ~/.copilot directory for GitHub Copilot
         #[arg(long)]
         copilot_dir: bool,
 
