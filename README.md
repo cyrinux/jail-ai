@@ -145,10 +145,10 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `--cursor-dir`: Mount `~/.cursor` and `~/.config/cursor` directories
 - `--gemini-dir`: Mount `~/.gemini` directory
 - `--codex-dir`: Mount `~/.codex` directory
-  - **First Run**: Automatically enters auth mode when credentials are missing
+  - **First Run**: When `--codex-dir` (or `--agent-configs`) is specified and credentials are missing, automatically enters auth mode
   - **Manual Auth**: Use `--auth` to re-authenticate or update credentials (joins running container or starts stopped one)
 - `--jules-dir`: Mount `~/.config/jules` directory
-  - **First Run**: Automatically enters auth mode when credentials are missing
+  - **First Run**: When `--jules-dir` (or `--agent-configs`) is specified and credentials are missing, automatically enters auth mode
   - **Manual Auth**: Use `--auth` to re-authenticate or update credentials
 - `--agent-configs`: Mount all of the above
 

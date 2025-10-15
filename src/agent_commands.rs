@@ -227,20 +227,31 @@ pub async fn run_ai_agent_command(
     // --auth only forces container recreation (for host networking) without rebuilding layers
 
     // Auto-detect if agent needs authentication (first run - credentials missing or empty)
+    // Only check if the user has mounted the config directory, otherwise credentials won't be accessible
     if !params.auth {
         if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
             // Only auto-enable auth for agents that support the auth workflow
             if agent.supports_auth_workflow() {
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-                let home_path = PathBuf::from(&home);
+                // Check if the appropriate config directory flag is set
+                let config_dir_mounted = match agent {
+                    crate::agents::Agent::Codex => params.codex_dir || params.agent_configs,
+                    crate::agents::Agent::Jules => params.jules_dir || params.agent_configs,
+                    _ => false, // Other agents don't use this auto-detection
+                };
+                
+                // Only check for credentials if the config directory will be mounted
+                if config_dir_mounted {
+                    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                    let home_path = PathBuf::from(&home);
 
-                if agent.needs_auth(&home_path) {
-                    info!(
-                        "First run detected - {} credentials not found or empty",
-                        agent.display_name()
-                    );
-                    info!("Automatically enabling authentication mode");
-                    params.auth = true;
+                    if agent.needs_auth(&home_path) {
+                        info!(
+                            "First run detected - {} credentials not found or empty",
+                            agent.display_name()
+                        );
+                        info!("Automatically enabling authentication mode");
+                        params.auth = true;
+                    }
                 }
             }
         }
