@@ -37,6 +37,7 @@ pub struct AgentCommandParams {
     pub verbose: bool,
     pub auth: bool,
     pub no_nix: bool,
+    pub block_host: bool,
     pub args: Vec<String>,
 }
 
@@ -167,9 +168,13 @@ async fn check_container_upgrade_needed(
     let current_image = backend.get_container_image(jail_name).await?;
 
     // Determine what image should be used now based on current project state
-    let expected_image =
-        crate::image_layers::get_expected_image_name(workspace_path, Some(agent_name), isolated, no_nix)
-            .await?;
+    let expected_image = crate::image_layers::get_expected_image_name(
+        workspace_path,
+        Some(agent_name),
+        isolated,
+        no_nix,
+    )
+    .await?;
 
     // Check if images differ
     let needs_upgrade = current_image != expected_image;
@@ -220,7 +225,7 @@ pub async fn run_ai_agent_command(
     // Check if we need to create/recreate the jail
     // --upgrade and --layers force layer rebuilding + container recreation
     // --auth only forces container recreation (for host networking) without rebuilding layers
-    
+
     // Auto-detect if agent needs authentication (first run - credentials missing or empty)
     if !params.auth {
         if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
@@ -228,16 +233,19 @@ pub async fn run_ai_agent_command(
             if agent.supports_auth_workflow() {
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
                 let home_path = PathBuf::from(&home);
-                
+
                 if agent.needs_auth(&home_path) {
-                    info!("First run detected - {} credentials not found or empty", agent.display_name());
+                    info!(
+                        "First run detected - {} credentials not found or empty",
+                        agent.display_name()
+                    );
                     info!("Automatically enabling authentication mode");
                     params.auth = true;
                 }
             }
         }
     }
-    
+
     let temp_config = JailConfig {
         name: jail_name.clone(),
         backend: backend_type,
@@ -245,7 +253,7 @@ pub async fn run_ai_agent_command(
     };
     let temp_jail = JailManager::new(temp_config);
     let jail_exists = temp_jail.exists().await?;
-    
+
     // Track container recreation separately from layer rebuilding
     // --auth should force container recreation (for networking) but not layer rebuilding
     let mut should_recreate = params.upgrade || !params.force_layers.is_empty() || params.auth;
@@ -257,7 +265,7 @@ pub async fn run_ai_agent_command(
             // Determine desired network mode based on --auth flag
             let desired_host_network = params.auth;
             let current_host_network = existing_config.network.host;
-            
+
             // If network mode has changed, force recreation
             if desired_host_network != current_host_network {
                 if desired_host_network {
@@ -421,11 +429,14 @@ pub async fn run_ai_agent_command(
                     strings::format_string(strings::RECREATING_JAIL_DETECTED_UPDATES, &jail_name)
                 );
             }
-            
+
             // Manually remove the container before recreating
             // This allows us to avoid setting upgrade=true when we only want to recreate
             // the container (e.g., for network mode changes) without rebuilding layers
-            info!("Stopping and removing existing container '{}'...", jail_name);
+            info!(
+                "Stopping and removing existing container '{}'...",
+                jail_name
+            );
             temp_jail.remove(false).await?; // false = don't remove volume (preserve data)
         }
 
@@ -433,8 +444,7 @@ pub async fn run_ai_agent_command(
         // This allows the layered image system to auto-detect and build agent-specific images
         let use_custom_image = params.image != crate::cli::DEFAULT_IMAGE;
 
-        let mut builder = JailBuilder::new(&jail_name)
-            .backend(backend_type);
+        let mut builder = JailBuilder::new(&jail_name).backend(backend_type);
 
         // Configure network mode based on flags
         if params.auth {
@@ -476,7 +486,10 @@ pub async fn run_ai_agent_command(
                 ];
                 let parent_dirs = crate::worktree::get_required_parent_dirs(&paths_to_mount);
 
-                info!("Will create {} parent directories in container", parent_dirs.len());
+                info!(
+                    "Will create {} parent directories in container",
+                    parent_dirs.len()
+                );
                 builder = builder.pre_create_dirs(parent_dirs);
 
                 // Mount 1: Worktree at /workspace (familiar location)
@@ -552,8 +565,7 @@ pub async fn run_ai_agent_command(
 
         // Parse port mappings
         for port_str in params.port {
-            let port_mapping =
-                Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
+            let port_mapping = Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
             builder = builder.port_mapping(
                 port_mapping.host_port,
                 port_mapping.container_port,
@@ -590,6 +602,9 @@ pub async fn run_ai_agent_command(
 
         // Set no_nix flag
         builder = builder.no_nix(params.no_nix);
+
+        // Set block_host flag
+        builder = builder.block_host(params.block_host);
 
         let jail = builder.build();
         jail.create().await?;
@@ -631,7 +646,7 @@ pub async fn run_ai_agent_command(
     if params.auth {
         return handle_auth_workflow(agent_command, &jail_name, backend_type).await;
     }
-    
+
     info!("about to run");
 
     // Check if the jail uses the Nix wrapper by testing if it exists in the agent's home directory
@@ -717,7 +732,10 @@ async fn handle_auth_workflow(
         )));
     }
 
-    info!("Starting OAuth authentication workflow for {}", agent.display_name());
+    info!(
+        "Starting OAuth authentication workflow for {}",
+        agent.display_name()
+    );
 
     // Get agent-specific auth command
     let auth_command = match agent {
@@ -749,7 +767,7 @@ async fn handle_auth_workflow(
 
     // Note: Container should already have been recreated with host networking
     // by the main flow when --auth flag was detected
-    
+
     if is_running {
         // Container is already running, just join it with an interactive shell
         info!("Container is running with host networking. Opening shell for authentication...");
@@ -780,7 +798,7 @@ async fn handle_auth_workflow(
     } else {
         // Container is stopped, we need to start it
         info!("Container is stopped. Starting it for authentication...");
-        
+
         println!("\n🔐 Authentication Mode - {}", agent.display_name());
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("Starting container with host networking for OAuth authentication.");

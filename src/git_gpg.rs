@@ -267,11 +267,10 @@ pub fn handle_ssh_allowed_signers_mounting(
                         signers_path.display(),
                         container_path
                     );
-                    let updated_builder = builder.clone().bind_mount(
-                        &signers_path,
-                        container_path,
-                        false,
-                    );
+                    let updated_builder =
+                        builder
+                            .clone()
+                            .bind_mount(&signers_path, container_path, false);
                     return Ok((updated_builder, true));
                 } else {
                     warn!("SSH allowed signers file not found: {} - SSH GPG signing may not work properly", signers_path.display());

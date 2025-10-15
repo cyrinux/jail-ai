@@ -94,11 +94,11 @@ impl JailBuilder {
     }
 
     /// Configure network access for the jail
-    /// 
+    ///
     /// # Arguments
     /// * `enabled` - If false, container has no network access (--network=none)
     /// * `private` - If true with enabled=true, uses private networking (slirp4netns) for secure isolation
-    /// 
+    ///
     /// Private networking provides:
     /// - Secure internet access without exposing host services
     /// - Proper port forwarding for OAuth callbacks and agent communication
@@ -171,6 +171,11 @@ impl JailBuilder {
     }
     pub fn no_nix(mut self, no_nix: bool) -> Self {
         self.config.no_nix = no_nix;
+        self
+    }
+
+    pub fn block_host(mut self, block_host: bool) -> Self {
+        self.config.block_host = block_host;
         self
     }
 

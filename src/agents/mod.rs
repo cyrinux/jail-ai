@@ -264,10 +264,7 @@ pub fn extract_agent_from_jail_name(jail_name: &str) -> Option<Agent> {
 
     // The format is: jail__{project}__{hash}__{agent}
     // Simply get the last segment after __
-    jail_name
-        .rsplit("__")
-        .next()
-        .and_then(Agent::from_str)
+    jail_name.rsplit("__").next().and_then(Agent::from_str)
 }
 
 /// Get a friendly display name for an agent extracted from a jail name
@@ -347,7 +344,10 @@ mod tests {
 
     #[test]
     fn test_agent_auth_credential_path() {
-        assert_eq!(Agent::Claude.auth_credential_path(), ".claude/.credentials.json");
+        assert_eq!(
+            Agent::Claude.auth_credential_path(),
+            ".claude/.credentials.json"
+        );
         assert_eq!(Agent::Copilot.auth_credential_path(), ".config/.copilot");
         assert_eq!(Agent::Cursor.auth_credential_path(), ".cursor");
         assert_eq!(Agent::Gemini.auth_credential_path(), ".gemini");

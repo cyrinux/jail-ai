@@ -29,7 +29,10 @@ pub fn detect_worktree(dir: &Path) -> Result<Option<WorktreeInfo>> {
 
     // Check if .git is a file (worktree indicator) rather than a directory
     if !git_path.is_file() {
-        debug!(".git at {} is a directory (regular repo, not worktree)", git_path.display());
+        debug!(
+            ".git at {} is a directory (regular repo, not worktree)",
+            git_path.display()
+        );
         return Ok(None);
     }
 
@@ -51,20 +54,21 @@ pub fn detect_worktree(dir: &Path) -> Result<Option<WorktreeInfo>> {
 
     // Make it absolute if it's relative
     let worktree_git_dir = if worktree_git_dir.is_relative() {
-        dir.join(&worktree_git_dir)
-            .canonicalize()
-            .map_err(|e| JailError::Config(format!(
+        dir.join(&worktree_git_dir).canonicalize().map_err(|e| {
+            JailError::Config(format!(
                 "Failed to resolve worktree git directory path {}: {}",
                 worktree_git_dir.display(),
                 e
-            )))?
+            ))
+        })?
     } else {
-        worktree_git_dir.canonicalize()
-            .map_err(|e| JailError::Config(format!(
+        worktree_git_dir.canonicalize().map_err(|e| {
+            JailError::Config(format!(
                 "Failed to resolve worktree git directory path {}: {}",
                 worktree_git_dir.display(),
                 e
-            )))?
+            ))
+        })?
     };
 
     // Extract main repo .git directory
@@ -75,10 +79,12 @@ pub fn detect_worktree(dir: &Path) -> Result<Option<WorktreeInfo>> {
     let main_git_dir = worktree_git_dir
         .parent()
         .and_then(|p| p.parent())
-        .ok_or_else(|| JailError::Config(format!(
-            "Unexpected worktree git directory structure: {}",
-            worktree_git_dir.display()
-        )))?
+        .ok_or_else(|| {
+            JailError::Config(format!(
+                "Unexpected worktree git directory structure: {}",
+                worktree_git_dir.display()
+            ))
+        })?
         .to_path_buf();
 
     // Verify this is actually a .git directory

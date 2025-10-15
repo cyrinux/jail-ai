@@ -1,0 +1,11 @@
+[package]
+name = "jail-ai-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-ebpf = { workspace = true }
+
+[[bin]]
+name = "jail-ai-ebpf"
+path = "src/main.rs"
