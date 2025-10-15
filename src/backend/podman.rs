@@ -24,6 +24,149 @@ impl PodmanBackend {
         Self
     }
 
+    /// Check if eBPF loader is running for this container and reattach if needed
+    /// This handles cases where the system rebooted but the container auto-started
+    async fn reattach_ebpf_if_needed(&self, name: &str) -> Result<()> {
+        // Check if this container has eBPF blocking enabled by checking for the label
+        // If the label doesn't exist or is false, skip eBPF reattachment
+        let mut label_cmd = Command::new("podman");
+        label_cmd
+            .arg("inspect")
+            .arg(name)
+            .arg("--format")
+            .arg("{{index .Config.Labels \"jail-ai.block-host\"}}");
+
+        let block_host_label = match run_command(&mut label_cmd).await {
+            Ok(output) => output.trim() == "true",
+            Err(_) => {
+                // Label not found or inspect failed, assume no eBPF needed
+                debug!(
+                    "No block-host label found for container {}, skipping eBPF check",
+                    name
+                );
+                return Ok(());
+            }
+        };
+
+        if !block_host_label {
+            debug!("Container {} does not have eBPF blocking enabled", name);
+            return Ok(());
+        }
+
+        // Check if container is using host networking
+        let mut network_cmd = Command::new("podman");
+        network_cmd
+            .arg("inspect")
+            .arg(name)
+            .arg("--format")
+            .arg("{{.HostConfig.NetworkMode}}");
+
+        if let Ok(network_mode) = run_command(&mut network_cmd).await {
+            if network_mode.trim() == "host" {
+                debug!("Container {} uses host networking, skipping eBPF", name);
+                return Ok(());
+            }
+        }
+
+        // Check if eBPF loader is already running for this container
+        let loader_running = self.is_ebpf_loader_running(name).await;
+
+        if loader_running {
+            debug!("eBPF loader already running for container {}", name);
+            return Ok(());
+        }
+
+        // Loader not running but should be - reattach eBPF
+        info!(
+            "⚠️  eBPF loader not running for container {} (likely due to system reboot)",
+            name
+        );
+        info!("Reattaching eBPF host blocking...");
+
+        // Get the actual cgroup path from the container
+        // This is more reliable than constructing it manually
+        let cgroup_path = match self.get_container_cgroup_path(name).await {
+            Ok(path) => path,
+            Err(e) => {
+                warn!("Failed to get cgroup path for container {}: {}", name, e);
+                warn!("eBPF host blocking will not be reattached");
+                return Ok(());
+            }
+        };
+
+        debug!("Found cgroup path for container {}: {}", name, cgroup_path);
+
+        // Verify cgroup exists
+        if !std::path::Path::new(&cgroup_path).exists() {
+            warn!("Cgroup path does not exist: {}", cgroup_path);
+            warn!("eBPF host blocking will not be reattached");
+            return Ok(());
+        }
+
+        // Get host IPs to block
+        let host_ips = crate::ebpf::get_host_ips()?;
+        
+        // Create eBPF blocker and attach to cgroup
+        let mut blocker = crate::ebpf::EbpfHostBlocker::new();
+        blocker.attach_to_cgroup(&cgroup_path, &host_ips).await?;
+
+        // Store the blocker instance
+        let blockers = ebpf_blockers();
+        let mut blockers_map = blockers
+            .lock()
+            .map_err(|e| JailError::Backend(format!("Failed to lock eBPF blockers map: {}", e)))?;
+        blockers_map.insert(name.to_string(), blocker);
+
+        info!("✓ eBPF host blocking reattached for container {}", name);
+        Ok(())
+    }
+
+    /// Check if eBPF loader process is running for a specific container  
+    /// by checking if we have a blocker in memory AND a loader process is running
+    async fn is_ebpf_loader_running(&self, container_name: &str) -> bool {
+        // ONLY trust our in-memory map - if we don't have a blocker stored,
+        // then we don't know if eBPF is active for this container
+        
+        let has_blocker_in_memory = {
+            let blockers = ebpf_blockers();
+            if let Ok(blockers_map) = blockers.lock() {
+                blockers_map.contains_key(container_name)
+            } else {
+                false
+            }
+        }; // Lock is dropped here before any await
+        
+        if !has_blocker_in_memory {
+            debug!(
+                "No eBPF blocker in memory for container {} - needs reattach",
+                container_name
+            );
+            return false;
+        }
+        
+        // We have a blocker in memory - verify the loader process is actually running
+        debug!(
+            "Found eBPF blocker in memory for container {}, checking if loader is running",
+            container_name
+        );
+        
+        let mut ps_cmd = Command::new("ps");
+        ps_cmd.args(["aux"]);
+
+        if let Ok(output) = run_command(&mut ps_cmd).await {
+            for line in output.lines() {
+                if line.contains("jail-ai-ebpf-loader") && !line.contains("grep") {
+                    debug!("eBPF loader process is running");
+                    return true;
+                }
+            }
+        }
+
+        // Blocker in memory but no loader process - stale entry
+        debug!("Blocker in memory but loader not running - needs reattach");
+        false
+    }
+
     async fn image_exists(&self, image: &str) -> Result<bool> {
         let mut cmd = Command::new("podman");
         cmd.arg("image").arg("exists").arg(image);
@@ -101,6 +244,11 @@ impl PodmanBackend {
             // "--cap-add=CAP_BPF".to_string(),
             // "--cap-add=CAP_NET_ADMIN".to_string(),
         ]);
+
+        // Add label to track if eBPF host blocking is enabled
+        // This allows us to reattach eBPF after system reboots
+        args.push("--label".to_string());
+        args.push(format!("jail-ai.block-host={}", config.block_host));
 
         // Persistent volume for /home/agent to preserve data across upgrades
         // Agent-specific (not shared across different agents)
@@ -183,7 +331,9 @@ impl PodmanBackend {
         // Base image
         args.push(config.base_image.clone());
 
-        // Keep container running
+        // Keep container running with tini as PID 1 to reap zombie processes
+        args.push("tini".to_string());
+        args.push("--".to_string());
         args.push("sleep".to_string());
         args.push("infinity".to_string());
 
@@ -562,6 +712,7 @@ impl JailBackend for PodmanBackend {
             name, command, interactive
         );
 
+        let mut was_stopped = false;
         // Check if container exists and is stopped
         if self.exists(name).await? {
             // Check container state
@@ -574,14 +725,27 @@ impl JailBackend for PodmanBackend {
 
             if let Ok(state) = run_command(&mut state_cmd).await {
                 let state = state.trim();
-                if state == "exited" || state == "stopped" || state == "created" {
+                was_stopped = state == "exited" || state == "stopped" || state == "created";
+                if was_stopped {
                     info!("Container {} is {}, starting it...", name, state);
                     let mut start_cmd = Command::new("podman");
                     start_cmd.arg("start").arg(name);
                     run_command(&mut start_cmd).await?;
                     info!("Container {} started successfully", name);
+
+                    // Wait a bit for cgroup to be fully initialized
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                    // Re-attach eBPF if needed after container restart
+                    self.reattach_ebpf_if_needed(name).await?;
                 }
             }
+        }
+
+        // Always check eBPF status when entering an existing running container
+        // (in case of system reboot where container auto-starts but loader doesn't)
+        if !was_stopped {
+            self.reattach_ebpf_if_needed(name).await?;
         }
 
         let mut cmd = Command::new("podman");

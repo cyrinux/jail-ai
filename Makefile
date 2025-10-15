@@ -76,7 +76,6 @@ install-loader: build-loader ## Install the eBPF loader helper binary with capab
 	@echo ""
 	@echo "Verification:"
 	@echo "  Helper capabilities: $$(getcap $$(which jail-ai-ebpf-loader))"
-	@echo "  Main binary caps:    $$(getcap $$(which jail-ai) 2>/dev/null || echo 'none (secure!)')"
 
 build-ebpf: ## Build eBPF programs in a container (reuses container if exists)
 	@echo "Building eBPF programs..."

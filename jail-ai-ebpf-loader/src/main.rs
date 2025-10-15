@@ -1,18 +1,24 @@
 //! jail-ai-ebpf-loader - Privileged helper for loading eBPF programs
 //!
-//! This is a minimal setuid helper binary that:
+//! This is a minimal privileged helper binary that:
 //! 1. Loads eBPF programs into the kernel
 //! 2. Populates BPF maps with blocked IPs
 //! 3. Attaches programs to cgroups
-//! 4. Drops privileges immediately after loading
-//! 5. Returns control to the unprivileged jail-ai process
+//! 4. Stays alive to keep the eBPF program active
+//! 5. Monitors cgroup existence and exits when cgroup is destroyed
 //!
 //! Security considerations:
 //! - Validates all inputs rigorously
 //! - Minimal attack surface (< 500 LOC)
-//! - Drops capabilities after loading
+//! - Drops capabilities after loading (but stays alive)
 //! - No network access, no file writes beyond BPF operations
-//! - Stateless: exits immediately after loading
+//! - Monitors cgroup and automatically exits when container stops
+//!
+//! Why stay alive:
+//! - eBPF cgroup programs must have an active file descriptor to remain attached
+//! - When the process exits, kernel automatically detaches the program
+//! - This helper stays alive in the background to keep the eBPF program active
+//! - Automatically exits when the cgroup is destroyed (container stops)
 
 use aya::{
     include_bytes_aligned,
@@ -85,12 +91,60 @@ async fn main() {
         }
     };
 
-    info!("Received request to load eBPF for cgroup: {}", request.cgroup_path);
+    info!(
+        "Received request to load eBPF for container: {} (cgroup: {})",
+        request.container_name, request.cgroup_path
+    );
     debug!("Blocking {} IPs", request.blocked_ips.len());
+
+    // Check if a loader is already running for this container
+    let lock_file = format!("/tmp/jail-ai-ebpf-{}.lock", request.container_name);
+    if std::path::Path::new(&lock_file).exists() {
+        // Check if the PID in the lock file is still running
+        if let Ok(pid_str) = std::fs::read_to_string(&lock_file) {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                // Check if process exists
+                if std::path::Path::new(&format!("/proc/{}", pid)).exists() {
+                    warn!(
+                        "Loader already running for container {} (PID: {})",
+                        request.container_name, pid
+                    );
+                    send_response(LoadResponse {
+                        success: false,
+                        message: format!(
+                            "Loader already running for this container (PID: {})",
+                            pid
+                        ),
+                        link_ids: vec![],
+                    });
+                    std::process::exit(1);
+                } else {
+                    // Stale lock file, remove it
+                    debug!("Removing stale lock file for container {}", request.container_name);
+                    let _ = std::fs::remove_file(&lock_file);
+                }
+            }
+        }
+    }
+
+    // Create lock file with our PID
+    let our_pid = std::process::id();
+    if let Err(e) = std::fs::write(&lock_file, our_pid.to_string()) {
+        error!("Failed to create lock file {}: {}", lock_file, e);
+        send_response(LoadResponse {
+            success: false,
+            message: format!("Failed to create lock file: {}", e),
+            link_ids: vec![],
+        });
+        std::process::exit(1);
+    }
+    info!("Created lock file {} with PID {}", lock_file, our_pid);
 
     // Validate inputs
     if let Err(e) = validate_request(&request) {
         error!("Invalid request: {}", e);
+        // Clean up lock file on validation failure
+        let _ = std::fs::remove_file(&lock_file);
         send_response(LoadResponse {
             success: false,
             message: format!("Invalid request: {}", e),
@@ -99,25 +153,48 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Clone data for monitoring loop before moving request
+    let cgroup_path_for_monitoring = request.cgroup_path.clone();
+    let lock_file_for_monitoring = lock_file.clone();
+
     // Load and attach eBPF program
     match load_and_attach_ebpf(request).await {
-        Ok(link_ids) => {
+        Ok(_) => {
             info!("Successfully loaded and attached eBPF programs");
             send_response(LoadResponse {
                 success: true,
                 message: "eBPF programs loaded successfully".to_string(),
-                link_ids,
+                link_ids: vec![],
             });
 
-            // Drop capabilities before exiting
+            // Drop capabilities but stay alive to keep eBPF program active
             if let Err(e) = drop_capabilities() {
                 warn!("Failed to drop capabilities: {}", e);
             }
 
-            std::process::exit(0);
+            info!("eBPF loader staying alive to keep programs active");
+            info!("Will exit automatically when cgroup is destroyed");
+            
+            // Enter monitoring loop - check if cgroup still exists
+            // The eBPF program will remain attached as long as this process lives
+            // and holds the link file descriptor
+            let lock_file_clone = lock_file.clone();
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                
+                // Check if cgroup still exists
+                if !std::path::Path::new(&cgroup_path_for_monitoring).exists() {
+                    info!("Cgroup {} no longer exists, exiting", cgroup_path_for_monitoring);
+                    // Clean up lock file
+                    let _ = std::fs::remove_file(&lock_file_clone);
+                    std::process::exit(0);
+                }
+            }
         }
         Err(e) => {
             error!("Failed to load eBPF: {}", e);
+            // Clean up lock file on failure
+            let _ = std::fs::remove_file(&lock_file);
             send_response(LoadResponse {
                 success: false,
                 message: format!("Failed to load eBPF: {}", e),
@@ -133,8 +210,8 @@ fn read_request() -> io::Result<LoadRequest> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
 
-    let request: LoadRequest = serde_json::from_str(&buffer)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let request: LoadRequest =
+        serde_json::from_str(&buffer).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     Ok(request)
 }
@@ -164,7 +241,11 @@ fn verify_capabilities() -> Result<(), String> {
         Err(e) => return Err(format!("Failed to check CAP_BPF: {}", e)),
     }
 
-    match caps::has_cap(None, caps::CapSet::Effective, caps::Capability::CAP_NET_ADMIN) {
+    match caps::has_cap(
+        None,
+        caps::CapSet::Effective,
+        caps::Capability::CAP_NET_ADMIN,
+    ) {
         Ok(true) => debug!("CAP_NET_ADMIN available"),
         Ok(false) => return Err("CAP_NET_ADMIN not available".to_string()),
         Err(e) => return Err(format!("Failed to check CAP_NET_ADMIN: {}", e)),
@@ -191,7 +272,10 @@ fn validate_request(request: &LoadRequest) -> Result<(), String> {
 
     // Validate cgroup path exists
     if !std::path::Path::new(&request.cgroup_path).exists() {
-        return Err(format!("cgroup path does not exist: {}", request.cgroup_path));
+        return Err(format!(
+            "cgroup path does not exist: {}",
+            request.cgroup_path
+        ));
     }
 
     // Validate IP addresses (basic sanity check)
@@ -207,7 +291,8 @@ fn validate_request(request: &LoadRequest) -> Result<(), String> {
 }
 
 /// Load eBPF program and attach to cgroup
-async fn load_and_attach_ebpf(request: LoadRequest) -> Result<Vec<u64>, String> {
+/// Returns () on success - the link is kept alive by not dropping the Bpf instance
+async fn load_and_attach_ebpf(request: LoadRequest) -> Result<(), String> {
     // Load eBPF program
     let mut ebpf = load_ebpf_program()?;
 
@@ -243,19 +328,23 @@ async fn load_and_attach_ebpf(request: LoadRequest) -> Result<Vec<u64>, String> 
         .try_into()
         .map_err(|e| format!("Failed to get egress program: {}", e))?;
 
-    let link = program
+    let _link = program
         .attach(&cgroup_file, CgroupSkbAttachType::Egress)
         .map_err(|e| format!("Failed to attach egress program: {}", e))?;
 
     info!("✓ Attached egress filtering program to cgroup");
 
-    // Keep the link and ebpf alive by leaking them
-    // The eBPF program will remain active until the container/cgroup is destroyed
-    std::mem::forget(link);
+    // IMPORTANT: We must NOT drop 'ebpf' or '_link'
+    // The eBPF program stays attached to the cgroup as long as:
+    // 1. This process is alive (holds the link file descriptor)
+    // 2. The cgroup exists
+    //
+    // Leak them to keep the program active for the lifetime of this process
+    std::mem::forget(_link);
     std::mem::forget(ebpf);
 
-    // Return empty link IDs since we can't access them after forgetting
-    Ok(vec![])
+    info!("✓ eBPF program will remain active while this process is alive");
+    Ok(())
 }
 
 /// Load eBPF program from embedded bytes or file

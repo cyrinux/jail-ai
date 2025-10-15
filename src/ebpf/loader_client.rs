@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::net::IpAddr;
 use std::process::{Command, Stdio};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// Request to load eBPF program
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoadRequest {
+    pub container_name: String,
     pub cgroup_path: String,
     pub blocked_ips: Vec<IpAddr>,
 }
@@ -32,12 +33,13 @@ pub struct LoadResponse {
 ///
 /// The helper binary requires CAP_BPF and CAP_NET_ADMIN capabilities.
 pub async fn load_ebpf_via_helper(
+    container_name: &str,
     cgroup_path: &str,
     blocked_ips: &[IpAddr],
 ) -> Result<Vec<u64>> {
     info!(
-        "Loading eBPF program via helper for cgroup: {}",
-        cgroup_path
+        "Loading eBPF program via helper for container {} (cgroup: {})",
+        container_name, cgroup_path
     );
 
     // Find the helper binary
@@ -46,19 +48,29 @@ pub async fn load_ebpf_via_helper(
 
     // Prepare request
     let request = LoadRequest {
+        container_name: container_name.to_string(),
         cgroup_path: cgroup_path.to_string(),
         blocked_ips: blocked_ips.to_vec(),
     };
 
-    let request_json = serde_json::to_string(&request).map_err(|e| {
-        JailError::Backend(format!("Failed to serialize LoadRequest: {}", e))
-    })?;
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| JailError::Backend(format!("Failed to serialize LoadRequest: {}", e)))?;
 
     debug!("Spawning loader process");
+    
+    // Check if we're in verbose mode via RUST_LOG
+    let is_verbose = std::env::var("RUST_LOG")
+        .map(|v| v.contains("debug") || v.contains("trace"))
+        .unwrap_or(false);
+    
     let mut child = Command::new(&loader_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(if is_verbose {
+            Stdio::inherit() // Show stderr in verbose mode
+        } else {
+            Stdio::null() // Silent by default
+        })
         .spawn()
         .map_err(|e| {
             JailError::Backend(format!(
@@ -69,50 +81,40 @@ pub async fn load_ebpf_via_helper(
         })?;
 
     // Send request to stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(request_json.as_bytes()).map_err(|e| {
-            JailError::Backend(format!("Failed to write request to loader: {}", e))
+    {
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            JailError::Backend("Failed to get stdin handle for loader".to_string())
         })?;
-        stdin.flush().map_err(|e| {
-            JailError::Backend(format!("Failed to flush request to loader: {}", e))
-        })?;
-    } else {
-        return Err(JailError::Backend(
-            "Failed to get stdin handle for loader".to_string(),
-        ));
+        stdin
+            .write_all(request_json.as_bytes())
+            .map_err(|e| JailError::Backend(format!("Failed to write request to loader: {}", e)))?;
+        stdin
+            .flush()
+            .map_err(|e| JailError::Backend(format!("Failed to flush request to loader: {}", e)))?;
+        // Drop stdin to signal end of input
     }
 
-    // Wait for completion and read response
-    let output = child.wait_with_output().map_err(|e| {
-        JailError::Backend(format!("Failed to wait for loader process: {}", e))
-    })?;
+    // Read response from stdout
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| JailError::Backend("Failed to get stdout handle for loader".to_string()))?;
 
-    if !output.status.success() {
-        let exit_code = output.status.code().unwrap_or(-1);
-        error!("Loader process failed with exit code: {}", exit_code);
-
-        // Try to parse response even on failure
-        if let Ok(response_str) = String::from_utf8(output.stdout.clone()) {
-            if let Ok(response) = serde_json::from_str::<LoadResponse>(&response_str) {
-                return Err(JailError::Backend(format!(
-                    "eBPF loader failed: {}",
-                    response.message
-                )));
-            }
-        }
-
-        return Err(JailError::Backend(format!(
-            "eBPF loader failed with exit code {}",
-            exit_code
-        )));
-    }
+    // Read response with a timeout (loader sends response immediately after loading)
+    let response_str = tokio::task::spawn_blocking(move || {
+        use std::io::BufRead;
+        let mut buffer = String::new();
+        // Read until newline or EOF
+        let mut reader = std::io::BufReader::new(&mut stdout);
+        reader.read_line(&mut buffer)?;
+        Ok::<String, std::io::Error>(buffer)
+    })
+    .await
+    .map_err(|e| JailError::Backend(format!("Failed to join stdout reader task: {}", e)))?
+    .map_err(|e| JailError::Backend(format!("Failed to read loader output: {}", e)))?;
 
     // Parse response
-    let response_str = String::from_utf8(output.stdout).map_err(|e| {
-        JailError::Backend(format!("Failed to parse loader output as UTF-8: {}", e))
-    })?;
-
-    let response: LoadResponse = serde_json::from_str(&response_str).map_err(|e| {
+    let response: LoadResponse = serde_json::from_str(&response_str.trim()).map_err(|e| {
         JailError::Backend(format!(
             "Failed to parse LoadResponse JSON: {}\nOutput: {}",
             e, response_str
@@ -121,8 +123,13 @@ pub async fn load_ebpf_via_helper(
 
     if response.success {
         info!("✓ eBPF program loaded successfully via helper");
+        info!("  Helper process will remain active to keep eBPF program attached");
+        // Don't wait for child - it stays alive to keep eBPF program active
+        // It will automatically exit when the container/cgroup is destroyed
         Ok(response.link_ids)
     } else {
+        // On failure, wait for child to exit
+        let _ = child.wait();
         Err(JailError::Backend(format!(
             "eBPF loader failed: {}",
             response.message
@@ -167,9 +174,12 @@ fn find_loader_binary() -> Result<std::path::PathBuf> {
     }
 
     // Not found
-    Err(JailError::Backend("jail-ai-ebpf-loader not found. Please install it with:\n\
+    Err(JailError::Backend(
+        "jail-ai-ebpf-loader not found. Please install it with:\n\
          cargo install --path jail-ai-ebpf-loader\n\
-         sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)".to_string()))
+         sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)"
+            .to_string(),
+    ))
 }
 
 #[cfg(test)]
