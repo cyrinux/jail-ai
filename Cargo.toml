@@ -1,5 +1,5 @@
 [workspace]
-members = ["jail-ai-ebpf"]
+members = ["jail-ai-ebpf", "jail-ai-ebpf-loader"]
 # members = ["xtask", "jail-ai-ebpf"]
 resolver = "2"
 
@@ -45,3 +45,4 @@ hex = "0.4"
 similar = "2.6"
 indicatif = "0.18.0"
 aya = { workspace = true }
+which = "7.0"

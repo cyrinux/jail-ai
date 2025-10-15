@@ -77,8 +77,15 @@ else
 fi
 
 echo ""
-echo "Build complete! You can now run:"
-echo "  cargo build --release"
-echo "  sudo setcap cap_bpf,cap_net_admin+ep ./target/release/jail-ai "
-echo "  ./target/release/jail-ai create test-jail --block-host"
+echo "✓ eBPF programs built successfully!"
+echo ""
+echo "Next steps:"
+echo "  1. Build main binary:        cargo build --release"
+echo "  2. Build loader helper:      cargo build --release -p jail-ai-ebpf-loader"
+echo "  3. Install loader:           cargo install --path jail-ai-ebpf-loader --force"
+echo "  4. Grant capabilities:       sudo setcap cap_bpf,cap_net_admin+ep \$(which jail-ai-ebpf-loader)"
+echo "  5. Test (no sudo needed!):   jail-ai create test-jail --block-host"
+echo ""
+echo "Or use the Makefile:"
+echo "  make build-all install-loader"
 
