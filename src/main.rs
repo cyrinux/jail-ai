@@ -26,7 +26,43 @@ use git_gpg::create_claude_json_in_container;
 
 /// Validate that a mount source is safe for jail execution
 /// Prevents mounting root filesystem (/) or entire home directory
+/// If the source path doesn't exist, prompts the user to create it
 pub fn validate_mount_source(source: &std::path::Path) -> error::Result<()> {
+    use tracing::debug;
+
+    // Check if the source path exists
+    if !source.exists() {
+        // Prompt user to create the path
+        use std::io::{self, BufRead, Write};
+        println!(
+            "⚠️  Mount source path does not exist: {}",
+            source.display()
+        );
+        print!("Create this path? [y/N] ");
+        io::stdout().flush()?;
+        let stdin = io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line)?;
+
+        if line.trim().eq_ignore_ascii_case("y") {
+            // Create the directory
+            debug!("Creating mount source directory: {}", source.display());
+            std::fs::create_dir_all(source).map_err(|e| {
+                error::JailError::Config(format!(
+                    "Failed to create mount source directory '{}': {}",
+                    source.display(),
+                    e
+                ))
+            })?;
+            println!("✓ Created directory: {}", source.display());
+        } else {
+            return Err(error::JailError::Config(format!(
+                "Mount source path does not exist: {}",
+                source.display()
+            )));
+        }
+    }
+
     let source = source.canonicalize().map_err(error::JailError::Io)?;
 
     // Check if source is the root filesystem
