@@ -54,6 +54,9 @@ clean: ## Remove built container images and eBPF build container
 build: ## Build the jail-ai binary
 	cargo build --release
 
+install: build ## Install the jail-ai binary
+	cargo install --path .
+
 build-loader: ## Build the eBPF loader helper binary
 	@echo "Building jail-ai-ebpf-loader..."
 	cargo build --release -p jail-ai-ebpf-loader
