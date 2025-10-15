@@ -21,11 +21,13 @@
 //! - Automatically exits when the cgroup is destroyed (container stops)
 
 use aya::{
-    include_bytes_aligned,
     maps::HashMap as AyaHashMap,
     programs::{CgroupSkb, CgroupSkbAttachType},
     Bpf,
 };
+
+#[cfg(not(debug_assertions))]
+use aya::include_bytes_aligned;
 use std::fs::File;
 use std::io::{self, Read};
 use std::net::{IpAddr, Ipv6Addr};
@@ -155,7 +157,6 @@ async fn main() {
 
     // Clone data for monitoring loop before moving request
     let cgroup_path_for_monitoring = request.cgroup_path.clone();
-    let lock_file_for_monitoring = lock_file.clone();
 
     // Load and attach eBPF program
     match load_and_attach_ebpf(request).await {
@@ -334,13 +335,13 @@ async fn load_and_attach_ebpf(request: LoadRequest) -> Result<(), String> {
 
     info!("✓ Attached egress filtering program to cgroup");
 
-    // IMPORTANT: We must NOT drop 'ebpf' or '_link'
+    // IMPORTANT: We must NOT drop 'ebpf'
     // The eBPF program stays attached to the cgroup as long as:
-    // 1. This process is alive (holds the link file descriptor)
+    // 1. This process is alive (holds the Bpf instance)
     // 2. The cgroup exists
     //
-    // Leak them to keep the program active for the lifetime of this process
-    std::mem::forget(_link);
+    // Leak the Bpf instance to keep the program active for the lifetime of this process
+    // Note: _link doesn't implement Drop, so it doesn't need to be forgotten
     std::mem::forget(ebpf);
 
     info!("✓ eBPF program will remain active while this process is alive");
