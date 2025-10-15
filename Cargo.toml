@@ -5,7 +5,7 @@ default-members = [".", "jail-ai-ebpf-loader"]
 resolver = "2"
 
 [workspace.dependencies]
-aya = { version = "0.12", features = ["async_tokio"] }
+aya = "0.12"
 aya-ebpf = "0.1"
 
 # eBPF-specific profile overrides
@@ -18,7 +18,7 @@ codegen-units = 1
 
 [package]
 name = "jail-ai"
-version = "0.44.5"
+version = "0.44.6"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"
@@ -34,16 +34,13 @@ categories = ["command-line-utilities", "development-tools", "virtualization"]
 clap = { version = "4.5.48", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.143"
-anyhow = "1.0.99"
 thiserror = "2.0.17"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
-tokio = { version = "1.47", features = ["full"] }
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "process", "fs", "time"] }
 tempfile = "3.20"
 async-trait = "0.1"
 sha2 = "0.10.9"
 hex = "0.4"
-similar = "2.6"
-indicatif = "0.18.0"
-aya = { workspace = true }
 which = "7.0"
+indicatif = "0.18.0"

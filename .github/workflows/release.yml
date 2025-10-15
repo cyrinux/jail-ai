@@ -72,18 +72,27 @@ jobs:
       - name: Build with cross
         run: |
           cross build --release --package jail-ai --target ${{ matrix.target }}
+          cross build --release --package jail-ai-ebpf-loader --target ${{ matrix.target }}
           strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
+          strip target/${{ matrix.target }}/release/jail-ai-ebpf-loader || true
 
-      - name: Package binary
+      - name: Package binaries
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} dist/${{ env.BINARY_NAME }}-${{ matrix.suffix }}
+          cp target/${{ matrix.target }}/release/jail-ai-ebpf-loader dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
 
-      - name: Upload artifact
+      - name: Upload main binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BINARY_NAME }}-${{ matrix.suffix }}
           path: dist/${{ env.BINARY_NAME }}-${{ matrix.suffix }}
+
+      - name: Upload loader binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jail-ai-ebpf-loader-${{ matrix.suffix }}
+          path: dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
 
   release:
     name: Create Release
