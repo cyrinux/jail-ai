@@ -34,7 +34,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ebpf-programs
-          path: jail-ai-ebpf/target/bpfel-unknown-none/release/jail-ai-ebpf
+          path: target/bpfel-unknown-none/release/jail-ai-ebpf
           retention-days: 1
 
   build:
@@ -59,7 +59,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ebpf-programs
-          path: jail-ai-ebpf/target/bpfel-unknown-none/release/
+          path: target/bpfel-unknown-none/release/
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
