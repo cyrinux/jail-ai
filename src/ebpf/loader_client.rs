@@ -164,7 +164,27 @@ fn find_loader_binary() -> Result<std::path::PathBuf> {
         return Ok(path_result);
     }
 
-    // 3. Common installation directories
+    // 3. NixOS-specific directories
+    let mut nixos_paths = vec![
+        "/run/current-system/sw/bin".to_string(),
+        format!("{}/.nix-profile/bin", std::env::var("HOME").unwrap_or_default()),
+    ];
+
+    // Add per-user profile path if we can get the username
+    if let Ok(username) = std::env::var("USER") {
+        nixos_paths.push(format!("/etc/profiles/per-user/{}/bin", username));
+    }
+
+    debug!("Checking NixOS-specific paths: {:?}", nixos_paths);
+    for dir in &nixos_paths {
+        let loader_path = std::path::Path::new(dir).join(loader_name);
+        if loader_path.exists() {
+            debug!("Found loader at: {:?}", loader_path);
+            return Ok(loader_path);
+        }
+    }
+
+    // 4. Common installation directories
     for dir in &["/usr/local/bin", "/usr/bin"] {
         let loader_path = std::path::Path::new(dir).join(loader_name);
         if loader_path.exists() {
