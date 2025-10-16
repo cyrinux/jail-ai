@@ -3,7 +3,7 @@ mod loader_client;
 
 use crate::error::Result;
 use std::net::IpAddr;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 pub use host_ips::get_host_ips;
 use loader_client::load_ebpf_via_helper;
@@ -110,12 +110,8 @@ impl EbpfHostBlocker {
                     return Ok(());
                 }
 
-                warn!("⚠️  Failed to load eBPF via helper: {}", e);
-                warn!("   Host blocking will not be enforced");
-                warn!("   To enable eBPF blocking:");
-                warn!("   1. Build loader: cargo build --release -p jail-ai-ebpf-loader");
-                warn!("   2. Install loader: cargo install --path jail-ai-ebpf-loader --force");
-                warn!("   3. Grant capabilities: sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)");
+                // Return error immediately - don't warn since we're going to crash
+                // The error message will be displayed when the application exits
                 Err(e)
             }
         }

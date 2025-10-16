@@ -597,13 +597,9 @@ impl JailBackend for PodmanBackend {
                     "Applying eBPF host blocking for container '{}'",
                     config.name
                 );
-                match self.apply_ebpf_host_blocking(&config.name).await {
-                    Ok(_) => info!("eBPF host blocking applied successfully"),
-                    Err(e) => {
-                        warn!("Failed to apply eBPF host blocking: {}", e);
-                        warn!("Container will run without host blocking");
-                    }
-                }
+                // Propagate eBPF loading errors - container creation must fail if eBPF fails
+                self.apply_ebpf_host_blocking(&config.name).await?;
+                info!("✓ eBPF host blocking applied successfully");
             }
         }
 
