@@ -166,8 +166,12 @@ fn find_loader_binary() -> Result<std::path::PathBuf> {
 
     // 3. NixOS-specific directories
     let mut nixos_paths = vec![
+        "/run/wrappers/bin".to_string(),
         "/run/current-system/sw/bin".to_string(),
-        format!("{}/.nix-profile/bin", std::env::var("HOME").unwrap_or_default()),
+        format!(
+            "{}/.nix-profile/bin",
+            std::env::var("HOME").unwrap_or_default()
+        ),
     ];
 
     // Add per-user profile path if we can get the username
