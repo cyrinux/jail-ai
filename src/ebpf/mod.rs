@@ -34,15 +34,15 @@ use loader_client::load_ebpf_via_helper;
 /// # }
 /// ```
 pub struct EbpfHostBlocker {
-    /// Link IDs for cleanup (not currently used but kept for API compatibility)
-    _link_ids: Vec<u64>,
+    /// Link IDs for cleanup
+    link_ids: Vec<u64>,
 }
 
 impl EbpfHostBlocker {
     /// Create a new eBPF host blocker instance
     pub fn new() -> Self {
         Self {
-            _link_ids: Vec::new(),
+            link_ids: Vec::new(),
         }
     }
 
@@ -89,13 +89,16 @@ impl EbpfHostBlocker {
             .and_then(|s| s.strip_prefix("libpod-"))
             .and_then(|s| s.strip_suffix(".scope"))
             .unwrap_or("unknown");
-        
-        debug!("Extracted container name: {} from cgroup path: {}", container_name, cgroup_path);
-        
+
+        debug!(
+            "Extracted container name: {} from cgroup path: {}",
+            container_name, cgroup_path
+        );
+
         // Call the helper binary to do the privileged work
         match load_ebpf_via_helper(container_name, cgroup_path, blocked_ips).await {
             Ok(link_ids) => {
-                self._link_ids = link_ids;
+                self.link_ids = link_ids;
                 info!("✓ eBPF host blocking active for cgroup {}", cgroup_path);
                 Ok(())
             }
@@ -106,7 +109,7 @@ impl EbpfHostBlocker {
                     debug!("eBPF loader already running for this container");
                     return Ok(());
                 }
-                
+
                 warn!("⚠️  Failed to load eBPF via helper: {}", e);
                 warn!("   Host blocking will not be enforced");
                 warn!("   To enable eBPF blocking:");
@@ -124,17 +127,17 @@ impl EbpfHostBlocker {
     /// eBPF programs are managed by the kernel and will be automatically
     /// detached when the container/cgroup is destroyed. This method is
     /// kept for API compatibility but is currently a no-op.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub async fn detach(&mut self) -> Result<()> {
         info!("eBPF programs will be automatically detached when container stops");
-        self._link_ids.clear();
+        self.link_ids.clear();
         Ok(())
     }
 
     /// Check if eBPF program is currently loaded
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn is_loaded(&self) -> bool {
-        !self._link_ids.is_empty()
+        !self.link_ids.is_empty()
     }
 }
 

@@ -34,10 +34,7 @@ pub fn validate_mount_source(source: &std::path::Path) -> error::Result<()> {
     if !source.exists() {
         // Prompt user to create the path
         use std::io::{self, BufRead, Write};
-        println!(
-            "⚠️  Mount source path does not exist: {}",
-            source.display()
-        );
+        println!("⚠️  Mount source path does not exist: {}", source.display());
         print!("Create this path? [y/N] ");
         io::stdout().flush()?;
         let stdin = io::stdin();

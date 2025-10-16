@@ -57,12 +57,12 @@ pub async fn load_ebpf_via_helper(
         .map_err(|e| JailError::Backend(format!("Failed to serialize LoadRequest: {}", e)))?;
 
     debug!("Spawning loader process");
-    
+
     // Check if we're in verbose mode via RUST_LOG
     let is_verbose = std::env::var("RUST_LOG")
         .map(|v| v.contains("debug") || v.contains("trace"))
         .unwrap_or(false);
-    
+
     let mut child = Command::new(&loader_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

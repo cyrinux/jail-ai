@@ -10,10 +10,6 @@ pub struct WorktreeInfo {
 
     /// Path to the main repository's .git directory
     pub main_git_dir: PathBuf,
-
-    /// Path to the worktree's git directory (inside main .git/worktrees/)
-    #[allow(dead_code)]
-    pub worktree_git_dir: PathBuf,
 }
 
 /// Detect if the current directory is a git worktree
@@ -98,12 +94,10 @@ pub fn detect_worktree(dir: &Path) -> Result<Option<WorktreeInfo>> {
     info!("Detected git worktree:");
     info!("  Worktree path: {}", dir.display());
     info!("  Main .git dir: {}", main_git_dir.display());
-    info!("  Worktree .git dir: {}", worktree_git_dir.display());
 
     Ok(Some(WorktreeInfo {
         worktree_path: dir.to_path_buf(),
         main_git_dir,
-        worktree_git_dir,
     }))
 }
 

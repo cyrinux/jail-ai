@@ -147,7 +147,10 @@ fn main() {
                     std::process::exit(1);
                 } else {
                     // Stale lock file, remove it
-                    debug!("Removing stale lock file for container {}", request.container_name);
+                    debug!(
+                        "Removing stale lock file for container {}",
+                        request.container_name
+                    );
                     let _ = std::fs::remove_file(&lock_file);
                 }
             }
@@ -200,7 +203,7 @@ fn main() {
 
             info!("eBPF loader staying alive to keep programs active");
             info!("Will exit automatically when cgroup is destroyed");
-            
+
             // Enter monitoring loop - check if cgroup still exists
             // The eBPF program will remain attached as long as this process lives
             // and holds the link file descriptor
@@ -210,7 +213,10 @@ fn main() {
 
                 // Check if cgroup still exists
                 if !std::path::Path::new(&cgroup_path_for_monitoring).exists() {
-                    info!("Cgroup {} no longer exists, exiting", cgroup_path_for_monitoring);
+                    info!(
+                        "Cgroup {} no longer exists, exiting",
+                        cgroup_path_for_monitoring
+                    );
                     // Clean up lock file
                     let _ = std::fs::remove_file(&lock_file_clone);
                     std::process::exit(0);
@@ -366,7 +372,7 @@ fn load_and_attach_ebpf(request: LoadRequest) -> Result<(), String> {
     // 2. The cgroup exists
     //
     // Leak the Bpf instance to keep the program active for the lifetime of this process
-    // Note: _link doesn't implement Drop, so it doesn't need to be forgotten
+    // Note: _link doesn't implement Drop, so letting it go out of scope is fine
     std::mem::forget(ebpf);
 
     info!("✓ eBPF program will remain active while this process is alive");

@@ -105,7 +105,7 @@ impl PodmanBackend {
 
         // Get host IPs to block
         let host_ips = crate::ebpf::get_host_ips()?;
-        
+
         // Create eBPF blocker and attach to cgroup
         let mut blocker = crate::ebpf::EbpfHostBlocker::new();
         blocker.attach_to_cgroup(&cgroup_path, &host_ips).await?;
@@ -126,7 +126,7 @@ impl PodmanBackend {
     async fn is_ebpf_loader_running(&self, container_name: &str) -> bool {
         // ONLY trust our in-memory map - if we don't have a blocker stored,
         // then we don't know if eBPF is active for this container
-        
+
         let has_blocker_in_memory = {
             let blockers = ebpf_blockers();
             if let Ok(blockers_map) = blockers.lock() {
@@ -135,7 +135,7 @@ impl PodmanBackend {
                 false
             }
         }; // Lock is dropped here before any await
-        
+
         if !has_blocker_in_memory {
             debug!(
                 "No eBPF blocker in memory for container {} - needs reattach",
@@ -143,13 +143,13 @@ impl PodmanBackend {
             );
             return false;
         }
-        
+
         // We have a blocker in memory - verify the loader process is actually running
         debug!(
             "Found eBPF blocker in memory for container {}, checking if loader is running",
             container_name
         );
-        
+
         let mut ps_cmd = Command::new("ps");
         ps_cmd.args(["aux"]);
 
