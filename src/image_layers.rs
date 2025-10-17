@@ -348,6 +348,133 @@ async fn get_image_containerfile_hash(image_name: &str) -> Result<Option<String>
     }
 }
 
+// ========== Performance Optimization: Batch Image Checks ==========
+
+/// Check multiple images for rebuild in a single podman inspect call
+/// 
+/// Performance optimization: Groups multiple image inspections into a single
+/// podman command, reducing syscall overhead significantly.
+/// 
+/// Returns a Vec of bools indicating which images need rebuild (same order as input)
+async fn batch_check_images_need_rebuild(
+    images: &[(String, String)], // (image_name, layer_name)
+) -> Result<Vec<bool>> {
+    if images.is_empty() {
+        return Ok(vec![]);
+    }
+
+    debug!(
+        "🔍 Batch checking {} images for rebuild",
+        images.len()
+    );
+
+    // First check which images exist (using our cached function)
+    let mut needs_rebuild = Vec::new();
+    let mut existing_images = Vec::new();
+    let mut existing_indices = Vec::new();
+
+    for (idx, (image_name, layer_name)) in images.iter().enumerate() {
+        if !image_exists(image_name).await? {
+            debug!("Image {} doesn't exist, needs rebuild", image_name);
+            needs_rebuild.push(true);
+        } else {
+            needs_rebuild.push(false); // Placeholder, will update if needed
+            existing_images.push((image_name.clone(), layer_name.clone()));
+            existing_indices.push(idx);
+        }
+    }
+
+    // If no existing images, all need rebuild
+    if existing_images.is_empty() {
+        return Ok(needs_rebuild);
+    }
+
+    // Build single podman inspect command for all existing images
+    let image_names: Vec<&str> = existing_images
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+
+    let mut cmd = Command::new("podman");
+    cmd.arg("image")
+        .arg("inspect")
+        .arg("--format")
+        .arg("{{.Id}}\t{{index .Labels \"ai.jail.containerfile.hash\"}}");
+    
+    for name in &image_names {
+        cmd.arg(name);
+    }
+
+    debug!("Running batch inspect: {:?}", cmd);
+
+    let output = cmd.output().await;
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<&str> = stdout.lines().collect();
+
+            // Parse results and check hashes
+            for (i, line) in lines.iter().enumerate() {
+                if i >= existing_images.len() {
+                    break;
+                }
+
+                let (_, layer_name) = &existing_images[i];
+                let idx = existing_indices[i];
+
+                let parts: Vec<&str> = line.split('\t').collect();
+                let image_hash = if parts.len() > 1 {
+                    let hash = parts[1].trim();
+                    if hash.is_empty() || hash == "<no value>" {
+                        None
+                    } else {
+                        Some(hash.to_string())
+                    }
+                } else {
+                    None
+                };
+
+                // Get current Containerfile hash
+                let current_hash = get_containerfile_content(layer_name).map(hash_containerfile);
+
+                // Determine if rebuild is needed
+                let rebuild = match (image_hash, current_hash) {
+                    (Some(img_hash), Some(cur_hash)) => {
+                        let needs = img_hash != cur_hash;
+                        if needs {
+                            debug!(
+                                "Layer {} hash mismatch: image={} current={}",
+                                layer_name, img_hash, cur_hash
+                            );
+                        }
+                        needs
+                    }
+                    (None, Some(_)) => {
+                        debug!("Layer {} missing hash label, needs rebuild", layer_name);
+                        true
+                    }
+                    (_, None) => {
+                        debug!("Layer {} has no Containerfile, skip rebuild", layer_name);
+                        false
+                    }
+                };
+
+                needs_rebuild[idx] = rebuild;
+            }
+        }
+        _ => {
+            // If batch inspect fails, mark all existing images as needing rebuild
+            debug!("Batch inspect failed, marking all as needing rebuild");
+            for &idx in &existing_indices {
+                needs_rebuild[idx] = true;
+            }
+        }
+    }
+
+    Ok(needs_rebuild)
+}
+
 /// Check if an image needs to be rebuilt based on Containerfile changes
 async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool> {
     // If image doesn't exist, it needs to be built
@@ -383,20 +510,23 @@ async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool>
 
 /// Check if any layers need rebuilding for a given workspace and agent
 /// Returns a list of outdated layer names
+/// 
+/// Performance optimization: Uses batch checking to inspect all images in a single call
 pub async fn check_layers_need_rebuild(
     workspace_path: &Path,
     agent_name: Option<&str>,
     no_nix: bool,
 ) -> Result<Vec<String>> {
     let project_type = detect_project_type_with_options(workspace_path, no_nix);
-    let mut outdated_layers = Vec::new();
+    let has_custom = has_custom_containerfile(workspace_path);
 
-    // Check base layer
-    if image_needs_rebuild(BASE_IMAGE_NAME, "base").await? {
-        outdated_layers.push("base".to_string());
-    }
+    // Build list of all images to check
+    let mut images_to_check: Vec<(String, String)> = Vec::new();
 
-    // Check language layers based on project type
+    // Add base layer
+    images_to_check.push((BASE_IMAGE_NAME.to_string(), "base".to_string()));
+
+    // Add language layers based on project type
     match &project_type {
         ProjectType::Generic => {
             // Only base layer needed
@@ -405,24 +535,17 @@ pub async fn check_layers_need_rebuild(
             for lang_type in types {
                 let layer_name = lang_type.language_layer();
                 let image_name = get_language_image_name(lang_type);
-                if image_needs_rebuild(image_name, layer_name).await? {
-                    outdated_layers.push(layer_name.to_string());
-                }
+                images_to_check.push((image_name.to_string(), layer_name.to_string()));
             }
         }
         _ => {
             let layer_name = project_type.language_layer();
             let image_name = get_language_image_name(&project_type);
-            if image_needs_rebuild(image_name, layer_name).await? {
-                outdated_layers.push(layer_name.to_string());
-            }
+            images_to_check.push((image_name.to_string(), layer_name.to_string()));
         }
     }
 
-    // Check custom layer if present
-    let has_custom = has_custom_containerfile(workspace_path);
-
-    // Check agent layer if specified
+    // Add agent layer if specified
     if let Some(agent_str) = agent_name {
         // Try to parse agent - if recognized, use proper layer name
         let agent_layer = if let Some(agent) = crate::agents::Agent::from_str(agent_str) {
@@ -438,11 +561,30 @@ pub async fn check_layers_need_rebuild(
             // For shared mode, we use layer-based tagging
             let layer_tag = generate_layer_tag(&project_type, has_custom, Some(agent_str));
             let agent_image = get_agent_project_image_name(agent_str, &layer_tag);
-
-            if image_needs_rebuild(&agent_image, &agent_layer).await? {
-                outdated_layers.push(agent_layer);
-            }
+            images_to_check.push((agent_image, agent_layer));
         }
+    }
+
+    // 🚀 Batch check all images at once
+    let needs_rebuild = batch_check_images_need_rebuild(&images_to_check).await?;
+
+    // Collect outdated layers
+    let outdated_layers: Vec<String> = images_to_check
+        .iter()
+        .zip(needs_rebuild.iter())
+        .filter_map(|((_, layer_name), &rebuild)| {
+            if rebuild {
+                Some(layer_name.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if !outdated_layers.is_empty() {
+        debug!("📦 Outdated layers: {:?}", outdated_layers);
+    } else {
+        debug!("✅ All layers are up to date");
     }
 
     Ok(outdated_layers)
