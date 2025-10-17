@@ -140,14 +140,12 @@ pub async fn load_ebpf_via_helper(
 /// Find the jail-ai-ebpf-loader binary
 ///
 /// Search order:
-/// 1. Same directory as jail-ai binary
-/// 2. $PATH
-/// 3. /usr/local/bin
-/// 4. /usr/bin
+/// 1. Same directory as jail-ai binary (for development)
+/// 2. $PATH (covers all system paths including NixOS)
 fn find_loader_binary() -> Result<std::path::PathBuf> {
     let loader_name = "jail-ai-ebpf-loader";
 
-    // 1. Same directory as current executable
+    // 1. Same directory as current executable (useful for development)
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let loader_path = exe_dir.join(loader_name);
@@ -158,43 +156,10 @@ fn find_loader_binary() -> Result<std::path::PathBuf> {
         }
     }
 
-    // 2. Check PATH
+    // 2. Check PATH (this should cover everything including NixOS paths)
     if let Ok(path_result) = which::which(loader_name) {
         debug!("Found loader in PATH: {:?}", path_result);
         return Ok(path_result);
-    }
-
-    // 3. NixOS-specific directories
-    let mut nixos_paths = vec![
-        "/run/wrappers/bin".to_string(),
-        "/run/current-system/sw/bin".to_string(),
-        format!(
-            "{}/.nix-profile/bin",
-            std::env::var("HOME").unwrap_or_default()
-        ),
-    ];
-
-    // Add per-user profile path if we can get the username
-    if let Ok(username) = std::env::var("USER") {
-        nixos_paths.push(format!("/etc/profiles/per-user/{}/bin", username));
-    }
-
-    debug!("Checking NixOS-specific paths: {:?}", nixos_paths);
-    for dir in &nixos_paths {
-        let loader_path = std::path::Path::new(dir).join(loader_name);
-        if loader_path.exists() {
-            debug!("Found loader at: {:?}", loader_path);
-            return Ok(loader_path);
-        }
-    }
-
-    // 4. Common installation directories
-    for dir in &["/usr/local/bin", "/usr/bin"] {
-        let loader_path = std::path::Path::new(dir).join(loader_name);
-        if loader_path.exists() {
-            debug!("Found loader at: {:?}", loader_path);
-            return Ok(loader_path);
-        }
     }
 
     // Not found
