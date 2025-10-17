@@ -690,7 +690,9 @@ async fn build_custom_layer(
 }
 
 /// Build a shared layer image (with :latest tag)
-async fn build_shared_layer(
+/// 
+/// This function is public to allow parallel building from image_parallel module
+pub async fn build_shared_layer(
     layer_name: &str,
     base_image: Option<&str>,
     verbose: bool,
@@ -897,21 +899,52 @@ pub async fn build_project_image(
     let language_image = match project_type {
         ProjectType::Generic => base_image.clone(),
         ProjectType::Multi(ref types) => {
-            let mut current_image = base_image.clone();
-            for lang_type in types {
-                let layer_name = lang_type.language_layer();
-                let lang_image_name = get_language_image_name(lang_type);
-                let should_rebuild_lang = upgrade
-                    || force_layers.contains(&layer_name.to_string())
-                    || !image_exists(lang_image_name).await?;
+            // 🚀 Feature: Parallel building for multi-language projects
+            // Enable with: JAIL_AI_PARALLEL_BUILD=1
+            let parallel_enabled = std::env::var("JAIL_AI_PARALLEL_BUILD")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
 
-                current_image = if should_rebuild_lang {
-                    build_shared_layer(layer_name, Some(&current_image), verbose).await?
-                } else {
-                    lang_image_name.to_string()
-                };
+            if parallel_enabled && types.len() > 1 {
+                info!(
+                    "🚀 Parallel build enabled for {} language layers",
+                    types.len()
+                );
+
+                // Use parallel building
+                let results = crate::image_parallel::build_language_layers_parallel(
+                    &base_image,
+                    types,
+                    force_layers,
+                    upgrade,
+                    verbose,
+                )
+                .await?;
+
+                // Return the last built image (any of them works since they all depend on base)
+                results.values().last().cloned().unwrap_or(base_image.clone())
+            } else {
+                // Sequential building (default, safer)
+                if parallel_enabled {
+                    debug!("Parallel build skipped: only {} layer(s)", types.len());
+                }
+
+                let mut current_image = base_image.clone();
+                for lang_type in types {
+                    let layer_name = lang_type.language_layer();
+                    let lang_image_name = get_language_image_name(lang_type);
+                    let should_rebuild_lang = upgrade
+                        || force_layers.contains(&layer_name.to_string())
+                        || !image_exists(lang_image_name).await?;
+
+                    current_image = if should_rebuild_lang {
+                        build_shared_layer(layer_name, Some(&current_image), verbose).await?
+                    } else {
+                        lang_image_name.to_string()
+                    };
+                }
+                current_image
             }
-            current_image
         }
         _ => {
             let layer_name = project_type.language_layer();

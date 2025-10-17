@@ -8,6 +8,7 @@ mod error;
 mod git_gpg;
 mod image;
 mod image_layers;
+mod image_parallel;
 mod jail;
 mod jail_setup;
 mod project_detection;
