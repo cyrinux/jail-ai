@@ -145,18 +145,7 @@ pub async fn load_ebpf_via_helper(
 fn find_loader_binary() -> Result<std::path::PathBuf> {
     let loader_name = "jail-ai-ebpf-loader";
 
-    // 1. Same directory as current executable (useful for development)
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let loader_path = exe_dir.join(loader_name);
-            if loader_path.exists() {
-                debug!("Found loader in exe directory: {:?}", loader_path);
-                return Ok(loader_path);
-            }
-        }
-    }
-
-    // 2. Check PATH (this should cover everything including NixOS paths)
+    // 1. Check PATH (this should cover everything including NixOS paths)
     if let Ok(path_result) = which::which(loader_name) {
         debug!("Found loader in PATH: {:?}", path_result);
         return Ok(path_result);
