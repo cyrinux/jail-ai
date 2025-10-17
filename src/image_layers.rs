@@ -4,8 +4,12 @@ use crate::project_detection::{
     CUSTOM_CONTAINERFILE_NAME,
 };
 use indicatif::{ProgressBar, ProgressStyle};
+use lru::LruCache;
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::process::Command;
 use tracing::{debug, info};
 
@@ -73,19 +77,53 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
     }
 }
 
-/// Generate a project identifier hash from workspace path
+// ========== Performance Optimization: Project Hash Memoization ==========
+
+/// Global cache for project hashes
+/// This prevents repeated canonicalize + SHA256 calculations for the same workspace
+static PROJECT_HASH_CACHE: OnceLock<Arc<Mutex<HashMap<PathBuf, String>>>> = OnceLock::new();
+
+fn project_hash_cache() -> &'static Arc<Mutex<HashMap<PathBuf, String>>> {
+    PROJECT_HASH_CACHE.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+}
+
+/// Generate a project identifier hash from workspace path (with memoization)
+/// 
+/// Performance optimization: Caches hash calculations to avoid repeated
+/// canonicalize() and SHA256 operations for the same workspace.
 fn generate_project_hash(workspace_path: &Path) -> String {
     let abs_path = workspace_path
         .canonicalize()
         .unwrap_or_else(|_| workspace_path.to_path_buf());
 
+    // Check cache first
+    {
+        let cache = project_hash_cache();
+        if let Ok(cache_guard) = cache.lock() {
+            if let Some(hash) = cache_guard.get(&abs_path) {
+                debug!("✅ Cache hit for project hash: {}", abs_path.display());
+                return hash.clone();
+            }
+        }
+    }
+
+    // Cache miss: calculate hash
+    debug!("🔍 Cache miss, calculating project hash: {}", abs_path.display());
     let mut hasher = Sha256::new();
     hasher.update(abs_path.to_string_lossy().as_bytes());
     let hash = hasher.finalize();
     let hash_hex = hex::encode(hash);
+    let short_hash = hash_hex[..8].to_string();
 
-    // Use first 8 characters for readability
-    hash_hex[..8].to_string()
+    // Store in cache
+    {
+        let cache = project_hash_cache();
+        if let Ok(mut cache_guard) = cache.lock() {
+            cache_guard.insert(abs_path.clone(), short_hash.clone());
+        }
+    }
+
+    short_hash
 }
 
 /// Generate a layer-based tag from project type, custom layer, and agent
@@ -188,15 +226,65 @@ fn hash_containerfile(content: &str) -> String {
     hex::encode(hash)[..16].to_string() // Use first 16 chars
 }
 
-/// Check if an image exists locally
+// ========== Performance Optimization: Image Existence Cache ==========
+
+/// Global LRU cache for image existence checks
+/// This prevents repeated `podman image exists` calls for the same image
+static IMAGE_EXISTS_CACHE: OnceLock<Arc<Mutex<LruCache<String, bool>>>> = OnceLock::new();
+
+fn image_cache() -> &'static Arc<Mutex<LruCache<String, bool>>> {
+    IMAGE_EXISTS_CACHE.get_or_init(|| {
+        // Cache up to 1000 images (more than enough for typical usage)
+        Arc::new(Mutex::new(
+            LruCache::new(NonZeroUsize::new(1000).unwrap()),
+        ))
+    })
+}
+
+/// Invalidate cache entry for an image (call after building/removing an image)
+fn invalidate_image_cache(image_name: &str) {
+    let cache = image_cache();
+    if let Ok(mut cache_guard) = cache.lock() {
+        cache_guard.pop(image_name);
+        debug!("🗑️  Invalidated cache for image: {}", image_name);
+    }
+}
+
+/// Check if an image exists locally (with LRU caching)
+/// 
+/// Performance optimization: Caches results to avoid repeated `podman image exists` calls.
+/// Cache is automatically invalidated when images are built or removed.
 pub async fn image_exists(image_name: &str) -> Result<bool> {
+    // Check cache first
+    {
+        let cache = image_cache();
+        if let Ok(mut cache_guard) = cache.lock() {
+            if let Some(&exists) = cache_guard.get(image_name) {
+                debug!("✅ Cache hit for image existence: {}", image_name);
+                return Ok(exists);
+            }
+        }
+    }
+
+    // Cache miss: query podman
+    debug!("🔍 Cache miss, checking image existence: {}", image_name);
     let mut cmd = Command::new("podman");
     cmd.arg("image").arg("exists").arg(image_name);
 
-    match cmd.output().await {
-        Ok(output) => Ok(output.status.success()),
-        Err(_) => Ok(false),
+    let exists = match cmd.output().await {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    };
+
+    // Update cache
+    {
+        let cache = image_cache();
+        if let Ok(mut cache_guard) = cache.lock() {
+            cache_guard.put(image_name.to_string(), exists);
+        }
     }
+
+    Ok(exists)
 }
 
 /// Get the expected image name for a workspace and agent
@@ -452,6 +540,9 @@ async fn build_custom_layer(
         )));
     }
 
+    // Invalidate cache after successful build
+    invalidate_image_cache(image_tag);
+
     info!("Successfully built custom layer: {}", image_tag);
     Ok(image_tag.to_string())
 }
@@ -579,6 +670,9 @@ async fn build_image_from_containerfile(
             layer_name, status
         )));
     }
+
+    // Invalidate cache after successful build
+    invalidate_image_cache(image_tag);
 
     info!("Successfully built: {}", image_tag);
     Ok(image_tag.to_string())
