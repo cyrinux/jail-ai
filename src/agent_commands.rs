@@ -293,6 +293,24 @@ pub async fn run_ai_agent_command(
                 // Note: We don't set params.upgrade = true here because we only need to
                 // recreate the container, not rebuild the image layers
             }
+
+            // Check for block_host mismatch
+            let desired_block_host = !params.no_block_host;
+            let current_block_host = existing_config.block_host;
+
+            if desired_block_host != current_block_host {
+                if desired_block_host {
+                    info!(
+                        "eBPF blocking mode mismatch detected: container has eBPF blocking disabled but current settings require it enabled"
+                    );
+                } else {
+                    info!(
+                        "eBPF blocking mode mismatch detected: container has eBPF blocking enabled but --no-block-host flag requires it disabled"
+                    );
+                }
+                info!("Container will be recreated with the correct eBPF blocking configuration");
+                should_recreate = true;
+            }
         }
     }
 

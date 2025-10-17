@@ -963,6 +963,12 @@ impl JailBackend for PodmanBackend {
                     .map(|period| ((quota as f64 / period as f64) * 100.0) as u32)
             });
 
+        // Extract block_host from label
+        let block_host = container["Config"]["Labels"]["jail-ai.block-host"]
+            .as_str()
+            .map(|s| s == "true")
+            .unwrap_or(false);
+
         Ok(JailConfig {
             name: name.to_string(),
             backend: crate::config::BackendType::Podman,
@@ -982,7 +988,7 @@ impl JailBackend for PodmanBackend {
             verbose: false,
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
             no_nix: false,
-            block_host: false, // Not persisted in container metadata
+            block_host,
         })
     }
 }
