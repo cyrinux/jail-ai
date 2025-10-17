@@ -6,7 +6,6 @@
 ///
 /// For projects with multiple language stacks (e.g., Rust + Node.js + Python),
 /// layers can be built concurrently instead of sequentially.
-
 use crate::error::Result;
 use crate::image_layers::{build_shared_layer, image_exists};
 use crate::project_detection::{detect_project_type_with_options, ProjectType};
@@ -69,7 +68,10 @@ pub async fn build_language_layers_parallel(
     while let Some(res) = join_set.join_next().await {
         match res {
             Ok(Ok((layer_name, image_name))) => {
-                debug!("✓ Parallel build completed: {} -> {}", layer_name, image_name);
+                debug!(
+                    "✓ Parallel build completed: {} -> {}",
+                    layer_name, image_name
+                );
                 results.insert(layer_name, image_name);
             }
             Ok(Err(e)) => {
@@ -89,10 +91,7 @@ pub async fn build_language_layers_parallel(
         )));
     }
 
-    info!(
-        "✓ Successfully built {} layers in parallel",
-        results.len()
-    );
+    info!("✓ Successfully built {} layers in parallel", results.len());
 
     Ok(results)
 }
@@ -112,9 +111,7 @@ pub async fn build_language_layers_parallel(
 /// # Returns
 /// A JoinHandle that can be awaited if you want to wait for prefetching to complete,
 /// or just dropped to let it run in the background.
-pub fn prefetch_common_layers(
-    workspace_path: &Path,
-) -> tokio::task::JoinHandle<()> {
+pub fn prefetch_common_layers(workspace_path: &Path) -> tokio::task::JoinHandle<()> {
     let workspace_path = workspace_path.to_path_buf();
 
     tokio::spawn(async move {

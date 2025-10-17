@@ -18,7 +18,7 @@ codegen-units = 1
 
 [package]
 name = "jail-ai"
-version = "0.45.8"
+version = "0.46.0"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"

@@ -124,6 +124,11 @@ fn main() {
     );
     debug!("Blocking {} IPs", request.blocked_ips.len());
 
+    // Set process name to include container name for easy identification
+    if let Err(e) = set_process_name(&request.container_name) {
+        warn!("Failed to set process name: {}", e);
+    }
+
     // Check if a loader is already running for this container
     let lock_file = format!("/tmp/jail-ai-ebpf-{}.lock", request.container_name);
     if std::path::Path::new(&lock_file).exists() {
@@ -457,6 +462,104 @@ fn ipv6_to_u32_array(ipv6: &Ipv6Addr) -> [u32; 4] {
         u32::from_be_bytes([octets[8], octets[9], octets[10], octets[11]]),
         u32::from_be_bytes([octets[12], octets[13], octets[14], octets[15]]),
     ]
+}
+
+/// Set process name to include container name
+/// This modifies both /proc/[pid]/comm (via prctl) and the process title (argv[0])
+fn set_process_name(container_name: &str) -> Result<(), String> {
+    // Format: "jail:name"
+    let process_name = format!("jail-ai:{}", container_name);
+
+    // 1. Set process name using prctl(PR_SET_NAME) - affects /proc/[pid]/comm
+    // Truncate to 15 characters (leave room for null terminator)
+    let truncated_name = if process_name.len() > 15 {
+        &process_name[..15]
+    } else {
+        &process_name
+    };
+
+    let c_name = std::ffi::CString::new(truncated_name)
+        .map_err(|e| format!("Invalid process name: {}", e))?;
+
+    const PR_SET_NAME: libc::c_int = 15;
+    let result = unsafe {
+        libc::prctl(
+            PR_SET_NAME,
+            c_name.as_ptr() as *const libc::c_void as libc::c_ulong,
+            0,
+            0,
+            0,
+        )
+    };
+
+    if result != 0 {
+        return Err(format!(
+            "prctl(PR_SET_NAME) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    debug!("Set comm name to: {}", truncated_name);
+
+    // 2. Modify the process title (what ps shows) using libc functions
+    set_process_title(&process_name)?;
+
+    Ok(())
+}
+
+/// Modify the process title shown by ps
+/// This writes to the original argv[0] memory location
+fn set_process_title(new_name: &str) -> Result<(), String> {
+    unsafe {
+        // Use libc's program_invocation_name to get argv[0]
+        extern "C" {
+            #[cfg(target_os = "linux")]
+            static mut program_invocation_name: *mut libc::c_char;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Get the pointer to argv[0]
+            let argv0_ptr = program_invocation_name;
+
+            if argv0_ptr.is_null() {
+                return Err("program_invocation_name is null".to_string());
+            }
+
+            // Get the current length of argv[0]
+            let current_len = libc::strlen(argv0_ptr);
+
+            // Prepare the new name as C string
+            let new_name_bytes = new_name.as_bytes();
+            let write_len = new_name_bytes.len().min(current_len);
+
+            // Copy the new name to argv[0] location
+            std::ptr::copy_nonoverlapping(
+                new_name_bytes.as_ptr() as *const libc::c_char,
+                argv0_ptr,
+                write_len,
+            );
+
+            // Null-terminate
+            if write_len < current_len {
+                *argv0_ptr.add(write_len) = 0;
+            }
+
+            // Fill remaining space with zeros to clear old name
+            if write_len < current_len {
+                std::ptr::write_bytes(argv0_ptr.add(write_len + 1), 0, current_len - write_len - 1);
+            }
+
+            debug!("Set process title to: {}", new_name);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            warn!("Process title modification not supported on this platform");
+        }
+    }
+
+    Ok(())
 }
 
 /// Drop all capabilities after loading eBPF

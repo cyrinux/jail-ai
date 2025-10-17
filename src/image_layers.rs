@@ -88,7 +88,7 @@ fn project_hash_cache() -> &'static Arc<Mutex<HashMap<PathBuf, String>>> {
 }
 
 /// Generate a project identifier hash from workspace path (with memoization)
-/// 
+///
 /// Performance optimization: Caches hash calculations to avoid repeated
 /// canonicalize() and SHA256 operations for the same workspace.
 fn generate_project_hash(workspace_path: &Path) -> String {
@@ -108,7 +108,10 @@ fn generate_project_hash(workspace_path: &Path) -> String {
     }
 
     // Cache miss: calculate hash
-    debug!("🔍 Cache miss, calculating project hash: {}", abs_path.display());
+    debug!(
+        "🔍 Cache miss, calculating project hash: {}",
+        abs_path.display()
+    );
     let mut hasher = Sha256::new();
     hasher.update(abs_path.to_string_lossy().as_bytes());
     let hash = hasher.finalize();
@@ -235,9 +238,7 @@ static IMAGE_EXISTS_CACHE: OnceLock<Arc<Mutex<LruCache<String, bool>>>> = OnceLo
 fn image_cache() -> &'static Arc<Mutex<LruCache<String, bool>>> {
     IMAGE_EXISTS_CACHE.get_or_init(|| {
         // Cache up to 1000 images (more than enough for typical usage)
-        Arc::new(Mutex::new(
-            LruCache::new(NonZeroUsize::new(1000).unwrap()),
-        ))
+        Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())))
     })
 }
 
@@ -251,7 +252,7 @@ fn invalidate_image_cache(image_name: &str) {
 }
 
 /// Check if an image exists locally (with LRU caching)
-/// 
+///
 /// Performance optimization: Caches results to avoid repeated `podman image exists` calls.
 /// Cache is automatically invalidated when images are built or removed.
 pub async fn image_exists(image_name: &str) -> Result<bool> {
@@ -351,10 +352,10 @@ async fn get_image_containerfile_hash(image_name: &str) -> Result<Option<String>
 // ========== Performance Optimization: Batch Image Checks ==========
 
 /// Check multiple images for rebuild in a single podman inspect call
-/// 
+///
 /// Performance optimization: Groups multiple image inspections into a single
 /// podman command, reducing syscall overhead significantly.
-/// 
+///
 /// Returns a Vec of bools indicating which images need rebuild (same order as input)
 async fn batch_check_images_need_rebuild(
     images: &[(String, String)], // (image_name, layer_name)
@@ -363,10 +364,7 @@ async fn batch_check_images_need_rebuild(
         return Ok(vec![]);
     }
 
-    debug!(
-        "🔍 Batch checking {} images for rebuild",
-        images.len()
-    );
+    debug!("🔍 Batch checking {} images for rebuild", images.len());
 
     // First check which images exist (using our cached function)
     let mut needs_rebuild = Vec::new();
@@ -400,7 +398,7 @@ async fn batch_check_images_need_rebuild(
         .arg("inspect")
         .arg("--format")
         .arg("{{.Id}}\t{{index .Labels \"ai.jail.containerfile.hash\"}}");
-    
+
     for name in &image_names {
         cmd.arg(name);
     }
@@ -510,7 +508,7 @@ async fn image_needs_rebuild(image_name: &str, layer_name: &str) -> Result<bool>
 
 /// Check if any layers need rebuilding for a given workspace and agent
 /// Returns a list of outdated layer names
-/// 
+///
 /// Performance optimization: Uses batch checking to inspect all images in a single call
 pub async fn check_layers_need_rebuild(
     workspace_path: &Path,
@@ -690,7 +688,7 @@ async fn build_custom_layer(
 }
 
 /// Build a shared layer image (with :latest tag)
-/// 
+///
 /// This function is public to allow parallel building from image_parallel module
 pub async fn build_shared_layer(
     layer_name: &str,
@@ -922,7 +920,11 @@ pub async fn build_project_image(
                 .await?;
 
                 // Return the last built image (any of them works since they all depend on base)
-                results.values().last().cloned().unwrap_or(base_image.clone())
+                results
+                    .values()
+                    .last()
+                    .cloned()
+                    .unwrap_or(base_image.clone())
             } else {
                 // Sequential building (default, safer)
                 if parallel_enabled {
