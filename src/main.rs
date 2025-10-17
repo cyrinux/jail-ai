@@ -115,10 +115,16 @@ async fn main() {
 }
 
 async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
+    // 🔮 Phase 4: Background pre-fetching of common layers (opt-in via JAIL_AI_PREFETCH=1)
+    // This spawns a background task that builds commonly needed layers while the user
+    // continues with their work, reducing perceived latency for subsequent operations
+    let cwd = std::env::current_dir()?;
+    let _prefetch_handle = image_parallel::prefetch_common_layers(&cwd);
+    // Note: We don't await this handle - it runs in the background
+
     match command {
         None => {
             // Default behavior: auto-init and exec based on workspace (git root if available)
-            let cwd = std::env::current_dir()?;
             let workspace_dir = agent_commands::get_git_root().unwrap_or_else(|| cwd.clone());
 
             // Find all jails for this directory

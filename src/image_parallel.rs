@@ -1,13 +1,17 @@
-/// Parallel image building for multi-language projects
+/// Parallel image building and pre-fetching for multi-language projects
 ///
-/// This module provides optimized parallel building of independent language layers.
+/// This module provides:
+/// 1. Optimized parallel building of independent language layers
+/// 2. Background pre-fetching of commonly needed layers
+///
 /// For projects with multiple language stacks (e.g., Rust + Node.js + Python),
 /// layers can be built concurrently instead of sequentially.
 
 use crate::error::Result;
-use crate::image_layers::build_shared_layer;
-use crate::project_detection::ProjectType;
+use crate::image_layers::{build_shared_layer, image_exists};
+use crate::project_detection::{detect_project_type_with_options, ProjectType};
 use std::collections::HashMap;
+use std::path::Path;
 use tokio::task::JoinSet;
 use tracing::{debug, info};
 
@@ -93,6 +97,128 @@ pub async fn build_language_layers_parallel(
     Ok(results)
 }
 
+/// Pre-fetch commonly needed layers in background
+///
+/// This function spawns a background task to build/ensure layers that are likely
+/// to be needed based on the project type. This can significantly reduce perceived
+/// latency for subsequent operations.
+///
+/// # Feature Flag
+/// Enable with: JAIL_AI_PREFETCH=1
+///
+/// # Arguments
+/// * `workspace_path` - Path to the workspace to analyze
+///
+/// # Returns
+/// A JoinHandle that can be awaited if you want to wait for prefetching to complete,
+/// or just dropped to let it run in the background.
+pub fn prefetch_common_layers(
+    workspace_path: &Path,
+) -> tokio::task::JoinHandle<()> {
+    let workspace_path = workspace_path.to_path_buf();
+
+    tokio::spawn(async move {
+        // Check if pre-fetching is enabled
+        let prefetch_enabled = std::env::var("JAIL_AI_PREFETCH")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
+        if !prefetch_enabled {
+            debug!("Pre-fetching disabled (JAIL_AI_PREFETCH not set)");
+            return;
+        }
+
+        info!("🔮 Starting background pre-fetch of common layers...");
+
+        // Detect project type (fast operation)
+        let project_type = detect_project_type_with_options(&workspace_path, false);
+
+        // Ensure base layer exists (most commonly needed)
+        if let Err(e) = ensure_layer_exists("base", None).await {
+            debug!("Pre-fetch base layer failed: {}", e);
+        }
+
+        // Pre-fetch language-specific layers based on detected type
+        match project_type {
+            ProjectType::Rust => {
+                let _ = ensure_layer_exists("rust", Some("base")).await;
+            }
+            ProjectType::Golang => {
+                let _ = ensure_layer_exists("golang", Some("base")).await;
+            }
+            ProjectType::NodeJS => {
+                let _ = ensure_layer_exists("nodejs", Some("base")).await;
+            }
+            ProjectType::Python => {
+                let _ = ensure_layer_exists("python", Some("base")).await;
+            }
+            ProjectType::Java => {
+                let _ = ensure_layer_exists("java", Some("base")).await;
+            }
+            ProjectType::Nix => {
+                let _ = ensure_layer_exists("nix", Some("base")).await;
+            }
+            ProjectType::Php => {
+                let _ = ensure_layer_exists("php", Some("base")).await;
+            }
+            ProjectType::Cpp => {
+                let _ = ensure_layer_exists("cpp", Some("base")).await;
+            }
+            ProjectType::CSharp => {
+                let _ = ensure_layer_exists("csharp", Some("base")).await;
+            }
+            ProjectType::Multi(types) => {
+                // Pre-fetch all detected language layers
+                for lang_type in types {
+                    let layer = lang_type.language_layer();
+                    let _ = ensure_layer_exists(layer, Some("base")).await;
+                }
+            }
+            ProjectType::Generic => {
+                // Only base layer needed
+            }
+            _ => {}
+        }
+
+        info!("✓ Background pre-fetch completed");
+    })
+}
+
+/// Ensure a specific layer exists, building it if necessary
+async fn ensure_layer_exists(layer: &str, base_image: Option<&str>) -> Result<()> {
+    // Get the image name for this layer
+    let image_name = match layer {
+        "base" => "localhost/jail-ai-base:latest",
+        "rust" => "localhost/jail-ai-rust:latest",
+        "golang" => "localhost/jail-ai-golang:latest",
+        "nodejs" => "localhost/jail-ai-nodejs:latest",
+        "python" => "localhost/jail-ai-python:latest",
+        "java" => "localhost/jail-ai-java:latest",
+        "nix" => "localhost/jail-ai-nix:latest",
+        "php" => "localhost/jail-ai-php:latest",
+        "cpp" => "localhost/jail-ai-cpp:latest",
+        "csharp" => "localhost/jail-ai-csharp:latest",
+        _ => {
+            debug!("Unknown layer for pre-fetch: {}", layer);
+            return Ok(());
+        }
+    };
+
+    // Check if image already exists (using cached check)
+    if image_exists(image_name).await? {
+        debug!("✅ Layer {} already exists, skipping pre-fetch", layer);
+        return Ok(());
+    }
+
+    info!("📥 Pre-fetching layer: {}", layer);
+
+    // Build the layer (non-verbose to avoid cluttering output)
+    build_shared_layer(layer, base_image, false).await?;
+
+    info!("✓ Pre-fetched layer: {}", layer);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +231,11 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().is_empty());
         });
+    }
+
+    #[tokio::test]
+    async fn test_ensure_layer_exists_unknown() {
+        let result = ensure_layer_exists("unknown-layer", None).await;
+        assert!(result.is_ok()); // Should not error on unknown layers
     }
 }
