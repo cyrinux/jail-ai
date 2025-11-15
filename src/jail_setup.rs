@@ -96,6 +96,7 @@ pub fn setup_default_environment(builder: JailBuilder) -> JailBuilder {
 /// Agent configuration flags
 pub struct AgentConfigFlags {
     pub claude_dir: bool,
+    pub claude_code_router_dir: bool,
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
@@ -132,6 +133,7 @@ pub fn mount_agent_configs(
         // Check if agent-specific config dir should be mounted
         let should_mount = match parsed_agent {
             crate::agents::Agent::Claude => flags.claude_dir || flags.agent_configs,
+            crate::agents::Agent::ClaudeCodeRouter => flags.claude_code_router_dir || flags.agent_configs,
             crate::agents::Agent::Copilot => flags.copilot_dir || flags.agent_configs,
             crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
             crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
@@ -164,6 +166,15 @@ pub fn mount_agent_configs(
         if flags.claude_dir || flags.agent_configs {
             builder =
                 mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
+        }
+        if flags.claude_code_router_dir || flags.agent_configs {
+            builder =
+                mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".claude-code-router"),
+                "/home/agent/.claude-code-router",
+            );
         }
         if flags.copilot_dir || flags.agent_configs {
             builder = mount_config_if_exists(

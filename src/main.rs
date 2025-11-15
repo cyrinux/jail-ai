@@ -176,6 +176,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 no_workspace,
                 workspace_path,
                 claude_dir,
+                claude_code_router_dir,
                 copilot_dir,
                 cursor_dir,
                 gemini_dir,
@@ -254,6 +255,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                         "", // No specific agent for create command
                         &jail_setup::AgentConfigFlags {
                             claude_dir,
+                            claude_code_router_dir,
                             copilot_dir,
                             cursor_dir,
                             gemini_dir,
@@ -413,6 +415,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
             Commands::Claude { common, args } => {
                 run_agent_command(agents::Agent::Claude, common, args, verbose).await?;
+            }
+
+            Commands::ClaudeCodeRouter { common, args } => {
+                run_agent_command(agents::Agent::ClaudeCodeRouter, common, args, verbose).await?;
             }
 
             Commands::Copilot { common, args } => {
@@ -615,6 +621,7 @@ async fn run_agent_command(
     // Validate agent-specific config flags before proceeding
     let config_flags = agents::AgentConfigFlags {
         claude_dir: common.claude_dir,
+        claude_code_router_dir: common.claude_code_router_dir,
         copilot_dir: common.copilot_dir,
         cursor_dir: common.cursor_dir,
         gemini_dir: common.gemini_dir,
@@ -641,6 +648,7 @@ async fn run_agent_command(
             no_workspace: common.no_workspace,
             workspace_path: common.workspace_path,
             claude_dir: common.claude_dir,
+            claude_code_router_dir: common.claude_code_router_dir,
             copilot_dir: common.copilot_dir,
             cursor_dir: common.cursor_dir,
             gemini_dir: common.gemini_dir,
