@@ -23,6 +23,7 @@ pub struct AgentCommandParams {
     pub no_workspace: bool,
     pub workspace_path: String,
     pub claude_dir: bool,
+    pub claude_code_router_dir: bool,
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
@@ -573,6 +574,7 @@ pub async fn run_ai_agent_command(
             agent_command,
             &jail_setup::AgentConfigFlags {
                 claude_dir: params.claude_dir,
+                claude_code_router_dir: params.claude_code_router_dir,
                 copilot_dir: params.copilot_dir,
                 cursor_dir: params.cursor_dir,
                 gemini_dir: params.gemini_dir,

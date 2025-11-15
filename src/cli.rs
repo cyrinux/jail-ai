@@ -52,6 +52,10 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub claude_dir: bool,
 
+    /// Mount entire ~/.claude and ~/.claude-code-router directories for Claude Code Router
+    #[arg(long)]
+    pub claude_code_router_dir: bool,
+
     /// Mount entire ~/.copilot directory for GitHub Copilot
     #[arg(long)]
     pub copilot_dir: bool,
@@ -72,7 +76,7 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub jules_dir: bool,
 
-    /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
+    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -185,6 +189,10 @@ pub enum Commands {
         #[arg(long)]
         claude_dir: bool,
 
+        /// Mount entire ~/.claude and ~/.claude-code-router directories for Claude Code Router
+        #[arg(long)]
+        claude_code_router_dir: bool,
+
         /// Mount entire ~/.copilot directory for GitHub Copilot
         #[arg(long)]
         copilot_dir: bool,
@@ -205,7 +213,7 @@ pub enum Commands {
         #[arg(long)]
         jules_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
+        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -277,6 +285,19 @@ pub enum Commands {
         common: AgentCommandOptions,
 
         /// Additional arguments to pass to claude (after --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Quick start Claude Code Router in a jail for current directory
+    /// Claude Code Router wraps Claude Code and routes requests to different models
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai claude-code-router --claude-code-router-dir -- chat "help me"
+    ClaudeCodeRouter {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+
+        /// Additional arguments to pass to ccr (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

@@ -1,7 +1,7 @@
 //! Agent registry for managing AI agent configurations.
 //!
 //! This module provides a centralized way to manage different AI coding agents
-//! (Claude, Copilot, Cursor, Gemini, Codex, Jules) with type-safe configuration.
+//! (Claude, Copilot, Cursor, Gemini, Codex, Jules, Claude Code Router) with type-safe configuration.
 //!
 //! # Architecture
 //!
@@ -20,6 +20,7 @@
 //! 5. Add the module declaration below
 
 mod claude;
+mod claude_code_router;
 mod codex;
 mod copilot;
 mod cursor;
@@ -32,6 +33,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Agent {
     Claude,
+    ClaudeCodeRouter,
     Copilot,
     Cursor,
     Gemini,
@@ -44,6 +46,7 @@ impl Agent {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "claude" => Some(Self::Claude),
+            "claude-code-router" | "ccr" => Some(Self::ClaudeCodeRouter),
             "copilot" => Some(Self::Copilot),
             "cursor" | "cursor-agent" => Some(Self::Cursor),
             "gemini" => Some(Self::Gemini),
@@ -57,6 +60,7 @@ impl Agent {
     pub fn command_name(&self) -> &'static str {
         match self {
             Self::Claude => claude::COMMAND_NAME,
+            Self::ClaudeCodeRouter => claude_code_router::COMMAND_NAME,
             Self::Copilot => copilot::COMMAND_NAME,
             Self::Cursor => cursor::COMMAND_NAME,
             Self::Gemini => gemini::COMMAND_NAME,
@@ -69,6 +73,7 @@ impl Agent {
     pub fn normalized_name(&self) -> &'static str {
         match self {
             Self::Claude => claude::NORMALIZED_NAME,
+            Self::ClaudeCodeRouter => claude_code_router::NORMALIZED_NAME,
             Self::Copilot => copilot::NORMALIZED_NAME,
             Self::Cursor => cursor::NORMALIZED_NAME,
             Self::Gemini => gemini::NORMALIZED_NAME,
@@ -81,6 +86,7 @@ impl Agent {
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::Claude => claude::DISPLAY_NAME,
+            Self::ClaudeCodeRouter => claude_code_router::DISPLAY_NAME,
             Self::Copilot => copilot::DISPLAY_NAME,
             Self::Cursor => cursor::DISPLAY_NAME,
             Self::Gemini => gemini::DISPLAY_NAME,
@@ -98,6 +104,7 @@ impl Agent {
     pub fn has_auto_credentials(&self) -> bool {
         match self {
             Self::Claude => claude::HAS_AUTO_CREDENTIALS,
+            Self::ClaudeCodeRouter => claude_code_router::HAS_AUTO_CREDENTIALS,
             Self::Copilot => copilot::HAS_AUTO_CREDENTIALS,
             Self::Cursor => cursor::HAS_AUTO_CREDENTIALS,
             Self::Gemini => gemini::HAS_AUTO_CREDENTIALS,
@@ -111,6 +118,7 @@ impl Agent {
     pub fn config_dir_paths(&self) -> Vec<(&'static str, &'static str)> {
         match self {
             Self::Claude => claude::CONFIG_DIR_PATHS.to_vec(),
+            Self::ClaudeCodeRouter => claude_code_router::CONFIG_DIR_PATHS.to_vec(),
             Self::Copilot => copilot::CONFIG_DIR_PATHS.to_vec(),
             Self::Cursor => cursor::CONFIG_DIR_PATHS.to_vec(),
             Self::Gemini => gemini::CONFIG_DIR_PATHS.to_vec(),
@@ -123,6 +131,7 @@ impl Agent {
     pub fn supports_auth_workflow(&self) -> bool {
         match self {
             Self::Claude => claude::SUPPORTS_AUTH_WORKFLOW,
+            Self::ClaudeCodeRouter => claude_code_router::SUPPORTS_AUTH_WORKFLOW,
             Self::Copilot => copilot::SUPPORTS_AUTH_WORKFLOW,
             Self::Cursor => cursor::SUPPORTS_AUTH_WORKFLOW,
             Self::Gemini => gemini::SUPPORTS_AUTH_WORKFLOW,
@@ -136,6 +145,7 @@ impl Agent {
     pub fn auth_credential_path(&self) -> &'static str {
         match self {
             Self::Claude => claude::AUTH_CREDENTIAL_PATH,
+            Self::ClaudeCodeRouter => claude_code_router::AUTH_CREDENTIAL_PATH,
             Self::Copilot => copilot::AUTH_CREDENTIAL_PATH,
             Self::Cursor => cursor::AUTH_CREDENTIAL_PATH,
             Self::Gemini => gemini::AUTH_CREDENTIAL_PATH,
@@ -179,6 +189,7 @@ impl Agent {
     pub fn config_flag_name(&self) -> &'static str {
         match self {
             Self::Claude => "claude-dir",
+            Self::ClaudeCodeRouter => "claude-code-router-dir",
             Self::Copilot => "copilot-dir",
             Self::Cursor => "cursor-dir",
             Self::Gemini => "gemini-dir",
@@ -195,6 +206,9 @@ impl Agent {
 
         if flags.claude_dir {
             specified_flags.push(("claude-dir", Agent::Claude));
+        }
+        if flags.claude_code_router_dir {
+            specified_flags.push(("claude-code-router-dir", Agent::ClaudeCodeRouter));
         }
         if flags.copilot_dir {
             specified_flags.push(("copilot-dir", Agent::Copilot));
@@ -241,6 +255,7 @@ impl Agent {
 /// Agent configuration flags structure for validation
 pub struct AgentConfigFlags {
     pub claude_dir: bool,
+    pub claude_code_router_dir: bool,
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
@@ -282,6 +297,8 @@ mod tests {
     #[test]
     fn test_agent_from_str() {
         assert_eq!(Agent::from_str("claude"), Some(Agent::Claude));
+        assert_eq!(Agent::from_str("claude-code-router"), Some(Agent::ClaudeCodeRouter));
+        assert_eq!(Agent::from_str("ccr"), Some(Agent::ClaudeCodeRouter));
         assert_eq!(Agent::from_str("copilot"), Some(Agent::Copilot));
         assert_eq!(Agent::from_str("cursor"), Some(Agent::Cursor));
         assert_eq!(Agent::from_str("cursor-agent"), Some(Agent::Cursor));
@@ -295,6 +312,7 @@ mod tests {
     #[test]
     fn test_agent_command_name() {
         assert_eq!(Agent::Claude.command_name(), "claude");
+        assert_eq!(Agent::ClaudeCodeRouter.command_name(), "ccr");
         assert_eq!(Agent::Copilot.command_name(), "copilot");
         assert_eq!(Agent::Cursor.command_name(), "cursor-agent");
         assert_eq!(Agent::Gemini.command_name(), "gemini");
@@ -305,6 +323,7 @@ mod tests {
     #[test]
     fn test_agent_normalized_name() {
         assert_eq!(Agent::Claude.normalized_name(), "claude");
+        assert_eq!(Agent::ClaudeCodeRouter.normalized_name(), "claude-code-router");
         assert_eq!(Agent::Cursor.normalized_name(), "cursor");
     }
 
@@ -329,6 +348,7 @@ mod tests {
     #[test]
     fn test_agent_has_auto_credentials() {
         assert!(Agent::Claude.has_auto_credentials());
+        assert!(!Agent::ClaudeCodeRouter.has_auto_credentials());
         assert!(!Agent::Copilot.has_auto_credentials());
         assert!(!Agent::Cursor.has_auto_credentials());
         assert!(!Agent::Gemini.has_auto_credentials());
@@ -339,6 +359,7 @@ mod tests {
     #[test]
     fn test_agent_layer_name() {
         assert_eq!(Agent::Claude.layer_name(), "agent-claude");
+        assert_eq!(Agent::ClaudeCodeRouter.layer_name(), "agent-claude-code-router");
         assert_eq!(Agent::Cursor.layer_name(), "agent-cursor");
     }
 
@@ -391,6 +412,7 @@ mod tests {
     #[test]
     fn test_agent_config_flag_name() {
         assert_eq!(Agent::Claude.config_flag_name(), "claude-dir");
+        assert_eq!(Agent::ClaudeCodeRouter.config_flag_name(), "claude-code-router-dir");
         assert_eq!(Agent::Copilot.config_flag_name(), "copilot-dir");
         assert_eq!(Agent::Cursor.config_flag_name(), "cursor-dir");
         assert_eq!(Agent::Gemini.config_flag_name(), "gemini-dir");
@@ -403,6 +425,7 @@ mod tests {
         // Test that matching flags pass validation
         let flags = AgentConfigFlags {
             claude_dir: true,
+            claude_code_router_dir: false,
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: false,
@@ -414,6 +437,7 @@ mod tests {
 
         let flags = AgentConfigFlags {
             claude_dir: false,
+            claude_code_router_dir: false,
             copilot_dir: true,
             cursor_dir: false,
             gemini_dir: false,
@@ -429,6 +453,7 @@ mod tests {
         // Test that mismatched flags fail validation
         let flags = AgentConfigFlags {
             claude_dir: false,
+            claude_code_router_dir: false,
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: true, // Wrong flag for Cursor agent
@@ -449,6 +474,7 @@ mod tests {
         // Test that multiple mismatched flags are all reported
         let flags = AgentConfigFlags {
             claude_dir: true,
+            claude_code_router_dir: false,
             copilot_dir: true,
             cursor_dir: false,
             gemini_dir: true,
@@ -469,6 +495,7 @@ mod tests {
         // Test that --agent-configs allows all flags
         let flags = AgentConfigFlags {
             claude_dir: true,
+            claude_code_router_dir: true,
             copilot_dir: true,
             cursor_dir: true,
             gemini_dir: true,
@@ -489,6 +516,7 @@ mod tests {
         // Test that having no flags always passes
         let flags = AgentConfigFlags {
             claude_dir: false,
+            claude_code_router_dir: false,
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: false,

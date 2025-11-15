@@ -42,6 +42,8 @@ const TERRAFORM_CONTAINERFILE: &str = include_str!("../containerfiles/terraform.
 const KUBERNETES_CONTAINERFILE: &str = include_str!("../containerfiles/kubernetes.Containerfile");
 const AGENT_CLAUDE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-claude.Containerfile");
+const AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE: &str =
+    include_str!("../containerfiles/agent-claude-code-router.Containerfile");
 const AGENT_COPILOT_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-copilot.Containerfile");
 const AGENT_CURSOR_CONTAINERFILE: &str =
@@ -68,6 +70,7 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "kubernetes" => "☸️",
         "custom" => "🎨",
         "agent-claude" => "🤖",
+        "agent-claude-code-router" => "🔀",
         "agent-copilot" => "🦾",
         "agent-cursor" => "➡️",
         "agent-gemini" => "🔮",
@@ -212,6 +215,7 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "terraform" => Some(TERRAFORM_CONTAINERFILE),
         "kubernetes" => Some(KUBERNETES_CONTAINERFILE),
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
+        "agent-claude-code-router" => Some(AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
         "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
         "agent-gemini" => Some(AGENT_GEMINI_CONTAINERFILE),
