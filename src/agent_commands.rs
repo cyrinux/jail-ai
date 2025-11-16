@@ -697,6 +697,62 @@ pub async fn run_ai_agent_command(
         .map(|output| output.trim() == "yes")
         .unwrap_or(false);
 
+    // Check if this agent requires a server to be started first
+    if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
+        if agent.requires_server_start() {
+            info!("Agent requires server start, executing startup sequence");
+            
+            if let Some(server_cmd) = agent.server_start_command() {
+                // Start the server in the background
+                info!("Starting {} server with command: {} {}", agent.display_name(), agent_command, server_cmd);
+                
+                let server_command = if uses_nix_wrapper {
+                    vec![
+                        "/usr/local/bin/nix-wrapper".to_string(),
+                        agent_command.to_string(),
+                        server_cmd.to_string(),
+                    ]
+                } else {
+                    vec![agent_command.to_string(), server_cmd.to_string()]
+                };
+                
+                // Execute server start in background (non-interactive)
+                let server_output = jail.exec(&server_command, false).await?;
+                if !server_output.is_empty() {
+                    info!("Server start output: {}", server_output);
+                }
+                
+                // Wait a bit for server to start
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                info!("Server started, proceeding with main command");
+            }
+            
+            // Override agent_command with the main command for agents that require server start
+            if let Some(main_cmd) = agent.main_command() {
+                let command = if uses_nix_wrapper {
+                    let mut cmd = vec![
+                        "/usr/local/bin/nix-wrapper".to_string(),
+                        agent_command.to_string(),
+                        main_cmd.to_string(),
+                    ];
+                    cmd.extend(params.args);
+                    cmd
+                } else {
+                    let mut cmd = vec![agent_command.to_string(), main_cmd.to_string()];
+                    cmd.extend(params.args);
+                    cmd
+                };
+                
+                let output = jail.exec(&command, true).await?;
+                if !output.is_empty() {
+                    print!("{output}");
+                }
+                
+                return Ok(());
+            }
+        }
+    }
+
     let command = if uses_nix_wrapper {
         // Wrap command with nix-wrapper to load flake environment
         let mut cmd = vec![

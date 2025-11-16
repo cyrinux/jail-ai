@@ -108,6 +108,7 @@ make dev-jail
 cargo run -- claude -- chat "help me debug this code"
 cargo run -- claude -- --help
 cargo run -- claude -- --version
+# Claude Code Router - Automatically starts server with "ccr start" then runs "ccr code"
 cargo run -- claude-code-router --claude-code-router-dir -- chat "help me debug this code"
 cargo run -- copilot --copilot-dir -- suggest "write tests"
 cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
@@ -316,6 +317,7 @@ The layered image system automatically detects your project type and builds appr
 - **AI Coding Agents**:
   - **Claude Code** (`claude`) - Anthropic's CLI coding assistant
   - **Claude Code Router** (`ccr`) - Routes Claude Code requests to different models (OpenRouter, DeepSeek, Ollama, Gemini, etc.)
+    - **Note**: Claude Code Router automatically starts a server with `ccr start` in the background before executing `ccr code` with your command. This is handled transparently by jail-ai.
   - **GitHub Copilot CLI** (`copilot`) - GitHub's AI pair programmer
   - **Cursor Agent** (`cursor-agent`) - Cursor's terminal AI agent
   - **Gemini CLI** (`gemini`) - Google's AI terminal assistant

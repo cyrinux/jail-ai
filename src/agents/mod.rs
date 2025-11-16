@@ -198,6 +198,30 @@ impl Agent {
         }
     }
 
+    /// Check if this agent requires a server to be started before executing the main command
+    pub fn requires_server_start(&self) -> bool {
+        match self {
+            Self::ClaudeCodeRouter => claude_code_router::REQUIRES_SERVER_START,
+            _ => false,
+        }
+    }
+
+    /// Get the server start command for this agent
+    pub fn server_start_command(&self) -> Option<&'static str> {
+        match self {
+            Self::ClaudeCodeRouter => Some(claude_code_router::SERVER_START_COMMAND),
+            _ => None,
+        }
+    }
+
+    /// Get the main command to execute after the server is started
+    pub fn main_command(&self) -> Option<&'static str> {
+        match self {
+            Self::ClaudeCodeRouter => Some(claude_code_router::MAIN_COMMAND),
+            _ => None,
+        }
+    }
+
     /// Validate that only compatible agent config flags are being used
     /// Returns an error message if incompatible flags are detected
     pub fn validate_config_flags(&self, flags: &AgentConfigFlags) -> Result<(), String> {

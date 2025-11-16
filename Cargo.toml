@@ -16,6 +16,7 @@ opt-level = 3
 opt-level = 3
 codegen-units = 1
 
+
 [package]
 name = "jail-ai"
 version = "0.46.0"
@@ -29,6 +30,7 @@ repository = "https://github.com/cyrinux/jail-ai"
 documentation = "https://docs.rs/jail-ai"
 keywords = ["podman", "sandbox", "container", "ai-agent", "isolation"]
 categories = ["command-line-utilities", "development-tools", "virtualization"]
+default-run = "jail-ai"
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
