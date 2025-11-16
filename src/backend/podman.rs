@@ -561,7 +561,7 @@ impl JailBackend for PodmanBackend {
                 .rsplit("__")
                 .next()
                 .and_then(|suffix| match suffix {
-                    "claude" | "copilot" | "cursor" | "gemini" | "jules" | "codex" => Some(suffix),
+                    "claude" | "claude-code-router" | "copilot" | "cursor" | "gemini" | "jules" | "codex" => Some(suffix),
                     _ => None,
                 });
 

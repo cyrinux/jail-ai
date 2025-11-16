@@ -133,7 +133,9 @@ pub fn mount_agent_configs(
         // Check if agent-specific config dir should be mounted
         let should_mount = match parsed_agent {
             crate::agents::Agent::Claude => flags.claude_dir || flags.agent_configs,
-            crate::agents::Agent::ClaudeCodeRouter => flags.claude_code_router_dir || flags.agent_configs,
+            crate::agents::Agent::ClaudeCodeRouter => {
+                flags.claude_code_router_dir || flags.agent_configs
+            }
             crate::agents::Agent::Copilot => flags.copilot_dir || flags.agent_configs,
             crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
             crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
@@ -196,7 +198,7 @@ pub fn mount_agent_configs(
             builder = mount_config_if_exists(
                 builder,
                 home_path.join(".config").join("gemini"),
-                "/home/agent/.gemini",
+                "/home/agent/.config/gemini",
             );
         }
         if flags.codex_dir || flags.agent_configs {
