@@ -5,9 +5,14 @@ use std::path::PathBuf;
 /// Default image name
 pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
 
-/// Common options for AI agent commands
-#[derive(Args, Debug)]
-pub struct AgentCommandOptions {
+/// A reusable set of arguments for configuring a jail environment.
+///
+/// This struct consolidates all common jail settings, allowing them to be
+/// shared between different commands (e.g., `create` and agent-specific commands)
+/// without duplicating code. By using `#[command(flatten)]`, these arguments
+/// can be seamlessly integrated into any command that needs to configure a jail.
+#[derive(Args, Debug, Clone)]
+pub struct JailArgs {
     /// Backend type (only 'podman' is supported, kept for compatibility)
     #[arg(short, long)]
     pub backend: Option<String>,
@@ -25,7 +30,7 @@ pub struct AgentCommandOptions {
     pub port: Vec<String>,
 
     /// Environment variable (format: KEY=VALUE)
-    #[arg(short = 'e', long)]
+    #[arg(short, long)]
     pub env: Vec<String>,
 
     /// Disable network access
@@ -92,17 +97,9 @@ pub struct AgentCommandOptions {
     #[arg(long, value_delimiter = ',')]
     pub layers: Vec<String>,
 
-    /// Start an interactive shell instead of running the agent command
-    #[arg(long)]
-    pub shell: bool,
-
     /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
     #[arg(long)]
     pub isolated: bool,
-
-    /// Open interactive shell for OAuth authentication (joins running container or starts stopped one)
-    #[arg(long)]
-    pub auth: bool,
 
     /// Skip nix layer (by default, nix takes precedence over other language layers)
     #[arg(long)]
@@ -111,6 +108,21 @@ pub struct AgentCommandOptions {
     /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
     #[arg(long)]
     pub no_block_host: bool,
+}
+
+/// Common options for AI agent commands
+#[derive(Args, Debug)]
+pub struct AgentCommandOptions {
+    #[command(flatten)]
+    pub jail: JailArgs,
+
+    /// Start an interactive shell instead of running the agent command
+    #[arg(long)]
+    pub shell: bool,
+
+    /// Open interactive shell for OAuth authentication (joins running container or starts stopped one)
+    #[arg(long)]
+    pub auth: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -136,105 +148,12 @@ pub enum Commands {
         /// Name of the jail (auto-generated from current directory if not provided)
         name: Option<String>,
 
-        /// Backend type (only 'podman' is supported, kept for compatibility)
-        #[arg(short, long)]
-        backend: Option<String>,
-
-        /// Base image (e.g., localhost/jail-ai-env:latest, alpine:latest)
-        #[arg(short, long, default_value = DEFAULT_IMAGE)]
-        image: String,
-
-        /// Bind mount (format: source:target[:ro])
-        #[arg(short = 'm', long)]
-        mount: Vec<String>,
-
-        /// Port mapping from host to container (format: host_port:container_port or host_port:container_port/protocol)
-        #[arg(short = 'p', long)]
-        port: Vec<String>,
-
-        /// Environment variable (format: KEY=VALUE)
-        #[arg(short, long)]
-        env: Vec<String>,
-
-        /// Disable network access
-        #[arg(long)]
-        no_network: bool,
-
-        /// Memory limit in MB
-        #[arg(long)]
-        memory: Option<u64>,
-
-        /// CPU quota percentage (0-100)
-        #[arg(long)]
-        cpu: Option<u32>,
+        #[command(flatten)]
+        jail: JailArgs,
 
         /// Load configuration from file
         #[arg(short, long)]
         config: Option<PathBuf>,
-
-        /// Skip auto-mounting current working directory to /workspace
-        #[arg(long)]
-        no_workspace: bool,
-
-        /// Custom workspace path inside jail (default: /workspace)
-        #[arg(long, default_value = "/workspace")]
-        workspace_path: String,
-
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.claude and ~/.claude-code-router directories for Claude Code Router
-        #[arg(long)]
-        claude_code_router_dir: bool,
-
-        /// Mount entire ~/.copilot directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount entire ~/.config/jules directory for Jules CLI
-        #[arg(long)]
-        jules_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
-        #[arg(long)]
-        agent_configs: bool,
-
-        /// Enable git and GPG configuration mapping
-        #[arg(long)]
-        git_gpg: bool,
-
-        /// Upgrade: rebuild outdated layers and recreate container
-        #[arg(long)]
-        upgrade: bool,
-
-        /// Force specific layers (comma-separated, e.g., "base,rust,python")
-        #[arg(long, value_delimiter = ',')]
-        layers: Vec<String>,
-
-        /// Use isolated project-specific images (workspace hash tag) instead of shared layer-based images
-        #[arg(long)]
-        isolated: bool,
-
-        /// Skip nix layer (by default, nix takes precedence over other language layers)
-        #[arg(long)]
-        no_nix: bool,
-
-        /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
-        #[arg(long)]
-        no_block_host: bool,
     },
 
     /// Remove a jail
@@ -690,7 +609,7 @@ mod tests {
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert!(common.auth);
-                assert!(common.codex_dir);
+                assert!(common.jail.codex_dir);
             }
             _ => panic!("Expected Codex command"),
         }
@@ -705,7 +624,7 @@ mod tests {
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert!(!common.auth);
-                assert!(common.codex_dir);
+                assert!(common.jail.codex_dir);
             }
             _ => panic!("Expected Codex command"),
         }
@@ -749,5 +668,51 @@ mod tests {
         assert!(Commands::parse_port("invalid:80").is_err());
         assert!(Commands::parse_port("8080:invalid").is_err());
         assert!(Commands::parse_port("70000:80").is_err());
+    }
+
+    #[test]
+    fn test_flattened_jail_args() {
+        // Test that flattened args are parsed correctly for Create command
+        let args = vec![
+            "jail-ai",
+            "create",
+            "my-jail",
+            "--image",
+            "my-image",
+            "--no-network",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        match cli.command {
+            Some(Commands::Create { name, jail, .. }) => {
+                assert_eq!(name, Some("my-jail".to_string()));
+                assert_eq!(jail.image, "my-image");
+                assert!(jail.no_network);
+            }
+            _ => panic!("Expected Create command"),
+        }
+    }
+
+    #[test]
+    fn test_flattened_jail_args_for_agent() {
+        // Test that flattened args are parsed correctly for an agent command
+        let args = vec![
+            "jail-ai",
+            "claude",
+            "--image",
+            "claude-image",
+            "--memory",
+            "2048",
+            "--",
+            "arg1",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        match cli.command {
+            Some(Commands::Claude { common, args }) => {
+                assert_eq!(common.jail.image, "claude-image");
+                assert_eq!(common.jail.memory, Some(2048));
+                assert_eq!(args, vec!["arg1"]);
+            }
+            _ => panic!("Expected Claude command"),
+        }
     }
 }

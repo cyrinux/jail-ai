@@ -989,6 +989,7 @@ impl JailBackend for PodmanBackend {
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
             no_nix: false,
             block_host,
+            git_gpg: false,
         })
     }
 }

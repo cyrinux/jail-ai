@@ -64,6 +64,10 @@ impl JailBuilder {
         }
     }
 
+    pub fn from_config(config: JailConfig) -> Self {
+        Self { config }
+    }
+
     pub fn backend(mut self, backend: crate::config::BackendType) -> Self {
         self.config.backend = backend;
         self

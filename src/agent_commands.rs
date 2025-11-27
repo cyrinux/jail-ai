@@ -1,8 +1,10 @@
-use crate::cli::Commands;
+use crate::cli::{Commands, JailArgs};
 use crate::config::{BackendType, JailConfig};
 use crate::error::{self, Result};
 use crate::git_gpg::{
-    create_claude_json_in_container, create_gitconfig_in_container, setup_git_gpg_config,
+    create_claude_json_in_container,
+    create_gitconfig_in_container,
+    setup_git_gpg_config,
 };
 use crate::jail::{JailBuilder, JailManager};
 use crate::jail_setup::{self, mount_agent_configs, setup_default_environment};
@@ -12,33 +14,10 @@ use tracing::{info, warn};
 
 /// Parameters for AI agent commands
 pub struct AgentCommandParams {
-    pub backend: Option<String>,
-    pub image: String,
-    pub mount: Vec<String>,
-    pub port: Vec<String>,
-    pub env: Vec<String>,
-    pub no_network: bool,
-    pub memory: Option<u64>,
-    pub cpu: Option<u32>,
-    pub no_workspace: bool,
-    pub workspace_path: String,
-    pub claude_dir: bool,
-    pub claude_code_router_dir: bool,
-    pub copilot_dir: bool,
-    pub cursor_dir: bool,
-    pub gemini_dir: bool,
-    pub codex_dir: bool,
-    pub jules_dir: bool,
-    pub agent_configs: bool,
-    pub git_gpg: bool,
-    pub upgrade: bool,
-    pub force_layers: Vec<String>,
+    pub jail: JailArgs,
     pub shell: bool,
-    pub isolated: bool,
     pub verbose: bool,
     pub auth: bool,
-    pub no_nix: bool,
-    pub no_block_host: bool,
     pub args: Vec<String>,
 }
 
@@ -190,12 +169,12 @@ fn prompt_upgrade() -> Result<bool> {
     print!("{}", strings::WOULD_YOU_LIKE_REBUILD);
     io::stdout()
         .flush()
-        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
+        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {}", e)))?;
 
     let mut input = String::new();
     io::stdin()
         .read_line(&mut input)
-        .map_err(|e| error::JailError::Config(format!("Failed to read input: {e}")))?;
+        .map_err(|e| error::JailError::Config(format!("Failed to read input: {}", e)))?;
 
     let answer = input.trim().to_lowercase();
     Ok(answer == "y" || answer == "yes")
@@ -217,8 +196,8 @@ pub async fn run_ai_agent_command(
     info!("Using jail: {} for agent: {}", jail_name, agent_command);
 
     // Determine backend type early - use user-specified or auto-detect
-    let backend_type = if let Some(backend_str) = params.backend {
-        Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
+    let backend_type = if let Some(backend_str) = &params.jail.backend {
+        Commands::parse_backend(backend_str).map_err(error::JailError::Config)?
     } else {
         BackendType::detect()
     };
@@ -235,8 +214,8 @@ pub async fn run_ai_agent_command(
             if agent.supports_auth_workflow() {
                 // Check if the appropriate config directory flag is set
                 let config_dir_mounted = match agent {
-                    crate::agents::Agent::Codex => params.codex_dir || params.agent_configs,
-                    crate::agents::Agent::Jules => params.jules_dir || params.agent_configs,
+                    crate::agents::Agent::Codex => params.jail.codex_dir || params.jail.agent_configs,
+                    crate::agents::Agent::Jules => params.jail.jules_dir || params.jail.agent_configs,
                     _ => false, // Other agents don't use this auto-detection
                 };
 
@@ -268,7 +247,7 @@ pub async fn run_ai_agent_command(
 
     // Track container recreation separately from layer rebuilding
     // --auth should force container recreation (for networking) but not layer rebuilding
-    let mut should_recreate = params.upgrade || !params.force_layers.is_empty() || params.auth;
+    let mut should_recreate = params.jail.upgrade || !params.jail.layers.is_empty() || params.auth;
 
     // Check for network mode mismatch when container exists
     if jail_exists && !should_recreate {
@@ -296,7 +275,7 @@ pub async fn run_ai_agent_command(
             }
 
             // Check for block_host mismatch
-            let desired_block_host = !params.no_block_host;
+            let desired_block_host = !params.jail.no_block_host;
             let current_block_host = existing_config.block_host;
 
             if desired_block_host != current_block_host {
@@ -327,10 +306,9 @@ pub async fn run_ai_agent_command(
         let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
             &workspace_dir,
             Some(normalized_agent),
-            params.no_nix,
+            params.jail.no_nix,
         )
-        .await
-        {
+        .await {
             Ok(layers) => layers,
             Err(e) => {
                 warn!("Failed to check for outdated layers: {}", e);
@@ -345,12 +323,12 @@ pub async fn run_ai_agent_command(
             }
             info!("Layers will be rebuilt automatically");
             // Enable upgrade to ensure layers are rebuilt
-            params.upgrade = true;
+            params.jail.upgrade = true;
         }
     } else if should_recreate {
         info!(
             "Jail exists but recreation requested (upgrade={}, layers={:?})",
-            params.upgrade, params.force_layers
+            params.jail.upgrade, params.jail.layers
         );
     } else {
         // Jail exists and no forced recreation - check if upgrade is available
@@ -362,10 +340,9 @@ pub async fn run_ai_agent_command(
         let outdated_layers = match crate::image_layers::check_layers_need_rebuild(
             &workspace_dir,
             Some(normalized_agent),
-            params.no_nix,
+            params.jail.no_nix,
         )
-        .await
-        {
+        .await {
             Ok(layers) => layers,
             Err(e) => {
                 warn!("Failed to check for outdated layers: {}", e);
@@ -378,11 +355,10 @@ pub async fn run_ai_agent_command(
             &jail_name,
             &workspace_dir,
             normalized_agent,
-            params.isolated,
-            params.no_nix,
+            params.jail.isolated,
+            params.jail.no_nix,
         )
-        .await
-        {
+        .await {
             Ok((needs_upgrade, current_img, expected_img)) => {
                 if needs_upgrade {
                     Some((current_img, expected_img))
@@ -431,7 +407,7 @@ pub async fn run_ai_agent_command(
                 info!("{}", strings::USER_CHOSE_UPGRADE);
                 should_recreate = true;
                 // Enable upgrade to ensure layers are rebuilt when recreating
-                params.upgrade = true;
+                params.jail.upgrade = true;
             } else {
                 info!("{}", strings::USER_DECLINED_UPGRADE);
             }
@@ -442,13 +418,13 @@ pub async fn run_ai_agent_command(
 
     if !jail_exists || should_recreate {
         if jail_exists && should_recreate {
-            if params.auth && !params.upgrade && params.force_layers.is_empty() {
+            if params.auth && !params.jail.upgrade && params.jail.layers.is_empty() {
                 // Auth-only recreation (no layer rebuilding)
                 info!(
                     "Recreating jail '{}' with host networking for authentication (layers will not be rebuilt)...",
                     jail_name
                 );
-            } else if params.upgrade || !params.force_layers.is_empty() {
+            } else if params.jail.upgrade || !params.jail.layers.is_empty() {
                 info!(
                     "{}",
                     strings::format_string(strings::RECREATING_JAIL_UPGRADE, &jail_name)
@@ -464,7 +440,7 @@ pub async fn run_ai_agent_command(
             // This allows us to avoid setting upgrade=true when we only want to recreate
             // the container (e.g., for network mode changes) without rebuilding layers
             info!(
-                "Stopping and removing existing container '{}'...",
+                "Stopping and removing existing container '{}'வுகளை...",
                 jail_name
             );
             temp_jail.remove(false).await?; // false = don't remove volume (preserve data)
@@ -472,7 +448,7 @@ pub async fn run_ai_agent_command(
 
         // Only use custom image if explicitly provided (not default)
         // This allows the layered image system to auto-detect and build agent-specific images
-        let use_custom_image = params.image != crate::cli::DEFAULT_IMAGE;
+        let use_custom_image = params.jail.image != crate::cli::DEFAULT_IMAGE;
 
         let mut builder = JailBuilder::new(&jail_name).backend(backend_type);
 
@@ -483,12 +459,12 @@ pub async fn run_ai_agent_command(
             info!("Using host networking for OAuth authentication");
         } else {
             // Normal operation: use private or shared networking
-            builder = builder.network(!params.no_network, true);
+            builder = builder.network(!params.jail.no_network, true);
         }
 
         // Set image: use custom if provided, otherwise let layered system auto-detect
         if use_custom_image {
-            builder = builder.base_image(params.image);
+            builder = builder.base_image(params.jail.image.clone());
         } else {
             // Use default image name, which triggers layered image auto-detection
             builder = builder.base_image(crate::image::DEFAULT_IMAGE_NAME);
@@ -499,7 +475,7 @@ pub async fn run_ai_agent_command(
 
         // Auto-mount workspace (git root if available, otherwise current directory)
         // Special handling for git worktrees
-        if !params.no_workspace {
+        if !params.jail.no_workspace {
             let workspace_dir = get_git_root().unwrap_or_else(|| cwd.clone());
 
             // Validate workspace directory is safe
@@ -557,9 +533,9 @@ pub async fn run_ai_agent_command(
                 info!(
                     "Auto-mounting {} to {}",
                     workspace_dir.display(),
-                    params.workspace_path
+                    params.jail.workspace_path
                 );
-                builder = builder.bind_mount(workspace_dir, params.workspace_path, false);
+                builder = builder.bind_mount(workspace_dir, &params.jail.workspace_path, false);
             }
         }
 
@@ -572,31 +548,31 @@ pub async fn run_ai_agent_command(
             &home_path,
             agent_command,
             &jail_setup::AgentConfigFlags {
-                claude_dir: params.claude_dir,
-                claude_code_router_dir: params.claude_code_router_dir,
-                copilot_dir: params.copilot_dir,
-                cursor_dir: params.cursor_dir,
-                gemini_dir: params.gemini_dir,
-                codex_dir: params.codex_dir,
-                jules_dir: params.jules_dir,
-                agent_configs: params.agent_configs,
+                claude_dir: params.jail.claude_dir,
+                claude_code_router_dir: params.jail.claude_code_router_dir,
+                copilot_dir: params.jail.copilot_dir,
+                cursor_dir: params.jail.cursor_dir,
+                gemini_dir: params.jail.gemini_dir,
+                codex_dir: params.jail.codex_dir,
+                jules_dir: params.jail.jules_dir,
+                agent_configs: params.jail.agent_configs,
             },
         );
 
         // Opt-in: GPG configuration
-        if params.git_gpg {
+        if params.jail.git_gpg {
             builder = setup_git_gpg_config(builder, &cwd, &home_path)?;
         }
 
         // Parse mounts
-        for mount_str in params.mount {
-            let mount = Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
+        for mount_str in &params.jail.mount {
+            let mount = Commands::parse_mount(mount_str).map_err(error::JailError::Config)?;
             builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
         }
 
         // Parse port mappings
-        for port_str in params.port {
-            let port_mapping = Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
+        for port_str in &params.jail.port {
+            let port_mapping = Commands::parse_port(port_str).map_err(error::JailError::Config)?;
             builder = builder.port_mapping(
                 port_mapping.host_port,
                 port_mapping.container_port,
@@ -605,37 +581,37 @@ pub async fn run_ai_agent_command(
         }
 
         // Parse environment variables
-        for env_str in params.env {
-            let (key, value) = Commands::parse_env(&env_str).map_err(error::JailError::Config)?;
+        for env_str in &params.jail.env {
+            let (key, value) = Commands::parse_env(env_str).map_err(error::JailError::Config)?;
             builder = builder.env(key, value);
         }
 
         // Set resource limits
-        if let Some(mem) = params.memory {
+        if let Some(mem) = params.jail.memory {
             builder = builder.memory_limit(mem);
         }
-        if let Some(cpu_quota) = params.cpu {
+        if let Some(cpu_quota) = params.jail.cpu {
             builder = builder.cpu_quota(cpu_quota);
         }
 
         // Set upgrade flag - this controls whether layers are rebuilt
         // Container removal is handled manually above when should_recreate is true
-        builder = builder.upgrade(params.upgrade);
+        builder = builder.upgrade(params.jail.upgrade);
 
         // Set force layers
-        builder = builder.force_layers(params.force_layers);
+        builder = builder.force_layers(params.jail.layers.clone());
 
         // Set isolated flag
-        builder = builder.isolated(params.isolated);
+        builder = builder.isolated(params.jail.isolated);
 
         // Set verbose flag
         builder = builder.verbose(params.verbose);
 
         // Set no_nix flag
-        builder = builder.no_nix(params.no_nix);
+        builder = builder.no_nix(params.jail.no_nix);
 
         // Set block_host flag (inverted: !no_block_host means blocking is enabled)
-        builder = builder.block_host(!params.no_block_host);
+        builder = builder.block_host(!params.jail.no_block_host);
 
         let jail = builder.build();
         jail.create().await?;
@@ -650,7 +626,7 @@ pub async fn run_ai_agent_command(
         }
 
         // Create .gitconfig file inside the container if git_gpg is enabled
-        if params.git_gpg {
+        if params.jail.git_gpg {
             if let Err(e) = create_gitconfig_in_container(&cwd, &jail).await {
                 tracing::warn!("Failed to create .gitconfig in container: {}", e);
             }
@@ -668,9 +644,9 @@ pub async fn run_ai_agent_command(
         info!("Starting interactive shell in jail '{}'...", jail_name);
         let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
         if !output.is_empty() {
-            print!("{output}");
+            print!("{{output}}");
         }
-        return Ok(());
+        return Ok(())
     }
 
     // Handle OAuth authentication workflow if --auth flag is provided
@@ -735,20 +711,20 @@ pub async fn run_ai_agent_command(
                         agent_command.to_string(),
                         main_cmd.to_string(),
                     ];
-                    cmd.extend(params.args);
+                    cmd.extend(params.args.clone());
                     cmd
                 } else {
                     let mut cmd = vec![agent_command.to_string(), main_cmd.to_string()];
-                    cmd.extend(params.args);
+                    cmd.extend(params.args.clone());
                     cmd
                 };
                 
                 let output = jail.exec(&command, true).await?;
                 if !output.is_empty() {
-                    print!("{output}");
+                    print!("{{output}}");
                 }
                 
-                return Ok(());
+                return Ok(())
             }
         }
     }
@@ -770,7 +746,7 @@ pub async fn run_ai_agent_command(
 
     let output = jail.exec(&command, true).await?;
     if !output.is_empty() {
-        print!("{output}");
+        print!("{{output}}");
     }
 
     Ok(())
@@ -845,7 +821,8 @@ async fn handle_auth_workflow(
     if !container_exists {
         return Err(error::JailError::NotFound(format!(
             "Container '{}' does not exist. Please create it first by running: jail-ai {} [options]",
-            jail_name, agent_command
+            jail_name,
+            agent_command
         )));
     }
 
@@ -877,7 +854,7 @@ async fn handle_auth_workflow(
 
         let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
         if !output.is_empty() {
-            print!("{}", output);
+            print!("{{output}}");
         }
 
         println!("\n⚠️  Remember to restart the container to restore secure networking:");
@@ -909,7 +886,7 @@ async fn handle_auth_workflow(
 
         let output = jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
         if !output.is_empty() {
-            print!("{}", output);
+            print!("{{output}}");
         }
 
         println!("\n⚠️  Remember to restart the container to restore secure networking:");
@@ -940,12 +917,12 @@ pub fn select_jail(jails: &[String]) -> Result<String> {
     print!("Select a jail (1-{}): ", jails.len());
     io::stdout()
         .flush()
-        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {e}")))?;
+        .map_err(|e| error::JailError::Config(format!("Failed to flush stdout: {}", e)))?;
 
     let mut input = String::new();
     io::stdin()
         .read_line(&mut input)
-        .map_err(|e| error::JailError::Config(format!("Failed to read input: {e}")))?;
+        .map_err(|e| error::JailError::Config(format!("Failed to read input: {}", e)))?;
 
     let selection: usize = input
         .trim()

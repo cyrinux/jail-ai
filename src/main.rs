@@ -162,42 +162,15 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
             jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
         }
         Some(command) => match command {
-            Commands::Create {
-                name,
-                backend,
-                image,
-                mount,
-                port,
-                env,
-                no_network,
-                memory,
-                cpu,
-                config,
-                no_workspace,
-                workspace_path,
-                claude_dir,
-                claude_code_router_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                codex_dir,
-                jules_dir,
-                agent_configs,
-                git_gpg,
-                upgrade,
-                layers,
-                isolated,
-                no_nix,
-                no_block_host,
-            } => {
-                let jail = if let Some(config_path) = config {
+            Commands::Create { name, jail, config } => {
+                let jail_manager = if let Some(config_path) = config {
                     // Load from config file
                     let config_str = tokio::fs::read_to_string(&config_path).await?;
                     let config: JailConfig = serde_json::from_str(&config_str)?;
                     jail::JailManager::new(config)
                 } else {
                     // Build from CLI args
-                    let backend_type = if let Some(backend_str) = backend {
+                    let backend_type = if let Some(backend_str) = jail.backend {
                         Commands::parse_backend(&backend_str).map_err(error::JailError::Config)?
                     } else {
                         config::BackendType::detect()
@@ -223,14 +196,14 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     let mut builder = JailBuilder::new(&jail_name)
                         .backend(backend_type)
-                        .base_image(image)
-                        .network(!no_network, true);
+                        .base_image(jail.image)
+                        .network(!jail.no_network, true);
 
                     // Setup default environment variables
                     builder = jail_setup::setup_default_environment(builder);
 
                     // Auto-mount workspace (git root if available, otherwise current directory)
-                    if !no_workspace {
+                    if !jail.no_workspace {
                         let workspace_dir = agent_commands::get_git_root()
                             .unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -240,9 +213,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                         info!(
                             "Auto-mounting {} to {}",
                             workspace_dir.display(),
-                            workspace_path
+                            jail.workspace_path
                         );
-                        builder = builder.bind_mount(workspace_dir, workspace_path, false);
+                        builder = builder.bind_mount(workspace_dir, jail.workspace_path, false);
                     }
 
                     // Mount agent config directories
@@ -254,32 +227,32 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                         &home_path,
                         "", // No specific agent for create command
                         &jail_setup::AgentConfigFlags {
-                            claude_dir,
-                            claude_code_router_dir,
-                            copilot_dir,
-                            cursor_dir,
-                            gemini_dir,
-                            codex_dir,
-                            jules_dir,
-                            agent_configs,
+                            claude_dir: jail.claude_dir,
+                            claude_code_router_dir: jail.claude_code_router_dir,
+                            copilot_dir: jail.copilot_dir,
+                            cursor_dir: jail.cursor_dir,
+                            gemini_dir: jail.gemini_dir,
+                            codex_dir: jail.codex_dir,
+                            jules_dir: jail.jules_dir,
+                            agent_configs: jail.agent_configs,
                         },
                     );
 
                     // Opt-in: GPG configuration
-                    if git_gpg {
+                    if jail.git_gpg {
                         let cwd = std::env::current_dir()?;
                         builder = git_gpg::setup_git_gpg_config(builder, &cwd, &home_path)?;
                     }
 
                     // Parse mounts
-                    for mount_str in mount {
+                    for mount_str in jail.mount {
                         let mount =
                             Commands::parse_mount(&mount_str).map_err(error::JailError::Config)?;
                         builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
                     }
 
                     // Parse port mappings
-                    for port_str in port {
+                    for port_str in jail.port {
                         let port_mapping =
                             Commands::parse_port(&port_str).map_err(error::JailError::Config)?;
                         builder = builder.port_mapping(
@@ -290,52 +263,52 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     }
 
                     // Parse environment variables
-                    for env_str in env {
+                    for env_str in jail.env {
                         let (key, value) =
                             Commands::parse_env(&env_str).map_err(error::JailError::Config)?;
                         builder = builder.env(key, value);
                     }
 
                     // Set resource limits
-                    if let Some(mem) = memory {
+                    if let Some(mem) = jail.memory {
                         builder = builder.memory_limit(mem);
                     }
-                    if let Some(cpu_quota) = cpu {
+                    if let Some(cpu_quota) = jail.cpu {
                         builder = builder.cpu_quota(cpu_quota);
                     }
 
                     // Set upgrade flag
-                    builder = builder.upgrade(upgrade);
+                    builder = builder.upgrade(jail.upgrade);
 
                     // Set force layers
-                    builder = builder.force_layers(layers);
+                    builder = builder.force_layers(jail.layers);
 
                     // Set isolated flag
-                    builder = builder.isolated(isolated);
+                    builder = builder.isolated(jail.isolated);
 
                     // Set verbose flag
                     builder = builder.verbose(verbose);
 
                     // Set no_nix flag
-                    builder = builder.no_nix(no_nix);
+                    builder = builder.no_nix(jail.no_nix);
 
                     // Set block_host flag (inverted: !no_block_host means blocking is enabled)
-                    builder = builder.block_host(!no_block_host);
+                    builder = builder.block_host(!jail.no_block_host);
 
                     builder.build()
                 };
 
-                jail.create().await?;
+                jail_manager.create().await?;
 
                 // Create .gitconfig file inside the container if git_gpg is enabled
-                if git_gpg {
+                if jail_manager.config().git_gpg {
                     let cwd = std::env::current_dir()?;
-                    if let Err(e) = git_gpg::create_gitconfig_in_container(&cwd, &jail).await {
+                    if let Err(e) = git_gpg::create_gitconfig_in_container(&cwd, &jail_manager).await {
                         warn!("Failed to create .gitconfig in container: {}", e);
                     }
                 }
 
-                info!("Jail created: {}", jail.config().name);
+                info!("Jail created: {}", jail_manager.config().name);
             }
 
             Commands::Remove {
@@ -620,14 +593,14 @@ async fn run_agent_command(
 ) -> error::Result<()> {
     // Validate agent-specific config flags before proceeding
     let config_flags = agents::AgentConfigFlags {
-        claude_dir: common.claude_dir,
-        claude_code_router_dir: common.claude_code_router_dir,
-        copilot_dir: common.copilot_dir,
-        cursor_dir: common.cursor_dir,
-        gemini_dir: common.gemini_dir,
-        codex_dir: common.codex_dir,
-        jules_dir: common.jules_dir,
-        agent_configs: common.agent_configs,
+        claude_dir: common.jail.claude_dir,
+        claude_code_router_dir: common.jail.claude_code_router_dir,
+        copilot_dir: common.jail.copilot_dir,
+        cursor_dir: common.jail.cursor_dir,
+        gemini_dir: common.jail.gemini_dir,
+        codex_dir: common.jail.codex_dir,
+        jules_dir: common.jail.jules_dir,
+        agent_configs: common.jail.agent_configs,
     };
 
     agent
@@ -637,33 +610,10 @@ async fn run_agent_command(
     agent_commands::run_ai_agent_command(
         agent.command_name(),
         agent_commands::AgentCommandParams {
-            backend: common.backend,
-            image: common.image,
-            mount: common.mount,
-            port: common.port,
-            env: common.env,
-            no_network: common.no_network,
-            memory: common.memory,
-            cpu: common.cpu,
-            no_workspace: common.no_workspace,
-            workspace_path: common.workspace_path,
-            claude_dir: common.claude_dir,
-            claude_code_router_dir: common.claude_code_router_dir,
-            copilot_dir: common.copilot_dir,
-            cursor_dir: common.cursor_dir,
-            gemini_dir: common.gemini_dir,
-            codex_dir: common.codex_dir,
-            jules_dir: common.jules_dir,
-            agent_configs: common.agent_configs,
-            git_gpg: common.git_gpg,
-            upgrade: common.upgrade,
-            force_layers: common.layers,
+            jail: common.jail,
             shell: common.shell,
-            isolated: common.isolated,
-            verbose,
             auth: common.auth,
-            no_nix: common.no_nix,
-            no_block_host: common.no_block_host,
+            verbose,
             args,
         },
     )
@@ -784,50 +734,30 @@ async fn upgrade_single_jail(
 
     // Create a new jail with the updated image but same configuration
     info!("Creating new jail with image '{}'...", new_image);
-    let mut builder = JailBuilder::new(jail_name)
-        .backend(old_config.backend)
+    let builder = JailBuilder::from_config(old_config)
         .base_image(new_image.clone())
-        .network(old_config.network.enabled, old_config.network.private)
+        .upgrade(true) // Ensure layers are rebuilt
         .verbose(verbose);
-
-    // Restore environment variables
-    for (key, value) in &old_config.environment {
-        builder = builder.env(key.clone(), value.clone());
-    }
-
-    // Restore bind mounts
-    for mount in &old_config.bind_mounts {
-        builder = builder.bind_mount(mount.source.clone(), mount.target.clone(), mount.readonly);
-    }
-
-    // Restore port mappings
-    for port_mapping in &old_config.port_mappings {
-        builder = builder.port_mapping(
-            port_mapping.host_port,
-            port_mapping.container_port,
-            &port_mapping.protocol,
-        );
-    }
-
-    // Restore resource limits
-    if let Some(memory) = old_config.limits.memory_mb {
-        builder = builder.memory_limit(memory);
-    }
-    if let Some(cpu) = old_config.limits.cpu_quota {
-        builder = builder.cpu_quota(cpu);
-    }
 
     let new_jail = builder.build();
     new_jail.create().await?;
 
     // Create .claude.json file inside the container if needed (only for Claude agent)
-    if jail_name.ends_with("-claude") {
+    if jail_name.contains("__claude") {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let home_path = std::path::PathBuf::from(&home);
         if let Err(e) = create_claude_json_in_container(&home_path, &new_jail).await {
             warn!("Failed to create .claude.json in container: {}", e);
         }
     }
+     // Create .gitconfig file inside the container if git_gpg is enabled
+    if new_jail.config().git_gpg {
+        let cwd = std::env::current_dir()?;
+        if let Err(e) = git_gpg::create_gitconfig_in_container(&cwd, &new_jail).await {
+            warn!("Failed to create .gitconfig in container: {}", e);
+        }
+    }
+
 
     println!("✓ Jail '{jail_name}' successfully upgraded to image '{new_image}'");
     info!("Upgrade completed successfully");
