@@ -34,7 +34,7 @@ pub async fn build_language_layers_parallel(
     base_image: &str,
     lang_types: &[ProjectType],
     _force_layers: &[String],
-    _upgrade: bool,
+    upgrade: bool,
     verbose: bool,
 ) -> Result<HashMap<String, String>> {
     if lang_types.is_empty() {
@@ -56,7 +56,7 @@ pub async fn build_language_layers_parallel(
         debug!("Spawning parallel build task for layer: {}", layer_name);
 
         join_set.spawn(async move {
-            let result = build_shared_layer(&layer_name, Some(&base_image), verbose).await?;
+            let result = build_shared_layer(&layer_name, Some(&base_image), verbose, upgrade).await?;
             Ok::<_, crate::error::JailError>((layer_name, result))
         });
     }
@@ -210,7 +210,7 @@ async fn ensure_layer_exists(layer: &str, base_image: Option<&str>) -> Result<()
     info!("📥 Pre-fetching layer: {}", layer);
 
     // Build the layer (non-verbose to avoid cluttering output)
-    build_shared_layer(layer, base_image, false).await?;
+    build_shared_layer(layer, base_image, false, false).await?;
 
     info!("✓ Pre-fetched layer: {}", layer);
     Ok(())

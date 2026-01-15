@@ -598,6 +598,7 @@ async fn build_custom_layer(
     base_image: &str,
     image_tag: &str,
     verbose: bool,
+    no_cache: bool,
 ) -> Result<String> {
     let custom_containerfile_path = workspace_path.join(CUSTOM_CONTAINERFILE_NAME);
 
@@ -637,6 +638,10 @@ async fn build_custom_layer(
     // Build command
     let mut cmd = Command::new("podman");
     cmd.arg("build").arg("-t").arg(image_tag);
+
+    if no_cache {
+        cmd.arg("--no-cache");
+    }
 
     // Add hash label to track Containerfile changes
     cmd.arg("--label")
@@ -698,6 +703,7 @@ pub async fn build_shared_layer(
     layer_name: &str,
     base_image: Option<&str>,
     verbose: bool,
+    force_rebuild: bool,
 ) -> Result<String> {
     let image_name = match layer_name {
         "base" => BASE_IMAGE_NAME.to_string(),
@@ -721,12 +727,12 @@ pub async fn build_shared_layer(
     };
 
     // Check if image needs to be rebuilt (doesn't exist or Containerfile changed)
-    if !image_needs_rebuild(&image_name, layer_name).await? {
+    if !force_rebuild && !image_needs_rebuild(&image_name, layer_name).await? {
         debug!("Shared layer {} is up to date", image_name);
         return Ok(image_name);
     }
 
-    build_image_from_containerfile(layer_name, base_image, &image_name, verbose).await
+    build_image_from_containerfile(layer_name, base_image, &image_name, verbose, force_rebuild).await
 }
 
 /// Internal function to build an image from a Containerfile
@@ -735,6 +741,7 @@ async fn build_image_from_containerfile(
     base_image: Option<&str>,
     image_tag: &str,
     verbose: bool,
+    no_cache: bool,
 ) -> Result<String> {
     // Create spinner if not in verbose mode
     let spinner = if !verbose {
@@ -772,6 +779,10 @@ async fn build_image_from_containerfile(
     // Build command
     let mut cmd = Command::new("podman");
     cmd.arg("build").arg("-t").arg(image_tag);
+
+    if no_cache {
+        cmd.arg("--no-cache");
+    }
 
     // Add hash label to track Containerfile changes
     cmd.arg("--label")
@@ -883,15 +894,14 @@ pub async fn build_project_image(
     };
 
     // Step 1: Build base layer (shared :latest)
-    let should_rebuild_base = upgrade
-        || force_layers.contains(&"base".to_string())
-        || !image_exists(BASE_IMAGE_NAME).await?;
+    let force_base = upgrade || force_layers.contains(&"base".to_string());
+    let should_rebuild_base = force_base || !image_exists(BASE_IMAGE_NAME).await?;
 
     let base_image = if should_rebuild_base {
         if verbose {
             info!("Building base layer...");
         }
-        build_shared_layer("base", None, verbose).await?
+        build_shared_layer("base", None, verbose, force_base).await?
     } else {
         debug!("Base layer already exists");
         BASE_IMAGE_NAME.to_string()
@@ -939,12 +949,11 @@ pub async fn build_project_image(
                 for lang_type in types {
                     let layer_name = lang_type.language_layer();
                     let lang_image_name = get_language_image_name(lang_type);
-                    let should_rebuild_lang = upgrade
-                        || force_layers.contains(&layer_name.to_string())
-                        || !image_exists(lang_image_name).await?;
+                    let should_force_lang = upgrade || force_layers.contains(&layer_name.to_string());
+                    let should_rebuild_lang = should_force_lang || !image_exists(lang_image_name).await?;
 
                     current_image = if should_rebuild_lang {
-                        build_shared_layer(layer_name, Some(&current_image), verbose).await?
+                        build_shared_layer(layer_name, Some(&current_image), verbose, should_force_lang).await?
                     } else {
                         lang_image_name.to_string()
                     };
@@ -955,12 +964,11 @@ pub async fn build_project_image(
         _ => {
             let layer_name = project_type.language_layer();
             let lang_image_name = get_language_image_name(&project_type);
-            let should_rebuild_lang = upgrade
-                || force_layers.contains(&layer_name.to_string())
-                || !image_exists(lang_image_name).await?;
+            let should_force_lang = upgrade || force_layers.contains(&layer_name.to_string());
+            let should_rebuild_lang = should_force_lang || !image_exists(lang_image_name).await?;
 
             if should_rebuild_lang {
-                build_shared_layer(layer_name, Some(&base_image), verbose).await?
+                build_shared_layer(layer_name, Some(&base_image), verbose, should_force_lang).await?
             } else {
                 debug!("Language layer {} already exists", lang_image_name);
                 lang_image_name.to_string()
@@ -982,15 +990,14 @@ pub async fn build_project_image(
 
         let custom_image_name = format!("localhost/jail-ai-custom:{}", custom_layer_tag);
 
-        let should_rebuild_custom = upgrade
-            || force_layers.contains(&"custom".to_string())
-            || !image_exists(&custom_image_name).await?;
+        let should_force_custom = upgrade || force_layers.contains(&"custom".to_string());
+        let should_rebuild_custom = should_force_custom || !image_exists(&custom_image_name).await?;
 
         if should_rebuild_custom {
             if verbose {
                 info!("Building custom layer: {}", custom_image_name);
             }
-            build_custom_layer(workspace_path, &language_image, &custom_image_name, verbose).await?
+            build_custom_layer(workspace_path, &language_image, &custom_image_name, verbose, should_force_custom).await?
         } else {
             debug!("Custom layer already exists: {}", custom_image_name);
             custom_image_name
@@ -1021,9 +1028,8 @@ pub async fn build_project_image(
         };
 
         let final_image_name = get_agent_project_image_name(agent, &image_tag);
-        let should_rebuild_agent = upgrade
-            || force_layers.contains(&agent_layer)
-            || !image_exists(&final_image_name).await?;
+        let should_force_agent = upgrade || force_layers.contains(&agent_layer);
+        let should_rebuild_agent = should_force_agent || !image_exists(&final_image_name).await?;
 
         if should_rebuild_agent {
             if verbose {
@@ -1034,6 +1040,7 @@ pub async fn build_project_image(
                 Some(&custom_image),
                 &final_image_name,
                 verbose,
+                should_force_agent,
             )
             .await?;
         } else {
