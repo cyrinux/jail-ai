@@ -56,7 +56,8 @@ pub async fn build_language_layers_parallel(
         debug!("Spawning parallel build task for layer: {}", layer_name);
 
         join_set.spawn(async move {
-            let result = build_shared_layer(&layer_name, Some(&base_image), verbose, upgrade).await?;
+            let result =
+                build_shared_layer(&layer_name, Some(&base_image), verbose, upgrade).await?;
             Ok::<_, crate::error::JailError>((layer_name, result))
         });
     }

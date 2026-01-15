@@ -224,6 +224,38 @@ pub async fn run_ai_agent_command(
         BackendType::detect()
     };
 
+    // Check for weekly upgrade opportunity
+    if !params.upgrade && params.force_layers.is_empty() {
+        if let Ok(mut state) = crate::state::State::load() {
+            let now = chrono::Utc::now();
+            let should_check = match state.last_weekly_upgrade_check {
+                Some(last_check) => {
+                    let duration = now.signed_duration_since(last_check);
+                    duration.num_days() >= 7
+                }
+                None => true,
+            };
+
+            if should_check {
+                println!("\n📅 Weekly Upgrade Check");
+                println!("It has been a week since the last upgrade check.");
+                println!(
+                    "This will force a rebuild of all layers to ensure you have the latest tools."
+                );
+
+                if prompt_upgrade()? {
+                    info!("User accepted weekly upgrade");
+                    params.upgrade = true;
+                }
+
+                state.last_weekly_upgrade_check = Some(now);
+                if let Err(e) = state.save() {
+                    warn!("Failed to save state: {}", e);
+                }
+            }
+        }
+    }
+
     // Check if we need to create/recreate the jail
     // --upgrade and --layers force layer rebuilding + container recreation
     // --auth only forces container recreation (for host networking) without rebuilding layers
@@ -705,11 +737,16 @@ pub async fn run_ai_agent_command(
     if let Some(agent) = crate::agents::Agent::from_str(agent_command) {
         if agent.requires_server_start() {
             info!("Agent requires server start, executing startup sequence");
-            
+
             if let Some(server_cmd) = agent.server_start_command() {
                 // Start the server in the background
-                info!("Starting {} server with command: {} {}", agent.display_name(), agent_command, server_cmd);
-                
+                info!(
+                    "Starting {} server with command: {} {}",
+                    agent.display_name(),
+                    agent_command,
+                    server_cmd
+                );
+
                 let server_command = if uses_nix_wrapper {
                     vec![
                         "/usr/local/bin/nix-wrapper".to_string(),
@@ -719,18 +756,18 @@ pub async fn run_ai_agent_command(
                 } else {
                     vec![agent_command.to_string(), server_cmd.to_string()]
                 };
-                
+
                 // Execute server start in background (non-interactive)
                 let server_output = jail.exec(&server_command, false).await?;
                 if !server_output.is_empty() {
                     info!("Server start output: {}", server_output);
                 }
-                
+
                 // Wait a bit for server to start
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 info!("Server started, proceeding with main command");
             }
-            
+
             // Override agent_command with the main command for agents that require server start
             if let Some(main_cmd) = agent.main_command() {
                 let command = if uses_nix_wrapper {
@@ -746,12 +783,12 @@ pub async fn run_ai_agent_command(
                     cmd.extend(params.args);
                     cmd
                 };
-                
+
                 let output = jail.exec(&command, true).await?;
                 if !output.is_empty() {
                     print!("{output}");
                 }
-                
+
                 return Ok(());
             }
         }
