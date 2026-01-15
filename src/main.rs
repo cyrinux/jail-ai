@@ -12,6 +12,7 @@ mod image_parallel;
 mod jail;
 mod jail_setup;
 mod project_detection;
+mod state;
 mod strings;
 mod worktree;
 

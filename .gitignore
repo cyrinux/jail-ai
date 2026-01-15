@@ -4,3 +4,6 @@
 *.swo
 *~
 .DS_Store
+# BMAD (local only)
+.bmad-core/
+.bmad-*/

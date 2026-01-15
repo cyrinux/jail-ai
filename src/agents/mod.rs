@@ -321,7 +321,10 @@ mod tests {
     #[test]
     fn test_agent_from_str() {
         assert_eq!(Agent::from_str("claude"), Some(Agent::Claude));
-        assert_eq!(Agent::from_str("claude-code-router"), Some(Agent::ClaudeCodeRouter));
+        assert_eq!(
+            Agent::from_str("claude-code-router"),
+            Some(Agent::ClaudeCodeRouter)
+        );
         assert_eq!(Agent::from_str("ccr"), Some(Agent::ClaudeCodeRouter));
         assert_eq!(Agent::from_str("copilot"), Some(Agent::Copilot));
         assert_eq!(Agent::from_str("cursor"), Some(Agent::Cursor));
@@ -347,7 +350,10 @@ mod tests {
     #[test]
     fn test_agent_normalized_name() {
         assert_eq!(Agent::Claude.normalized_name(), "claude");
-        assert_eq!(Agent::ClaudeCodeRouter.normalized_name(), "claude-code-router");
+        assert_eq!(
+            Agent::ClaudeCodeRouter.normalized_name(),
+            "claude-code-router"
+        );
         assert_eq!(Agent::Cursor.normalized_name(), "cursor");
     }
 
@@ -383,7 +389,10 @@ mod tests {
     #[test]
     fn test_agent_layer_name() {
         assert_eq!(Agent::Claude.layer_name(), "agent-claude");
-        assert_eq!(Agent::ClaudeCodeRouter.layer_name(), "agent-claude-code-router");
+        assert_eq!(
+            Agent::ClaudeCodeRouter.layer_name(),
+            "agent-claude-code-router"
+        );
         assert_eq!(Agent::Cursor.layer_name(), "agent-cursor");
     }
 
@@ -436,7 +445,10 @@ mod tests {
     #[test]
     fn test_agent_config_flag_name() {
         assert_eq!(Agent::Claude.config_flag_name(), "claude-dir");
-        assert_eq!(Agent::ClaudeCodeRouter.config_flag_name(), "claude-code-router-dir");
+        assert_eq!(
+            Agent::ClaudeCodeRouter.config_flag_name(),
+            "claude-code-router-dir"
+        );
         assert_eq!(Agent::Copilot.config_flag_name(), "copilot-dir");
         assert_eq!(Agent::Cursor.config_flag_name(), "cursor-dir");
         assert_eq!(Agent::Gemini.config_flag_name(), "gemini-dir");
