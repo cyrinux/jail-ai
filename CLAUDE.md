@@ -317,7 +317,7 @@ The layered image system automatically detects your project type and builds appr
   - C# (.NET SDK 8.0, dotnet-format, EF Core tools)
 - **Build tools**: gcc, make, cmake, pkg-config
 - **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
-- **Python tools**: black, pylint, mypy, pytest
+- **Python tools**: black, pylint, mypy, pytest, uv/uvx (for running MCP servers)
 - **Rust tools**: clippy, rustfmt
 - **Nix tools**: Nix package manager with flakes enabled
 - **AI Coding Agents**:

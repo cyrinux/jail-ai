@@ -186,9 +186,6 @@ RUN cat > /etc/skel/.bashrc <<'EOFBASHRC'
 source /usr/local/share/jail-ai/base.bash
 source /usr/local/share/jail-ai/nix.bash 2>/dev/null || true
 
-# Install uvx
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
 # Auto-load Nix flake development environment if available
 # Only for interactive shells, not for command execution
 if command -v nix >/dev/null 2>&1 && [[ $- == *i* ]] && [ -f /workspace/flake.nix ] && [ -z "$JAIL_AI_NIX_LOADED" ]; then
@@ -198,6 +195,9 @@ if command -v nix >/dev/null 2>&1 && [[ $- == *i* ]] && [ -f /workspace/flake.ni
   exec nix develop --command zsh
 fi
 EOFBASHRC
+
+# Install uv (provides uvx for running Python tools, commonly used for MCP servers)
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 
 # Create agent user with configurable UID/GID
 RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
