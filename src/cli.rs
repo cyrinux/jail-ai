@@ -107,6 +107,11 @@ pub struct AgentCommandOptions {
     /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
     #[arg(long)]
     pub no_block_host: bool,
+
+    /// Enable Podman-in-Podman by mounting the host's Podman socket
+    /// This allows running containers inside the jail (useful for MCP agents)
+    #[arg(long)]
+    pub podman: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -227,6 +232,11 @@ pub enum Commands {
         /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
         #[arg(long)]
         no_block_host: bool,
+
+        /// Enable Podman-in-Podman by mounting the host's Podman socket
+        /// This allows running containers inside the jail (useful for MCP agents)
+        #[arg(long)]
+        podman: bool,
     },
 
     /// Remove a jail

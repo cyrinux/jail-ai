@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tig \
     vim \
     tree \
-    uv \
     file \
     less \
     openssh-client \
@@ -186,6 +185,9 @@ EOFBASH
 RUN cat > /etc/skel/.bashrc <<'EOFBASHRC'
 source /usr/local/share/jail-ai/base.bash
 source /usr/local/share/jail-ai/nix.bash 2>/dev/null || true
+
+# Install uvx
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Auto-load Nix flake development environment if available
 # Only for interactive shells, not for command execution

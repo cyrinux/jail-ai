@@ -188,6 +188,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 isolated,
                 no_nix,
                 no_block_host,
+                podman,
             } => {
                 let jail = if let Some(config_path) = config {
                     // Load from config file
@@ -319,6 +320,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     // Set block_host flag (inverted: !no_block_host means blocking is enabled)
                     builder = builder.block_host(!no_block_host);
+
+                    // Set podman_socket flag for Podman-in-Podman support
+                    builder = builder.podman_socket(podman);
 
                     builder.build()
                 };
@@ -656,6 +660,7 @@ async fn run_agent_command(
             auth: common.auth,
             no_nix: common.no_nix,
             no_block_host: common.no_block_host,
+            podman: common.podman,
             args,
         },
     )

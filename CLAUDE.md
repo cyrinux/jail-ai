@@ -77,6 +77,9 @@ cargo run -- create my-agent --jules-dir
 # Create jail with all agent config directories (combines --claude-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
 cargo run -- create my-agent --agent-configs
 
+# Create jail with Podman-in-Podman support (for running MCP agents)
+cargo run -- create my-agent --podman
+
 # Create jail with git and GPG configuration mapping
 cargo run -- create my-agent --git-gpg
 
@@ -118,6 +121,9 @@ cargo run -- jules --jules-dir -- --help
 # AI Agent with port mapping (e.g., for connecting to host PostgreSQL)
 cargo run -- claude -p 5432:5432 -- chat "help me with database queries"
 cargo run -- claude -p 8080:80 -p 5432:5432 -- chat "debug my web app and database"
+
+# AI Agent with Podman-in-Podman support (for running MCP agents inside the jail)
+cargo run -- claude --podman -- chat "help me run containers"
 
 # AI Agent commands skipping nix layer (use other detected languages instead)
 cargo run -- claude --no-nix -- chat "help me debug this code"
@@ -408,6 +414,55 @@ When `--git-gpg` flag is used, jail-ai will:
 This ensures that git commits and tags made inside the jail will use your configured identity and signing key.
 
 **Note**: Git and GPG configuration mapping are **opt-in** (disabled by default). Use `--git-gpg` flag to enable them.
+
+## Podman-in-Podman Support
+
+jail-ai supports running containers inside the jail using Podman-in-Podman. This is useful for MCP (Model Context Protocol) agents that need to spawn containers.
+
+### Usage
+
+Use the `--podman` flag to enable Podman-in-Podman support:
+
+```bash
+# Create a jail with Podman-in-Podman support
+cargo run -- create my-agent --podman
+
+# Run Claude with Podman-in-Podman support
+cargo run -- claude --podman
+
+# Combine with other options
+cargo run -- claude --podman --claude-dir --git-gpg
+```
+
+### How it Works
+
+When `--podman` is enabled, jail-ai:
+
+1. **Mounts the Podman socket**: The host's Podman socket (`/run/user/<UID>/podman/podman.sock`) is mounted to `/run/podman/podman.sock` inside the container
+2. **Sets CONTAINER_HOST**: The `CONTAINER_HOST` environment variable is set to `unix:///run/podman/podman.sock` for seamless Podman remote operation
+
+### Security Considerations
+
+- The container can manage containers on the host through the socket
+- This is more secure than using `--privileged` as it doesn't grant full root access
+- Containers started from within the jail run on the host, not nested
+- Use with caution in multi-tenant environments
+
+### Use Cases
+
+- **MCP Agents**: Run Model Context Protocol agents that need to spawn containers (e.g., for isolated code execution)
+- **CI/CD Tasks**: Run build tasks that require container operations
+- **Development Workflows**: Test containerized applications from within the jail
+
+### Example with MCP Agent
+
+```bash
+# Start Claude with Podman support for MCP agents
+jail-ai claude --podman --claude-dir
+
+# Inside the jail, you can now use podman commands
+podman run --rm alpine echo "Hello from nested container"
+```
 
 ## Shell Features
 

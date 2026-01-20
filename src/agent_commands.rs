@@ -38,6 +38,7 @@ pub struct AgentCommandParams {
     pub auth: bool,
     pub no_nix: bool,
     pub no_block_host: bool,
+    pub podman: bool,
     pub args: Vec<String>,
 }
 
@@ -634,6 +635,9 @@ pub async fn run_ai_agent_command(
 
         // Set block_host flag (inverted: !no_block_host means blocking is enabled)
         builder = builder.block_host(!params.no_block_host);
+
+        // Set podman_socket flag for Podman-in-Podman support
+        builder = builder.podman_socket(params.podman);
 
         let jail = builder.build();
         jail.create().await?;

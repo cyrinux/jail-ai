@@ -179,6 +179,11 @@ impl JailBuilder {
         self
     }
 
+    pub fn podman_socket(mut self, podman_socket: bool) -> Self {
+        self.config.podman_socket = podman_socket;
+        self
+    }
+
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }

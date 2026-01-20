@@ -272,6 +272,37 @@ impl PodmanBackend {
             args.push(format!("{nix_volume}:/nix"));
         }
 
+        // Podman-in-Podman: mount host's Podman socket
+        // This allows running containers inside the jail (useful for MCP agents)
+        if config.podman_socket {
+            // Get the user's UID for the socket path
+            let uid = std::process::Command::new("id")
+                .arg("-u")
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|| "1000".to_string());
+
+            let socket_path = format!("/run/user/{}/podman/podman.sock", uid);
+
+            // Check if the socket exists
+            if std::path::Path::new(&socket_path).exists() {
+                debug!("Mounting Podman socket: {}", socket_path);
+                args.push("-v".to_string());
+                args.push(format!("{}:/run/podman/podman.sock", socket_path));
+
+                // Set CONTAINER_HOST environment variable for podman remote
+                args.push("-e".to_string());
+                args.push("CONTAINER_HOST=unix:///run/podman/podman.sock".to_string());
+            } else {
+                warn!(
+                    "Podman socket not found at {}. Podman-in-Podman may not work.",
+                    socket_path
+                );
+            }
+        }
+
         // Network settings
         // Supports: no network, host network, private network (slirp4netns), or default bridge
         if !config.network.enabled {
@@ -989,6 +1020,7 @@ impl JailBackend for PodmanBackend {
             pre_create_dirs: Vec::new(), // Not persisted in container metadata
             no_nix: false,
             block_host,
+            podman_socket: false, // Not persisted in container metadata
         })
     }
 }
@@ -1026,6 +1058,7 @@ mod tests {
             pre_create_dirs: Vec::new(),
             no_nix: false,
             block_host: false,
+            podman_socket: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -1106,6 +1139,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            podman_socket: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -1147,6 +1181,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            podman_socket: false,
         };
 
         let args = backend.build_run_args(&config);
@@ -1288,6 +1323,7 @@ mod tests {
             no_nix: false,
             pre_create_dirs: Vec::new(),
             block_host: false,
+            podman_socket: false,
         };
 
         let args = backend.build_run_args(&config_with_nix);
