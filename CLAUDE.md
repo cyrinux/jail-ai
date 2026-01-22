@@ -98,6 +98,9 @@ cargo run -- create my-agent --workspace-path /app
 # Create jail skipping nix layer (when flake.nix is present, use other detected languages instead)
 cargo run -- create my-agent --no-nix
 
+# Create jail with cloud provider tools (AWS CLI + GCP gcloud)
+cargo run -- claude --cloud
+
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
 
@@ -315,6 +318,8 @@ The layered image system automatically detects your project type and builds appr
   - PHP (8.2, Composer, PHPUnit, PHPStan, PHP-CS-Fixer)
   - C/C++ (GCC, Clang, CMake, vcpkg, GDB, Valgrind)
   - C# (.NET SDK 8.0, dotnet-format, EF Core tools)
+  - AWS (AWS CLI v2, eksctl, SAM CLI, CDK, Session Manager, cfn-lint, rain, Copilot CLI, Steampipe)
+  - GCP (gcloud CLI, Cloud SQL Proxy, Skaffold, kubectl, Helm, kpt, emulators)
 - **Build tools**: gcc, make, cmake, pkg-config
 - **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest, uv/uvx (for running MCP servers)

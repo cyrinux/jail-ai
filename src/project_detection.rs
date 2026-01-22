@@ -18,6 +18,8 @@ pub enum ProjectType {
     CSharp,
     Terraform,
     Kubernetes,
+    Aws,
+    Gcp,
     /// Multiple project types detected
     Multi(Vec<ProjectType>),
     /// No specific project type detected
@@ -39,6 +41,8 @@ impl ProjectType {
             ProjectType::CSharp => "csharp",
             ProjectType::Terraform => "terraform",
             ProjectType::Kubernetes => "kubernetes",
+            ProjectType::Aws => "aws",
+            ProjectType::Gcp => "gcp",
             ProjectType::Multi(_) => "multi",
             ProjectType::Generic => "base",
         }
@@ -178,6 +182,44 @@ pub fn detect_project_type_with_options(path: &Path, no_nix: bool) -> ProjectTyp
     {
         debug!("Detected Kubernetes project");
         detected_types.push(ProjectType::Kubernetes);
+    }
+
+    // Check for AWS project (SAM, CDK, CloudFormation, Serverless)
+    if path.join("samconfig.toml").exists()
+        || path.join("samconfig.yaml").exists()
+        || path.join("template.yaml").exists()
+        || path.join("template.yml").exists()
+        || path.join("cdk.json").exists()
+        || path.join("serverless.yml").exists()
+        || path.join("serverless.yaml").exists()
+        || path.join("buildspec.yml").exists()
+        || path.join("buildspec.yaml").exists()
+        || path.join("appspec.yml").exists()
+        || path.join("appspec.yaml").exists()
+        || path.join("aws-exports.js").exists()
+        || path.join("amplify.yml").exists()
+        || path.join(".aws-sam").exists()
+        || path.join("copilot").exists()
+    {
+        debug!("Detected AWS project");
+        detected_types.push(ProjectType::Aws);
+    }
+
+    // Check for GCP project (Google Cloud Platform)
+    if path.join("app.yaml").exists()
+        || path.join("cloudbuild.yaml").exists()
+        || path.join("cloudbuild.json").exists()
+        || path.join(".gcloudignore").exists()
+        || path.join("skaffold.yaml").exists()
+        || path.join("dispatch.yaml").exists()
+        || path.join("cron.yaml").exists()
+        || path.join("queue.yaml").exists()
+        || path.join("index.yaml").exists()
+        || path.join(".firebaserc").exists()
+        || path.join("firebase.json").exists()
+    {
+        debug!("Detected GCP project");
+        detected_types.push(ProjectType::Gcp);
     }
 
     match detected_types.len() {

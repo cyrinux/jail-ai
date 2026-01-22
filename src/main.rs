@@ -65,7 +65,7 @@ pub fn validate_mount_source(source: &std::path::Path) -> error::Result<()> {
     let source = source.canonicalize().map_err(error::JailError::Io)?;
 
     // Check if source is the root filesystem
-    if source == std::path::PathBuf::from("/") {
+    if source == std::path::Path::new("/") {
         return Err(error::JailError::UnsafeMount(
             "Cannot mount root filesystem (/) into container".to_string(),
         ));
@@ -663,6 +663,7 @@ async fn run_agent_command(
             git_gpg: common.git_gpg,
             upgrade: common.upgrade,
             force_layers: common.layers,
+            cloud: common.cloud,
             shell: common.shell,
             isolated: common.isolated,
             verbose,

@@ -26,6 +26,8 @@ const CPP_IMAGE_NAME: &str = "localhost/jail-ai-cpp:latest";
 const CSHARP_IMAGE_NAME: &str = "localhost/jail-ai-csharp:latest";
 const TERRAFORM_IMAGE_NAME: &str = "localhost/jail-ai-terraform:latest";
 const KUBERNETES_IMAGE_NAME: &str = "localhost/jail-ai-kubernetes:latest";
+const AWS_IMAGE_NAME: &str = "localhost/jail-ai-aws:latest";
+const GCP_IMAGE_NAME: &str = "localhost/jail-ai-gcp:latest";
 
 /// Containerfiles embedded from the repository
 const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base.Containerfile");
@@ -40,6 +42,8 @@ const CPP_CONTAINERFILE: &str = include_str!("../containerfiles/cpp.Containerfil
 const CSHARP_CONTAINERFILE: &str = include_str!("../containerfiles/csharp.Containerfile");
 const TERRAFORM_CONTAINERFILE: &str = include_str!("../containerfiles/terraform.Containerfile");
 const KUBERNETES_CONTAINERFILE: &str = include_str!("../containerfiles/kubernetes.Containerfile");
+const AWS_CONTAINERFILE: &str = include_str!("../containerfiles/aws.Containerfile");
+const GCP_CONTAINERFILE: &str = include_str!("../containerfiles/gcp.Containerfile");
 const AGENT_CLAUDE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-claude.Containerfile");
 const AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE: &str =
@@ -68,6 +72,8 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "csharp" => "🎯",
         "terraform" => "🏗️",
         "kubernetes" => "☸️",
+        "aws" => "☁️",
+        "gcp" => "🌐",
         "custom" => "🎨",
         "agent-claude-code-router" => "🔀",
         "agent-claude" => "🤖",
@@ -185,6 +191,8 @@ fn get_language_image_name(project_type: &ProjectType) -> &'static str {
         ProjectType::CSharp => CSHARP_IMAGE_NAME,
         ProjectType::Terraform => TERRAFORM_IMAGE_NAME,
         ProjectType::Kubernetes => KUBERNETES_IMAGE_NAME,
+        ProjectType::Aws => AWS_IMAGE_NAME,
+        ProjectType::Gcp => GCP_IMAGE_NAME,
         ProjectType::Multi(_) | ProjectType::Generic => BASE_IMAGE_NAME,
     }
 }
@@ -214,6 +222,8 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "csharp" => Some(CSHARP_CONTAINERFILE),
         "terraform" => Some(TERRAFORM_CONTAINERFILE),
         "kubernetes" => Some(KUBERNETES_CONTAINERFILE),
+        "aws" => Some(AWS_CONTAINERFILE),
+        "gcp" => Some(GCP_CONTAINERFILE),
         "agent-claude-code-router" => Some(AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE),
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
@@ -718,6 +728,8 @@ pub async fn build_shared_layer(
         "csharp" => CSHARP_IMAGE_NAME.to_string(),
         "terraform" => TERRAFORM_IMAGE_NAME.to_string(),
         "kubernetes" => KUBERNETES_IMAGE_NAME.to_string(),
+        "aws" => AWS_IMAGE_NAME.to_string(),
+        "gcp" => GCP_IMAGE_NAME.to_string(),
         _ => {
             return Err(JailError::Backend(format!(
                 "Unknown shared layer: {}",
@@ -875,6 +887,8 @@ pub async fn build_project_image(
                 "csharp" => lang_types.push(ProjectType::CSharp),
                 "terraform" => lang_types.push(ProjectType::Terraform),
                 "kubernetes" => lang_types.push(ProjectType::Kubernetes),
+                "aws" => lang_types.push(ProjectType::Aws),
+                "gcp" => lang_types.push(ProjectType::Gcp),
                 "base" => {}                                         // base is implicit
                 "custom" => {}                                       // custom is handled separately
                 layer_name if layer_name.starts_with("agent-") => {} // ignore agent layers
@@ -1162,6 +1176,8 @@ mod tests {
             get_language_image_name(&ProjectType::CSharp),
             CSHARP_IMAGE_NAME
         );
+        assert_eq!(get_language_image_name(&ProjectType::Aws), AWS_IMAGE_NAME);
+        assert_eq!(get_language_image_name(&ProjectType::Gcp), GCP_IMAGE_NAME);
         assert_eq!(
             get_language_image_name(&ProjectType::Generic),
             BASE_IMAGE_NAME
@@ -1224,6 +1240,8 @@ mod tests {
         assert!(get_containerfile_content("php").is_some());
         assert!(get_containerfile_content("cpp").is_some());
         assert!(get_containerfile_content("csharp").is_some());
+        assert!(get_containerfile_content("aws").is_some());
+        assert!(get_containerfile_content("gcp").is_some());
         assert!(get_containerfile_content("agent-claude").is_some());
         assert!(get_containerfile_content("unknown").is_none());
     }

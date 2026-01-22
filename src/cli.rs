@@ -92,6 +92,10 @@ pub struct AgentCommandOptions {
     #[arg(long, value_delimiter = ',')]
     pub layers: Vec<String>,
 
+    /// Include cloud provider layers (AWS + GCP tools)
+    #[arg(long)]
+    pub cloud: bool,
+
     /// Start an interactive shell instead of running the agent command
     #[arg(long)]
     pub shell: bool,

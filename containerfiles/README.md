@@ -85,6 +85,14 @@ Each language layer builds on top of the base layer:
   - Image name: `localhost/jail-ai-csharp:latest`
   - Adds: .NET SDK 8.0, dotnet-format, Entity Framework Core tools
 
+- **`aws.Containerfile`** - AWS development environment
+  - Image name: `localhost/jail-ai-aws:latest`
+  - Adds: AWS CLI v2, eksctl, SAM CLI, CDK, Session Manager, cfn-lint, rain, Copilot CLI, Steampipe
+
+- **`gcp.Containerfile`** - Google Cloud Platform development environment
+  - Image name: `localhost/jail-ai-gcp:latest`
+  - Adds: gcloud CLI, GKE auth plugin, Cloud SQL Proxy, Skaffold, kubectl, Helm, kpt, emulators (Firestore, Pub/Sub, Bigtable, Datastore, Spanner)
+
 ### Agent Layers
 Agent layers require Node.js, so they build on top of the nodejs layer:
 
@@ -123,6 +131,8 @@ When you create a jail, jail-ai automatically detects your project type and buil
 | `composer.json`, `composer.lock` | PHP | `base` → `php` |
 | `CMakeLists.txt` | C/C++ | `base` → `cpp` |
 | `*.csproj`, `*.sln` | C# | `base` → `csharp` |
+| `samconfig.toml`, `cdk.json`, `serverless.yml` | AWS | `base` → `aws` |
+| `app.yaml`, `cloudbuild.yaml`, `.gcloudignore` | GCP | `base` → `gcp` |
 | Multiple files | Multi-language | `base` → all detected layers |
 | No specific files | Generic | `base` only |
 
@@ -224,6 +234,8 @@ cargo run -- create --image localhost/my-custom-image:latest
 | `php` | ~280MB | base + PHP |
 | `cpp` | ~320MB | base + C/C++ |
 | `csharp` | ~380MB | base + .NET SDK |
+| `aws` | ~500MB | base + AWS tools |
+| `gcp` | ~450MB | base + GCP tools |
 | `agent-claude` | ~300MB | nodejs + Claude |
 
 Compare to monolithic: **~1.2GB** with all languages + all agents!

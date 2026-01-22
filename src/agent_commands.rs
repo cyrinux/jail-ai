@@ -33,6 +33,7 @@ pub struct AgentCommandParams {
     pub git_gpg: bool,
     pub upgrade: bool,
     pub force_layers: Vec<String>,
+    pub cloud: bool,
     pub shell: bool,
     pub isolated: bool,
     pub verbose: bool,
@@ -655,8 +656,17 @@ pub async fn run_ai_agent_command(
         // Container removal is handled manually above when should_recreate is true
         builder = builder.upgrade(params.upgrade);
 
-        // Set force layers
-        builder = builder.force_layers(params.force_layers);
+        // Set force layers (include cloud layers if --cloud is specified)
+        let mut force_layers = params.force_layers;
+        if params.cloud {
+            if !force_layers.contains(&"aws".to_string()) {
+                force_layers.push("aws".to_string());
+            }
+            if !force_layers.contains(&"gcp".to_string()) {
+                force_layers.push("gcp".to_string());
+            }
+        }
+        builder = builder.force_layers(force_layers);
 
         // Set isolated flag
         builder = builder.isolated(params.isolated);
