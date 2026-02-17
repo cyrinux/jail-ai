@@ -219,7 +219,15 @@ RUN if ! getent group ${PGID} > /dev/null 2>&1; then \
     && usermod -aG sudo agent \
     && mkdir -p /etc/sudoers.d \
     && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
+    && echo 'Defaults env_keep += "CONTAINER_HOST"' >> /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
+
+# Configure subuid/subgid for rootless podman-in-podman support
+# Allows inner podman to handle images with extended UID ownership (e.g. shadow:42)
+RUN echo 'root:100000:65536' >> /etc/subuid \
+    && echo 'root:100000:65536' >> /etc/subgid \
+    && echo 'agent:165536:65536' >> /etc/subuid \
+    && echo 'agent:165536:65536' >> /etc/subgid
 
 # Create workspace and empty config directories for mounting
 RUN mkdir -p /workspace && chown agent:agent /workspace \
