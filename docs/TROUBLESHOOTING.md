@@ -61,6 +61,16 @@ sudo apt-get update
 sudo apt-get install podman
 ```
 
+If your package manager does not support newer version of podman,
+you can manually install Podman from static releases.
+
+```bash
+VERSION=<VERSION>
+curl -fsSL -o podman-linux-amd64.tar.gz https://github.com/mgoltzsche/podman-static/releases/download/$VERSION/podman-linux-amd64.tar.gz
+tar -xzf podman-linux-amd64.tar.gz
+sudo cp -r podman-linux-amd64/usr podman-linux-amd64/etc /
+```
+
 ## eBPF Build Issues
 
 See [EBPF_SETUP.md](./EBPF_SETUP.md) for detailed eBPF troubleshooting.
