@@ -49,7 +49,7 @@ else
     $CONTAINER_CMD run -d --name "$CONTAINER_NAME" \
       -v "$(pwd)":/workspace \
       -w /workspace \
-      rust:latest \
+      ghcr.io/rust-lang/rust:latest \
       sleep infinity
     
     # Install tools in the new container

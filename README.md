@@ -39,7 +39,7 @@ For advanced network isolation using eBPF:
 git clone https://github.com/cyrinux/jail-ai.git
 cd jail-ai
 
-# Build eBPF programs (requires Docker/Podman)
+# Build eBPF programs (requires Podman >= 5.7.0)
 ./build-ebpf.sh
 
 # Build and install main binary and eBPF loader
@@ -54,6 +54,7 @@ getcap $(which jail-ai-ebpf-loader)
 ```
 
 **eBPF Host Blocking Benefits:**
+
 - Prevents containers from accessing host network interfaces
 - Uses unprivileged eBPF programs loaded by a small (~400 LOC) helper binary
 - Main jail-ai binary remains unprivileged
@@ -136,18 +137,21 @@ jail-ai includes several performance optimizations for faster execution:
 ### Opt-in Features (Feature Flags)
 
 Enable parallel building for multi-language projects:
+
 ```bash
 export JAIL_AI_PARALLEL_BUILD=1
 jail-ai claude  # Up to 3× faster for Rust + Node.js + Python projects
 ```
 
 Enable background pre-fetching of layers:
+
 ```bash
 export JAIL_AI_PREFETCH=1
 jail-ai claude  # Layers build in background while you work
 ```
 
 Combine both for maximum performance:
+
 ```bash
 export JAIL_AI_PARALLEL_BUILD=1
 export JAIL_AI_PREFETCH=1
@@ -155,6 +159,7 @@ jail-ai claude
 ```
 
 **Performance Gains:**
+
 - Single-language projects: ~1.2× faster
 - Multi-language projects: ~2.8× faster with parallel build
 - Repeated operations: ~6× faster with caching
@@ -169,11 +174,13 @@ jail-ai uses a smart layered image system that automatically detects your projec
 ### Image Layers
 
 1. **Base Layer** (`localhost/jail-ai-base:latest`)
+
    - Shell: zsh with Powerlevel10k theme, bash
    - Shell enhancements: fzf, ripgrep, fd-find
    - Utilities: git, vim, nano, helix, jq, tree, tmux, htop, gh CLI
 
 2. **Language Layers** (built on demand)
+
    - 🦀 **Rust**: cargo, clippy, rustfmt
    - 🐹 **Go**: go toolchain
    - 🟢 **Node.js**: npm, yarn, pnpm
