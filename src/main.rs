@@ -183,6 +183,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 gemini_dir,
                 codex_dir,
                 jules_dir,
+                pi_dir,
                 agent_configs,
                 git_gpg,
                 upgrade,
@@ -263,6 +264,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                             gemini_dir,
                             codex_dir,
                             jules_dir,
+                            pi_dir,
                             agent_configs,
                         },
                     );
@@ -444,6 +446,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
             Commands::Jules { common, args } => {
                 run_agent_command(agents::Agent::Jules, common, args, verbose).await?;
+            }
+
+            Commands::Pi { common, args } => {
+                run_agent_command(agents::Agent::Pi, common, args, verbose).await?;
             }
 
             Commands::List { current, backend } => {
@@ -632,6 +638,7 @@ async fn run_agent_command(
         gemini_dir: common.gemini_dir,
         codex_dir: common.codex_dir,
         jules_dir: common.jules_dir,
+        pi_dir: common.pi_dir,
         agent_configs: common.agent_configs,
     };
 
@@ -659,6 +666,7 @@ async fn run_agent_command(
             gemini_dir: common.gemini_dir,
             codex_dir: common.codex_dir,
             jules_dir: common.jules_dir,
+            pi_dir: common.pi_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
             upgrade: common.upgrade,

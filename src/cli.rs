@@ -76,7 +76,11 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub jules_dir: bool,
 
-    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
+    /// Mount entire ~/.pi directory for Pi CLI
+    #[arg(long)]
+    pub pi_dir: bool,
+
+    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir, --pi-dir)
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -217,7 +221,11 @@ pub enum Commands {
         #[arg(long)]
         jules_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir)
+        /// Mount entire ~/.pi directory for Pi CLI
+        #[arg(long)]
+        pi_dir: bool,
+
+        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir, --pi-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -362,6 +370,18 @@ pub enum Commands {
         common: AgentCommandOptions,
 
         /// Additional arguments to pass to jules (after --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Quick start Pi in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai pi --pi-dir -- "help with this code"
+    Pi {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+
+        /// Additional arguments to pass to pi (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

@@ -56,6 +56,7 @@ const AGENT_GEMINI_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-gemini.Containerfile");
 const AGENT_CODEX_CONTAINERFILE: &str = include_str!("../containerfiles/agent-codex.Containerfile");
 const AGENT_JULES_CONTAINERFILE: &str = include_str!("../containerfiles/agent-jules.Containerfile");
+const AGENT_PI_CONTAINERFILE: &str = include_str!("../containerfiles/agent-pi.Containerfile");
 
 /// Get emoji for a layer type
 fn get_layer_emoji(layer_name: &str) -> &'static str {
@@ -82,6 +83,7 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "agent-gemini" => "🔮",
         "agent-codex" => "💻",
         "agent-jules" => "🚀",
+        "agent-pi" => "🥧",
         _ => "📦",
     }
 }
@@ -231,6 +233,7 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "agent-gemini" => Some(AGENT_GEMINI_CONTAINERFILE),
         "agent-codex" => Some(AGENT_CODEX_CONTAINERFILE),
         "agent-jules" => Some(AGENT_JULES_CONTAINERFILE),
+        "agent-pi" => Some(AGENT_PI_CONTAINERFILE),
         _ => None,
     }
 }
@@ -1243,6 +1246,7 @@ mod tests {
         assert!(get_containerfile_content("aws").is_some());
         assert!(get_containerfile_content("gcp").is_some());
         assert!(get_containerfile_content("agent-claude").is_some());
+        assert!(get_containerfile_content("agent-pi").is_some());
         assert!(get_containerfile_content("unknown").is_none());
     }
 }

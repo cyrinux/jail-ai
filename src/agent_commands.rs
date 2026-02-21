@@ -29,6 +29,7 @@ pub struct AgentCommandParams {
     pub gemini_dir: bool,
     pub codex_dir: bool,
     pub jules_dir: bool,
+    pub pi_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub upgrade: bool,
@@ -613,6 +614,7 @@ pub async fn run_ai_agent_command(
                 gemini_dir: params.gemini_dir,
                 codex_dir: params.codex_dir,
                 jules_dir: params.jules_dir,
+                pi_dir: params.pi_dir,
                 agent_configs: params.agent_configs,
             },
         );

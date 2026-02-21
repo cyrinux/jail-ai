@@ -102,6 +102,7 @@ pub struct AgentConfigFlags {
     pub gemini_dir: bool,
     pub codex_dir: bool,
     pub jules_dir: bool,
+    pub pi_dir: bool,
     pub agent_configs: bool,
 }
 
@@ -141,6 +142,7 @@ pub fn mount_agent_configs(
             crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
             crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
             crate::agents::Agent::Jules => flags.jules_dir || flags.agent_configs,
+            crate::agents::Agent::Pi => flags.pi_dir || flags.agent_configs,
         };
 
         if should_mount {
@@ -154,12 +156,22 @@ pub fn mount_agent_configs(
             // Mount minimal auth files for agents that support it (e.g., Claude)
             // Use the first config path for credential mounting
             let config_paths = parsed_agent.config_dir_paths();
-            if let Some((host_path_str, _)) = config_paths.first() {
-                let creds_file = home_path.join(host_path_str).join(".credentials.json");
+            if let Some((host_path_str, container_path)) = config_paths.first() {
+                let config_dir = home_path.join(host_path_str);
+                let creds_file = config_dir.join(".credentials.json");
                 if creds_file.exists() {
+                    // Agent uses a .credentials.json file (e.g., Claude)
                     let target = format!("/home/agent/{}/.credentials.json", host_path_str);
                     info!("Auto-mounting {} to {}", creds_file.display(), target);
                     builder = builder.bind_mount(creds_file, target, false);
+                } else if config_dir.exists() {
+                    // Agent uses the whole config dir as credentials (e.g., Pi)
+                    info!(
+                        "Auto-mounting config dir {} to {}",
+                        config_dir.display(),
+                        container_path
+                    );
+                    builder = mount_config_if_exists(builder, config_dir, container_path);
                 }
             }
         }
@@ -211,6 +223,10 @@ pub fn mount_agent_configs(
                 home_path.join(".config").join("jules"),
                 "/home/agent/.config/jules",
             );
+        }
+        if flags.pi_dir || flags.agent_configs {
+            builder =
+                mount_config_if_exists(builder, home_path.join(".pi"), "/home/agent/.pi");
         }
     }
 
