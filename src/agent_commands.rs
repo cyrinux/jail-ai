@@ -18,6 +18,7 @@ pub struct AgentCommandParams {
     pub port: Vec<String>,
     pub env: Vec<String>,
     pub no_network: bool,
+    pub host_network: bool,
     pub memory: Option<u64>,
     pub cpu: Option<u32>,
     pub no_workspace: bool,
@@ -310,8 +311,8 @@ pub async fn run_ai_agent_command(
     if jail_exists && !should_recreate {
         // Inspect existing container to get its network configuration
         if let Ok(existing_config) = temp_jail.inspect().await {
-            // Determine desired network mode based on --auth flag
-            let desired_host_network = params.auth;
+            // Determine desired network mode based on --auth or --host-network flags
+            let desired_host_network = params.auth || params.host_network;
             let current_host_network = existing_config.network.host;
 
             // If network mode has changed, force recreation
@@ -513,10 +514,14 @@ pub async fn run_ai_agent_command(
         let mut builder = JailBuilder::new(&jail_name).backend(backend_type);
 
         // Configure network mode based on flags
-        if params.auth {
-            // OAuth authentication requires host networking for callbacks
+        if params.auth || params.host_network {
+            // OAuth authentication or explicit --host-network requires host networking
             builder = builder.host_network(true);
-            info!("Using host networking for OAuth authentication");
+            if params.auth {
+                info!("Using host networking for OAuth authentication");
+            } else {
+                info!("Using host networking (--host-network)");
+            }
         } else {
             // Normal operation: use private or shared networking
             builder = builder.network(!params.no_network, true);

@@ -171,6 +171,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 port,
                 env,
                 no_network,
+                host_network,
                 memory,
                 cpu,
                 config,
@@ -227,8 +228,13 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
                     let mut builder = JailBuilder::new(&jail_name)
                         .backend(backend_type)
-                        .base_image(image)
-                        .network(!no_network, true);
+                        .base_image(image);
+
+                    builder = if host_network {
+                        builder.host_network(true)
+                    } else {
+                        builder.network(!no_network, true)
+                    };
 
                     // Setup default environment variables
                     builder = jail_setup::setup_default_environment(builder);
@@ -662,6 +668,7 @@ async fn run_agent_command(
             port: common.port,
             env: common.env,
             no_network: common.no_network,
+            host_network: common.host_network,
             memory: common.memory,
             cpu: common.cpu,
             no_workspace: common.no_workspace,

@@ -32,6 +32,11 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub no_network: bool,
 
+    /// Use host networking (--network=host) instead of private networking
+    /// Less secure but provides full access to host network services
+    #[arg(long, conflicts_with = "no_network")]
+    pub host_network: bool,
+
     /// Memory limit in MB
     #[arg(long)]
     pub memory: Option<u64>,
@@ -176,6 +181,11 @@ pub enum Commands {
         /// Disable network access
         #[arg(long)]
         no_network: bool,
+
+        /// Use host networking (--network=host) instead of private networking
+        /// Less secure but provides full access to host network services
+        #[arg(long, conflicts_with = "no_network")]
+        host_network: bool,
 
         /// Memory limit in MB
         #[arg(long)]
@@ -733,6 +743,43 @@ mod tests {
         // Special characters like @ should be sanitized to hyphens (in the project name part)
         // Format: jail__{sanitized-name}__{hash}
         assert!(name.contains("my-project-2024__"));
+    }
+
+    #[test]
+    fn test_host_network_flag_parsing() {
+        // Test that the --host-network flag is properly parsed for agent commands
+        let args = vec!["jail-ai", "claude", "--host-network"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            Some(Commands::Claude { common, .. }) => {
+                assert!(common.host_network);
+                assert!(!common.no_network);
+            }
+            _ => panic!("Expected Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_host_network_conflicts_with_no_network() {
+        // Test that --host-network and --no-network conflict
+        let args = vec!["jail-ai", "claude", "--host-network", "--no-network"];
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+
+    #[test]
+    fn test_host_network_flag_create_command() {
+        // Test that --host-network works with the create command
+        let args = vec!["jail-ai", "create", "test-jail", "--host-network"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            Some(Commands::Create { host_network, no_network, .. }) => {
+                assert!(host_network);
+                assert!(!no_network);
+            }
+            _ => panic!("Expected Create command"),
+        }
     }
 
     #[test]

@@ -47,6 +47,9 @@ cargo run -- create my-agent --image alpine:latest
 # Create jail without workspace mount
 cargo run -- create my-agent --no-workspace
 
+# Create jail with host networking (shares host's network namespace)
+cargo run -- create my-agent --host-network
+
 # Create jail with port mapping (e.g., PostgreSQL)
 cargo run -- create my-agent -p 5432:5432
 
@@ -131,6 +134,9 @@ cargo run -- codex --codex-dir --auth
 cargo run -- codex --codex-dir -- generate "create a REST API"
 cargo run -- jules --jules-dir -- chat "help me debug this code"
 cargo run -- jules --jules-dir -- --help
+
+# AI Agent with host networking (full access to host network)
+cargo run -- claude --host-network -- chat "help me with this service"
 
 # AI Agent with port mapping (e.g., for connecting to host PostgreSQL)
 cargo run -- claude -p 5432:5432 -- chat "help me with database queries"
