@@ -331,8 +331,10 @@ The layered image system automatically detects your project type and builds appr
   - PHP (8.2, Composer, PHPUnit, PHPStan, PHP-CS-Fixer)
   - C/C++ (GCC, Clang, CMake, vcpkg, GDB, Valgrind)
   - C# (.NET SDK 8.0, dotnet-format, EF Core tools)
-  - AWS (AWS CLI v2, eksctl, SAM CLI, CDK, Session Manager, cfn-lint, rain, Copilot CLI, Steampipe)
-  - GCP (gcloud CLI, Cloud SQL Proxy, Skaffold, kubectl, Helm, kpt, emulators)
+  - AWS (AWS CLI v2, eksctl, SAM CLI, CDK, Session Manager, cfn-lint, rain, Copilot CLI, Steampipe) - **all versions pinned** for efficient caching
+  - GCP (gcloud CLI, Cloud SQL Proxy, Skaffold, kubectl, Helm, kpt, emulators) - **all versions pinned** for efficient caching
+
+> **📌 Cloud Layers Optimization**: AWS and GCP layers use pinned package versions to avoid unnecessary rebuilds. Layers only rebuild when you update versions in the Containerfiles. See [docs/cloud-layers.md](docs/cloud-layers.md) for details on updating tools.
 - **Build tools**: gcc, make, cmake, pkg-config
 - **Utilities**: git, vim, nano, helix, jq, tree, tmux, htop, gh (GitHub CLI)
 - **Python tools**: black, pylint, mypy, pytest, uv/uvx (for running MCP servers)

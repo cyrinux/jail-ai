@@ -192,6 +192,10 @@ jail-ai uses a smart layered image system that automatically detects your projec
    - 🎯 **C#**: .NET SDK 8.0, dotnet-format, EF Core tools
    - 🏗️ **Terraform**: Terraform CLI, tflint
    - ☸️ **Kubernetes**: kubectl, helm, k9s
+   - ☁️ **AWS**: AWS CLI, eksctl, SAM CLI, CDK, Session Manager, cfn-lint, rain, Copilot CLI, Steampipe (all versions pinned)
+   - 🌐 **GCP**: gcloud CLI, Terraform, Pulumi, Cloud SQL Proxy, Skaffold, kubectl, Helm, kpt (all versions pinned)
+
+   > **📌 Note**: AWS and GCP layers use pinned package versions for reproducible builds and efficient caching. See [docs/cloud-layers.md](docs/cloud-layers.md) for version management.
 
 3. **Agent Layers** (optional)
    - 🤖 **Claude Code**: `claude` CLI
@@ -383,6 +387,7 @@ make build-image IMAGE_NAME=custom-name IMAGE_TAG=version
 ## 📚 Documentation
 
 - [CLAUDE.md](CLAUDE.md) - Claude Code guidelines for this project
+- [docs/cloud-layers.md](docs/cloud-layers.md) - Cloud provider layer version management and optimization
 - [docs/specs/](docs/specs/) - Technical specifications and implementation details
   - [IMAGE_TAGGING_STRATEGY.md](docs/specs/IMAGE_TAGGING_STRATEGY.md) - Image naming and tagging strategy
   - [LAYERED_IMAGES_SUMMARY.md](docs/specs/LAYERED_IMAGES_SUMMARY.md) - Layered image system overview

@@ -4,18 +4,34 @@ FROM ${BASE_IMAGE}
 LABEL maintainer="jail-ai"
 LABEL description="jail-ai AWS development environment"
 
+# Version pins for reproducible builds
+# Update these versions to trigger layer rebuilds
+ARG AWS_CLI_VERSION=2.22.17
+ARG EKSCTL_VERSION=0.197.0
+ARG SAM_CLI_VERSION=1.133.0
+ARG AWS_CDK_VERSION=2.175.2
+ARG SESSION_MANAGER_VERSION=1.2.677.0
+ARG CFN_LINT_VERSION=1.22.3
+ARG RAIN_VERSION=1.20.1
+ARG AWS_COPILOT_VERSION=1.34.0
+ARG STEAMPIPE_VERSION=1.0.1
+
+LABEL ai.jail.aws.cli.version="${AWS_CLI_VERSION}"
+LABEL ai.jail.aws.eksctl.version="${EKSCTL_VERSION}"
+LABEL ai.jail.aws.sam.version="${SAM_CLI_VERSION}"
+LABEL ai.jail.aws.cdk.version="${AWS_CDK_VERSION}"
+
 USER root
 
-# Install AWS CLI v2
+# Install AWS CLI v2 (pinned version)
 RUN ARCH=$(dpkg --print-architecture) && \
     AWS_ARCH=$([ "$ARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
-    curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o awscliv2.zip && \
+    curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}-${AWS_CLI_VERSION}.zip" -o awscliv2.zip && \
     unzip -q awscliv2.zip && \
     ./aws/install && \
     rm -rf awscliv2.zip aws
 
 # Install eksctl (Amazon EKS CLI)
-ARG EKSCTL_VERSION=0.197.0
 RUN ARCH=$(dpkg --print-architecture) && \
     EKSCTL_ARCH=$([ "$ARCH" = "amd64" ] && echo "amd64" || echo "arm64") && \
     curl -sSL "https://github.com/eksctl-io/eksctl/releases/download/v${EKSCTL_VERSION}/eksctl_Linux_${EKSCTL_ARCH}.tar.gz" | tar xz -C /usr/local/bin && \
@@ -30,24 +46,24 @@ RUN apt-get update && \
 ENV PIPX_HOME=/opt/pipx
 ENV PIPX_BIN_DIR=/usr/local/bin
 
-# Install AWS SAM CLI via pipx
-RUN pipx install aws-sam-cli
+# Install AWS SAM CLI via pipx (pinned version)
+RUN pipx install aws-sam-cli==${SAM_CLI_VERSION}
 
-# Install AWS CDK
-RUN npm install -g aws-cdk
+# Install AWS CDK (pinned version)
+RUN npm install -g aws-cdk@${AWS_CDK_VERSION}
 
-# Install Session Manager plugin
+# Install Session Manager plugin (pinned version)
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
-        curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o session-manager-plugin.deb; \
+        curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/${SESSION_MANAGER_VERSION}/ubuntu_64bit/session-manager-plugin.deb" -o session-manager-plugin.deb; \
     else \
-        curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_arm64/session-manager-plugin.deb" -o session-manager-plugin.deb; \
+        curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/${SESSION_MANAGER_VERSION}/ubuntu_arm64/session-manager-plugin.deb" -o session-manager-plugin.deb; \
     fi && \
     dpkg -i session-manager-plugin.deb && \
     rm session-manager-plugin.deb
 
-# Install cfn-lint (CloudFormation linter) via pipx
-RUN pipx install cfn-lint
+# Install cfn-lint (CloudFormation linter) via pipx (pinned version)
+RUN pipx install cfn-lint==${CFN_LINT_VERSION}
 
 # Install rain (CloudFormation deployment tool)
 ARG RAIN_VERSION=1.20.1
