@@ -17,6 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run single test**: `cargo test <test_name>`
 - **Lint**: `cargo clippy -- -D warnings` or `make clippy`
 - **Format**: `cargo fmt` or `make fmt`
+- **Update cloud versions**: `make update-cloud-versions` or `./scripts/update-cloud-versions.sh`
+- **Rebuild cloud layers**: `make rebuild-cloud-layers`
 
 ### Container Image
 

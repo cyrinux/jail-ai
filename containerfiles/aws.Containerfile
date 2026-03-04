@@ -6,15 +6,15 @@ LABEL description="jail-ai AWS development environment"
 
 # Version pins for reproducible builds
 # Update these versions to trigger layer rebuilds
-ARG AWS_CLI_VERSION=2.22.17
-ARG EKSCTL_VERSION=0.197.0
-ARG SAM_CLI_VERSION=1.133.0
-ARG AWS_CDK_VERSION=2.175.2
-ARG SESSION_MANAGER_VERSION=1.2.677.0
-ARG CFN_LINT_VERSION=1.22.3
-ARG RAIN_VERSION=1.20.1
-ARG AWS_COPILOT_VERSION=1.34.0
-ARG STEAMPIPE_VERSION=1.0.1
+ARG AWS_CLI_VERSION=2.34.2
+ARG EKSCTL_VERSION=0.224.0
+ARG SAM_CLI_VERSION=1.154.0
+ARG AWS_CDK_VERSION=2.241.0
+ARG SESSION_MANAGER_VERSION=1.2.712.0
+ARG CFN_LINT_VERSION=1.46.0
+ARG RAIN_VERSION=1.24.3
+ARG AWS_COPILOT_VERSION=1.34.1
+ARG STEAMPIPE_VERSION=2.4.0
 
 LABEL ai.jail.aws.cli.version="${AWS_CLI_VERSION}"
 LABEL ai.jail.aws.eksctl.version="${EKSCTL_VERSION}"
@@ -66,7 +66,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN pipx install cfn-lint==${CFN_LINT_VERSION}
 
 # Install rain (CloudFormation deployment tool)
-ARG RAIN_VERSION=1.20.1
+ARG RAIN_VERSION=1.24.3
 RUN ARCH=$(dpkg --print-architecture) && \
     RAIN_ARCH=$([ "$ARCH" = "amd64" ] && echo "amd64" || echo "arm64") && \
     curl -sSL "https://github.com/aws-cloudformation/rain/releases/download/v${RAIN_VERSION}/rain-v${RAIN_VERSION}_linux-${RAIN_ARCH}.zip" -o rain.zip && \
@@ -76,14 +76,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
     chmod +x /usr/local/bin/rain
 
 # Install AWS Copilot CLI (for ECS/App Runner deployments)
-ARG AWS_COPILOT_VERSION=1.34.0
+ARG AWS_COPILOT_VERSION=1.34.1
 RUN ARCH=$(dpkg --print-architecture) && \
     COPILOT_ARCH=$([ "$ARCH" = "amd64" ] && echo "amd64" || echo "arm64") && \
     curl -sSL --http1.1 "https://github.com/aws/copilot-cli/releases/download/v${AWS_COPILOT_VERSION}/copilot-linux-${COPILOT_ARCH}" -o /usr/local/bin/copilot && \
     chmod +x /usr/local/bin/copilot
 
 # Install Steampipe (for AWS resource querying)
-ARG STEAMPIPE_VERSION=1.0.1
+ARG STEAMPIPE_VERSION=2.4.0
 RUN ARCH=$(dpkg --print-architecture) && \
     STEAMPIPE_ARCH=$([ "$ARCH" = "amd64" ] && echo "amd64" || echo "arm64") && \
     curl -sSL "https://github.com/turbot/steampipe/releases/download/v${STEAMPIPE_VERSION}/steampipe_linux_${STEAMPIPE_ARCH}.tar.gz" -o steampipe.tar.gz && \

@@ -14,24 +14,46 @@ All cloud tools have **pinned versions** in their Containerfiles. This ensures:
 
 ### Pinned Tools
 
-- **AWS CLI**: v2.22.17
-- **eksctl**: v0.197.0
-- **SAM CLI**: v1.133.0
-- **AWS CDK**: v2.175.2
-- **Session Manager Plugin**: v1.2.677.0
-- **cfn-lint**: v1.22.3
-- **rain**: v1.20.1
-- **AWS Copilot**: v1.34.0
-- **Steampipe**: v1.0.1
+- **AWS CLI**: v2.34.2
+- **eksctl**: v0.224.0
+- **SAM CLI**: v1.154.0
+- **AWS CDK**: v2.241.0
+- **Session Manager Plugin**: v1.2.712.0
+- **cfn-lint**: v1.46.0
+- **rain**: v1.24.3
+- **AWS Copilot**: v1.34.1
+- **Steampipe**: v2.4.0
 
 ### Updating AWS Tools
+
+### Automatic Update (Recommended)
+
+Use the provided update script to fetch and update all versions automatically:
+
+```bash
+# Run the update script
+./scripts/update-cloud-versions.sh
+
+# Review changes
+git diff containerfiles/
+
+# Rebuild layers
+jail-ai claude --cloud --upgrade --force-layers aws,gcp
+```
+
+The script automatically fetches the latest versions from:
+- GitHub releases (AWS CLI, eksctl, SAM CLI, CDK, cfn-lint, etc.)
+- HashiCorp releases (Terraform)
+- Kubernetes releases (kubectl)
+
+### Manual Update
 
 Edit `containerfiles/aws.Containerfile` and update the `ARG` versions:
 
 ```dockerfile
-ARG AWS_CLI_VERSION=2.22.17      # Update this
-ARG SAM_CLI_VERSION=1.133.0      # Update this
-ARG AWS_CDK_VERSION=2.175.2      # Update this
+ARG AWS_CLI_VERSION=2.34.2       # Update this
+ARG SAM_CLI_VERSION=1.154.0      # Update this
+ARG AWS_CDK_VERSION=2.241.0      # Update this
 # ... etc
 ```
 
@@ -41,23 +63,23 @@ When you update any version, the Containerfile hash changes and the layer will r
 
 ### Pinned Tools
 
-- **gcloud CLI**: v503.0.0 (with emulators and auth plugins)
-- **Terraform**: v1.9.8
-- **Pulumi**: v3.143.0
-- **Cloud SQL Proxy**: v2.14.1
-- **Skaffold**: v2.15.0
-- **kubectl**: v1.32.0
-- **Helm**: v3.16.3
-- **kpt**: v1.0.0-beta.58
+- **gcloud CLI**: v513.0.0 (with emulators and auth plugins)
+- **Terraform**: v1.15.0
+- **Pulumi**: v3.224.0
+- **Cloud SQL Proxy**: v2.21.1
+- **Skaffold**: v2.17.2
+- **kubectl**: v1.35.2
+- **Helm**: v4.1.1
+- **kpt**: v1.0.0-beta.61
 
 ### Updating GCP Tools
 
-Edit `containerfiles/gcp.Containerfile` and update the `ARG` versions:
+Use the automatic update script (see AWS Tools section above) or edit manually:
 
 ```dockerfile
-ARG GCLOUD_VERSION=503.0.0       # Update this
-ARG TERRAFORM_VERSION=1.9.8      # Update this
-ARG KUBECTL_VERSION=1.32.0       # Update this
+ARG GCLOUD_VERSION=513.0.0       # Update this
+ARG TERRAFORM_VERSION=1.15.0     # Update this
+ARG KUBECTL_VERSION=1.35.2       # Update this
 # ... etc
 ```
 

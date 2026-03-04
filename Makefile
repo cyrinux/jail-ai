@@ -60,3 +60,14 @@ clippy: ## Run clippy lints
 
 fmt: ## Format code
 	cargo fmt
+
+update-cloud-versions: ## Update cloud provider tool versions to latest
+	@echo "Updating cloud provider tool versions..."
+	./scripts/update-cloud-versions.sh
+	@echo ""
+	@echo "Review changes with: git diff containerfiles/"
+	@echo "Rebuild with: make rebuild-cloud-layers"
+
+rebuild-cloud-layers: ## Force rebuild cloud layers with updated versions
+	@echo "Rebuilding cloud layers..."
+	cargo run -- claude --cloud --upgrade --force-layers aws,gcp --verbose
