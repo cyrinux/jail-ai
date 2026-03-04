@@ -21,6 +21,7 @@
 
 mod claude;
 mod claude_code_router;
+mod coderabbit;
 mod codex;
 mod copilot;
 mod cursor;
@@ -35,6 +36,7 @@ use std::fmt;
 pub enum Agent {
     Claude,
     ClaudeCodeRouter,
+    CodeRabbit,
     Copilot,
     Cursor,
     Gemini,
@@ -49,6 +51,7 @@ impl Agent {
         match s.to_lowercase().as_str() {
             "claude" => Some(Self::Claude),
             "claude-code-router" | "ccr" => Some(Self::ClaudeCodeRouter),
+            "coderabbit" => Some(Self::CodeRabbit),
             "copilot" => Some(Self::Copilot),
             "cursor" | "cursor-agent" => Some(Self::Cursor),
             "gemini" => Some(Self::Gemini),
@@ -64,6 +67,7 @@ impl Agent {
         match self {
             Self::Claude => claude::COMMAND_NAME,
             Self::ClaudeCodeRouter => claude_code_router::COMMAND_NAME,
+            Self::CodeRabbit => coderabbit::COMMAND_NAME,
             Self::Copilot => copilot::COMMAND_NAME,
             Self::Cursor => cursor::COMMAND_NAME,
             Self::Gemini => gemini::COMMAND_NAME,
@@ -78,6 +82,7 @@ impl Agent {
         match self {
             Self::Claude => claude::NORMALIZED_NAME,
             Self::ClaudeCodeRouter => claude_code_router::NORMALIZED_NAME,
+            Self::CodeRabbit => coderabbit::NORMALIZED_NAME,
             Self::Copilot => copilot::NORMALIZED_NAME,
             Self::Cursor => cursor::NORMALIZED_NAME,
             Self::Gemini => gemini::NORMALIZED_NAME,
@@ -92,6 +97,7 @@ impl Agent {
         match self {
             Self::Claude => claude::DISPLAY_NAME,
             Self::ClaudeCodeRouter => claude_code_router::DISPLAY_NAME,
+            Self::CodeRabbit => coderabbit::DISPLAY_NAME,
             Self::Copilot => copilot::DISPLAY_NAME,
             Self::Cursor => cursor::DISPLAY_NAME,
             Self::Gemini => gemini::DISPLAY_NAME,
@@ -111,6 +117,7 @@ impl Agent {
         match self {
             Self::Claude => claude::HAS_AUTO_CREDENTIALS,
             Self::ClaudeCodeRouter => claude_code_router::HAS_AUTO_CREDENTIALS,
+            Self::CodeRabbit => coderabbit::HAS_AUTO_CREDENTIALS,
             Self::Copilot => copilot::HAS_AUTO_CREDENTIALS,
             Self::Cursor => cursor::HAS_AUTO_CREDENTIALS,
             Self::Gemini => gemini::HAS_AUTO_CREDENTIALS,
@@ -126,6 +133,7 @@ impl Agent {
         match self {
             Self::Claude => claude::CONFIG_DIR_PATHS.to_vec(),
             Self::ClaudeCodeRouter => claude_code_router::CONFIG_DIR_PATHS.to_vec(),
+            Self::CodeRabbit => coderabbit::CONFIG_DIR_PATHS.to_vec(),
             Self::Copilot => copilot::CONFIG_DIR_PATHS.to_vec(),
             Self::Cursor => cursor::CONFIG_DIR_PATHS.to_vec(),
             Self::Gemini => gemini::CONFIG_DIR_PATHS.to_vec(),
@@ -140,6 +148,7 @@ impl Agent {
         match self {
             Self::Claude => claude::SUPPORTS_AUTH_WORKFLOW,
             Self::ClaudeCodeRouter => claude_code_router::SUPPORTS_AUTH_WORKFLOW,
+            Self::CodeRabbit => coderabbit::SUPPORTS_AUTH_WORKFLOW,
             Self::Copilot => copilot::SUPPORTS_AUTH_WORKFLOW,
             Self::Cursor => cursor::SUPPORTS_AUTH_WORKFLOW,
             Self::Gemini => gemini::SUPPORTS_AUTH_WORKFLOW,
@@ -155,6 +164,7 @@ impl Agent {
         match self {
             Self::Claude => claude::AUTH_CREDENTIAL_PATH,
             Self::ClaudeCodeRouter => claude_code_router::AUTH_CREDENTIAL_PATH,
+            Self::CodeRabbit => coderabbit::AUTH_CREDENTIAL_PATH,
             Self::Copilot => copilot::AUTH_CREDENTIAL_PATH,
             Self::Cursor => cursor::AUTH_CREDENTIAL_PATH,
             Self::Gemini => gemini::AUTH_CREDENTIAL_PATH,
@@ -200,6 +210,7 @@ impl Agent {
         match self {
             Self::Claude => "claude-dir",
             Self::ClaudeCodeRouter => "claude-code-router-dir",
+            Self::CodeRabbit => "coderabbit-dir",
             Self::Copilot => "copilot-dir",
             Self::Cursor => "cursor-dir",
             Self::Gemini => "gemini-dir",
@@ -244,6 +255,9 @@ impl Agent {
         }
         if flags.claude_code_router_dir {
             specified_flags.push(("claude-code-router-dir", Agent::ClaudeCodeRouter));
+        }
+        if flags.coderabbit_dir {
+            specified_flags.push(("coderabbit-dir", Agent::CodeRabbit));
         }
         if flags.copilot_dir {
             specified_flags.push(("copilot-dir", Agent::Copilot));
@@ -294,6 +308,7 @@ impl Agent {
 pub struct AgentConfigFlags {
     pub claude_dir: bool,
     pub claude_code_router_dir: bool,
+    pub coderabbit_dir: bool,
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
@@ -480,6 +495,7 @@ mod tests {
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: false,
+            coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
             pi_dir: false,
@@ -493,6 +509,7 @@ mod tests {
             copilot_dir: true,
             cursor_dir: false,
             gemini_dir: false,
+            coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
             pi_dir: false,
@@ -510,6 +527,7 @@ mod tests {
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: true, // Wrong flag for Cursor agent
+            coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
             pi_dir: false,
@@ -532,6 +550,7 @@ mod tests {
             copilot_dir: true,
             cursor_dir: false,
             gemini_dir: true,
+            coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
             pi_dir: false,
@@ -554,6 +573,7 @@ mod tests {
             copilot_dir: true,
             cursor_dir: true,
             gemini_dir: true,
+            coderabbit_dir: true,
             codex_dir: true,
             jules_dir: true,
             pi_dir: true,
@@ -563,6 +583,7 @@ mod tests {
         assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
         assert!(Agent::Cursor.validate_config_flags(&flags).is_ok());
         assert!(Agent::Gemini.validate_config_flags(&flags).is_ok());
+        assert!(Agent::CodeRabbit.validate_config_flags(&flags).is_ok());
         assert!(Agent::Codex.validate_config_flags(&flags).is_ok());
         assert!(Agent::Jules.validate_config_flags(&flags).is_ok());
     }
@@ -576,6 +597,7 @@ mod tests {
             copilot_dir: false,
             cursor_dir: false,
             gemini_dir: false,
+            coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
             pi_dir: false,

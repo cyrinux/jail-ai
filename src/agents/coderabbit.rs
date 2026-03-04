@@ -1,0 +1,26 @@
+//! CodeRabbit AI agent configuration
+//!
+//! CodeRabbit is an AI-powered code review assistant.
+//! https://coderabbit.ai
+
+/// Command name to execute the agent
+pub const COMMAND_NAME: &str = "coderabbit";
+
+/// Normalized name for jail naming and images
+pub const NORMALIZED_NAME: &str = "coderabbit";
+
+/// Display name for UI
+pub const DISPLAY_NAME: &str = "CodeRabbit";
+
+/// Auto-mount credentials (minimal auth)
+pub const HAS_AUTO_CREDENTIALS: bool = false;
+
+/// Config directory paths: (host_path, container_path)
+pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".coderabbit", "/home/agent/.coderabbit")];
+
+/// Supports OAuth authentication workflow with network=host
+pub const SUPPORTS_AUTH_WORKFLOW: bool = true;
+
+/// Path to the auth credential file/directory to check for first run
+/// Relative to user's home directory
+pub const AUTH_CREDENTIAL_PATH: &str = ".coderabbit";

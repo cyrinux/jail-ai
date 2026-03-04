@@ -100,6 +100,7 @@ pub struct AgentConfigFlags {
     pub copilot_dir: bool,
     pub cursor_dir: bool,
     pub gemini_dir: bool,
+    pub coderabbit_dir: bool,
     pub codex_dir: bool,
     pub jules_dir: bool,
     pub pi_dir: bool,
@@ -140,6 +141,7 @@ pub fn mount_agent_configs(
             crate::agents::Agent::Copilot => flags.copilot_dir || flags.agent_configs,
             crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
             crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
+            crate::agents::Agent::CodeRabbit => flags.coderabbit_dir || flags.agent_configs,
             crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
             crate::agents::Agent::Jules => flags.jules_dir || flags.agent_configs,
             crate::agents::Agent::Pi => flags.pi_dir || flags.agent_configs,
@@ -213,6 +215,13 @@ pub fn mount_agent_configs(
                 "/home/agent/.config/gemini",
             );
         }
+        if flags.coderabbit_dir || flags.agent_configs {
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".coderabbit"),
+                "/home/agent/.coderabbit",
+            );
+        }
         if flags.codex_dir || flags.agent_configs {
             builder =
                 mount_config_if_exists(builder, home_path.join(".codex"), "/home/agent/.codex");
@@ -225,8 +234,7 @@ pub fn mount_agent_configs(
             );
         }
         if flags.pi_dir || flags.agent_configs {
-            builder =
-                mount_config_if_exists(builder, home_path.join(".pi"), "/home/agent/.pi");
+            builder = mount_config_if_exists(builder, home_path.join(".pi"), "/home/agent/.pi");
         }
     }
 

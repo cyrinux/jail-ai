@@ -68,6 +68,10 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub gemini_dir: bool,
 
+    /// Mount entire ~/.coderabbit directory for CodeRabbit CLI
+    #[arg(long)]
+    pub coderabbit_dir: bool,
+
     /// Mount entire ~/.config/codex directory for Codex CLI
     #[arg(long)]
     pub codex_dir: bool,
@@ -80,7 +84,7 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub pi_dir: bool,
 
-    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir, --pi-dir)
+    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --pi-dir)
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -213,6 +217,10 @@ pub enum Commands {
         #[arg(long)]
         gemini_dir: bool,
 
+        /// Mount entire ~/.coderabbit directory for CodeRabbit CLI
+        #[arg(long)]
+        coderabbit_dir: bool,
+
         /// Mount entire ~/.config/codex directory for Codex CLI
         #[arg(long)]
         codex_dir: bool,
@@ -225,7 +233,7 @@ pub enum Commands {
         #[arg(long)]
         pi_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --codex-dir, --jules-dir, --pi-dir)
+        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --pi-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -346,6 +354,18 @@ pub enum Commands {
         common: AgentCommandOptions,
 
         /// Additional arguments to pass to gemini (after --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Quick start CodeRabbit CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai coderabbit --coderabbit-dir -- review
+    CodeRabbit {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+
+        /// Additional arguments to pass to coderabbit (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

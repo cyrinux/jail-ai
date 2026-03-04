@@ -181,6 +181,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 copilot_dir,
                 cursor_dir,
                 gemini_dir,
+                coderabbit_dir,
                 codex_dir,
                 jules_dir,
                 pi_dir,
@@ -262,6 +263,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                             copilot_dir,
                             cursor_dir,
                             gemini_dir,
+                            coderabbit_dir,
                             codex_dir,
                             jules_dir,
                             pi_dir,
@@ -438,6 +440,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
             Commands::Gemini { common, args } => {
                 run_agent_command(agents::Agent::Gemini, common, args, verbose).await?;
+            }
+
+            Commands::CodeRabbit { common, args } => {
+                run_agent_command(agents::Agent::CodeRabbit, common, args, verbose).await?;
             }
 
             Commands::Codex { common, args } => {
@@ -636,6 +642,7 @@ async fn run_agent_command(
         copilot_dir: common.copilot_dir,
         cursor_dir: common.cursor_dir,
         gemini_dir: common.gemini_dir,
+        coderabbit_dir: common.coderabbit_dir,
         codex_dir: common.codex_dir,
         jules_dir: common.jules_dir,
         pi_dir: common.pi_dir,
@@ -664,6 +671,7 @@ async fn run_agent_command(
             copilot_dir: common.copilot_dir,
             cursor_dir: common.cursor_dir,
             gemini_dir: common.gemini_dir,
+            coderabbit_dir: common.coderabbit_dir,
             codex_dir: common.codex_dir,
             jules_dir: common.jules_dir,
             pi_dir: common.pi_dir,

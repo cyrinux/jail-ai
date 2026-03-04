@@ -70,10 +70,7 @@ pub fn get_git_config(key: &str, cwd: &Path) -> Option<String> {
             let output_str = String::from_utf8_lossy(&output.stdout);
             // Get the last non-empty line (git uses last value when there are duplicates)
             // This correctly implements git's "last value wins" behavior
-            if let Some(value) = output_str
-                .lines()
-                .rfind(|l| !l.trim().is_empty())
-            {
+            if let Some(value) = output_str.lines().rfind(|l| !l.trim().is_empty()) {
                 let value = value.trim().to_string();
                 debug!("Found {} in {} config: {}", key, scope, value);
                 return Some(value);
