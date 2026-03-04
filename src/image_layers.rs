@@ -747,8 +747,16 @@ pub async fn build_shared_layer(
 
     // Check if image needs to be rebuilt (doesn't exist or Containerfile changed)
     if !force_rebuild && !image_needs_rebuild(&image_name, layer_name).await? {
-        debug!("Shared layer {} is up to date", image_name);
+        if verbose {
+            info!("Shared layer {} is up to date, skipping", layer_name);
+        } else {
+            debug!("Shared layer {} is up to date", image_name);
+        }
         return Ok(image_name);
+    }
+
+    if force_rebuild && verbose {
+        info!("Force rebuilding layer: {}", layer_name);
     }
 
     build_image_from_containerfile(layer_name, base_image, &image_name, verbose, force_rebuild)
@@ -925,7 +933,11 @@ pub async fn build_project_image(
         }
         build_shared_layer("base", None, verbose, force_base).await?
     } else {
-        debug!("Base layer already exists");
+        if verbose {
+            info!("Base layer already exists, skipping");
+        } else {
+            debug!("Base layer already exists");
+        }
         BASE_IMAGE_NAME.to_string()
     };
 
@@ -985,6 +997,9 @@ pub async fn build_project_image(
                         )
                         .await?
                     } else {
+                        if verbose {
+                            info!("Language layer {} already exists, skipping", layer_name);
+                        }
                         lang_image_name.to_string()
                     };
                 }
@@ -1001,7 +1016,11 @@ pub async fn build_project_image(
                 build_shared_layer(layer_name, Some(&base_image), verbose, should_force_lang)
                     .await?
             } else {
-                debug!("Language layer {} already exists", lang_image_name);
+                if verbose {
+                    info!("Language layer {} already exists, skipping", layer_name);
+                } else {
+                    debug!("Language layer {} already exists", lang_image_name);
+                }
                 lang_image_name.to_string()
             }
         }
@@ -1038,7 +1057,11 @@ pub async fn build_project_image(
             )
             .await?
         } else {
-            debug!("Custom layer already exists: {}", custom_image_name);
+            if verbose {
+                info!("Custom layer already exists, skipping");
+            } else {
+                debug!("Custom layer already exists: {}", custom_image_name);
+            }
             custom_image_name
         }
     } else {
@@ -1083,7 +1106,11 @@ pub async fn build_project_image(
             )
             .await?;
         } else {
-            debug!("Agent image already exists: {}", final_image_name);
+            if verbose {
+                info!("Agent image already exists, skipping");
+            } else {
+                debug!("Agent image already exists: {}", final_image_name);
+            }
         }
 
         info!("Final image: {}", final_image_name);
