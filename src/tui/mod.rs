@@ -1,7 +1,7 @@
 use crate::error::{JailError, Result};
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -210,7 +210,6 @@ impl Pane {
             for span in spans.iter_mut() {
                 let span_len = span.content.chars().count();
                 if char_pos + span_len > col {
-                    let _local = col - char_pos;
                     span.style = span.style.bg(Color::White).fg(Color::Black);
                     found = true;
                     break;
@@ -324,34 +323,31 @@ impl Tui {
 
         let mut active_tab = Tab::Agent;
         let mut prefix_mode = false;
+        let mut current_rows = pane_rows;
+        let mut current_cols = pane_cols;
 
         loop {
-            let current_size = terminal
+            let term_size = terminal
                 .size()
                 .map_err(|e| JailError::Backend(format!("Failed to get terminal size: {e}")))?;
 
-            let new_rows = current_size.height.saturating_sub(3);
-            let new_cols = current_size.width;
+            let new_rows = term_size.height.saturating_sub(3);
+            let new_cols = term_size.width;
 
-            if new_rows != pane_rows || new_cols != pane_cols {
+            if new_rows != current_rows || new_cols != current_cols {
                 agent_pane.resize(new_rows, new_cols);
                 shell_pane.resize(new_rows, new_cols);
+                current_rows = new_rows;
+                current_cols = new_cols;
             }
 
-            let rows = new_rows;
-            let cols = new_cols;
-
-            let agent_done = agent_pane.is_done();
-            let shell_done = shell_pane.is_done();
-
-            if agent_done && shell_done {
+            if agent_pane.is_done() && shell_pane.is_done() {
                 debug!("Both panes exited, leaving TUI");
                 break;
             }
 
-            let agent_lines = agent_pane.render_into_text(rows, cols);
-            let shell_lines = shell_pane.render_into_text(rows, cols);
-
+            let agent_lines = agent_pane.render_into_text(current_rows, current_cols);
+            let shell_lines = shell_pane.render_into_text(current_rows, current_cols);
             let tab_index = active_tab as usize;
 
             terminal
@@ -363,13 +359,13 @@ impl Tui {
                         .split(area);
 
                     let tab_titles: Vec<Line> = vec![
-                        Line::from(format!(" {} {} ", 1, agent_pane.title.to_uppercase())),
-                        Line::from(format!(" {} {} ", 2, shell_pane.title.to_uppercase())),
+                        Line::from(format!(" F1 {} ", agent_pane.title.to_uppercase())),
+                        Line::from(format!(" F2 {} ", shell_pane.title.to_uppercase())),
                     ];
 
                     let tabs = Tabs::new(tab_titles)
                         .block(Block::default().borders(Borders::ALL).title(Span::styled(
-                            " jail-ai TUI  Alt+1/2: switch tab  Ctrl+B d: quit ",
+                            " jail-ai TUI  F1/F2: switch tab  Ctrl+B d: quit ",
                             Style::default().fg(Color::DarkGray),
                         )))
                         .select(tab_index)
@@ -383,22 +379,21 @@ impl Tui {
 
                     frame.render_widget(tabs, chunks[0]);
 
-                    let content_area = chunks[1];
                     let lines = if active_tab == Tab::Agent {
                         &agent_lines
                     } else {
                         &shell_lines
                     };
 
-                    let pane_block = Block::default().borders(Borders::NONE);
                     let text = Text::from(lines.clone());
-                    let paragraph = Paragraph::new(text).block(pane_block);
-                    frame.render_widget(paragraph, content_area);
+                    let paragraph =
+                        Paragraph::new(text).block(Block::default().borders(Borders::NONE));
+                    frame.render_widget(paragraph, chunks[1]);
 
                     if prefix_mode {
-                        let msg = Paragraph::new(" CTRL+B pressed — d: quit, 1/2: switch tab ")
+                        let msg = Paragraph::new(" Ctrl+B: d quit  1 agent  2 shell ")
                             .style(Style::default().fg(Color::Black).bg(Color::Yellow));
-                        let w = 45u16;
+                        let w = 36u16;
                         let h = 1u16;
                         let x = area.width.saturating_sub(w) / 2;
                         let y = area.height.saturating_sub(3);
@@ -407,17 +402,25 @@ impl Tui {
                 })
                 .map_err(|e| JailError::Backend(format!("Failed to draw frame: {e}")))?;
 
-            if event::poll(Duration::from_millis(16))
-                .map_err(|e| JailError::Backend(format!("Event poll failed: {e}")))?
-            {
-                match event::read()
-                    .map_err(|e| JailError::Backend(format!("Event read failed: {e}")))?
+            // Drain all pending key events in one tick so fast typing never starves TUI keys.
+            loop {
+                if !event::poll(Duration::from_millis(16))
+                    .map_err(|e| JailError::Backend(format!("Event poll failed: {e}")))?
                 {
+                    break;
+                }
+
+                let ev = event::read()
+                    .map_err(|e| JailError::Backend(format!("Event read failed: {e}")))?;
+
+                match ev {
+                    Event::Key(key) if key.kind != KeyEventKind::Press => {}
+
                     Event::Key(key) if prefix_mode => {
                         prefix_mode = false;
                         match key.code {
                             KeyCode::Char('d') | KeyCode::Char('D') => {
-                                break;
+                                return Ok(());
                             }
                             KeyCode::Char('1') => {
                                 active_tab = Tab::Agent;
@@ -425,63 +428,72 @@ impl Tui {
                             KeyCode::Char('2') => {
                                 active_tab = Tab::Shell;
                             }
-                            KeyCode::Char('b') | KeyCode::Char('B')
-                                if key.modifiers == KeyModifiers::CONTROL =>
-                            {
+                            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 prefix_mode = true;
                             }
                             _ => {
                                 let bytes = key_event_to_bytes(key);
-                                if active_tab == Tab::Agent {
-                                    agent_pane.write_input(&bytes);
-                                } else {
-                                    shell_pane.write_input(&bytes);
-                                }
+                                active_pane_mut(&mut agent_pane, &mut shell_pane, active_tab)
+                                    .write_input(&bytes);
                             }
                         }
                     }
+
                     Event::Key(KeyEvent {
                         code: KeyCode::Char('b'),
-                        modifiers: KeyModifiers::CONTROL,
+                        modifiers,
+                        kind: KeyEventKind::Press,
                         ..
-                    }) => {
+                    }) if modifiers.contains(KeyModifiers::CONTROL) => {
                         prefix_mode = true;
                     }
+
                     Event::Key(KeyEvent {
-                        code: KeyCode::Char('1'),
-                        modifiers: KeyModifiers::ALT,
+                        code: KeyCode::F(1),
+                        kind: KeyEventKind::Press,
                         ..
                     }) => {
                         active_tab = Tab::Agent;
                     }
+
                     Event::Key(KeyEvent {
-                        code: KeyCode::Char('2'),
-                        modifiers: KeyModifiers::ALT,
+                        code: KeyCode::F(2),
+                        kind: KeyEventKind::Press,
                         ..
                     }) => {
                         active_tab = Tab::Shell;
                     }
+
                     Event::Key(key) => {
                         let bytes = key_event_to_bytes(key);
                         if !bytes.is_empty() {
-                            if active_tab == Tab::Agent {
-                                agent_pane.write_input(&bytes);
-                            } else {
-                                shell_pane.write_input(&bytes);
-                            }
+                            active_pane_mut(&mut agent_pane, &mut shell_pane, active_tab)
+                                .write_input(&bytes);
                         }
                     }
+
                     Event::Resize(cols, rows) => {
                         let new_rows = rows.saturating_sub(3);
                         agent_pane.resize(new_rows, cols);
                         shell_pane.resize(new_rows, cols);
+                        current_rows = new_rows;
+                        current_cols = cols;
                     }
+
                     _ => {}
                 }
             }
         }
 
         Ok(())
+    }
+}
+
+fn active_pane_mut<'a>(agent: &'a mut Pane, shell: &'a mut Pane, tab: Tab) -> &'a mut Pane {
+    if tab == Tab::Agent {
+        agent
+    } else {
+        shell
     }
 }
 
@@ -524,7 +536,9 @@ fn key_event_to_bytes(key: KeyEvent) -> Vec<u8> {
         KeyCode::F(2) => vec![0x1b, b'O', b'Q'],
         KeyCode::F(3) => vec![0x1b, b'O', b'R'],
         KeyCode::F(4) => vec![0x1b, b'O', b'S'],
-        KeyCode::F(n) => vec![0x1b, b'[', b'1', b'5' + (n - 5), b'~'],
+        KeyCode::F(n) if n >= 5 => {
+            vec![0x1b, b'[', b'1', b'5' + (n - 5), b'~']
+        }
         _ => vec![],
     }
 }
