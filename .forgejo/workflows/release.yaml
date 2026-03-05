@@ -8,19 +8,22 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_HOME: /usr/local/cargo
+  RUSTUP_HOME: /usr/local/rustup
+  PATH: /usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 jobs:
   build-ebpf:
     name: Build eBPF
-    runs-on: ubuntu-latest
-    container:
-      image: rust:latest
+    runs-on: rust
     steps:
       - name: Checkout
         uses: https://data.forgejo.org/actions/checkout@v4
 
-      - name: Install nightly + rust-src
+      - name: Install Rust
         run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+            sh -s -- -y --default-toolchain stable --profile minimal
           rustup toolchain install nightly
           rustup component add rust-src --toolchain nightly
 
@@ -40,21 +43,17 @@ jobs:
           retention-days: 1
 
   build:
-    name: Build - ${{ matrix.suffix }}
+    name: Build x86_64
     needs: build-ebpf
-    runs-on: ubuntu-latest
-    container:
-      image: rust:latest
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            suffix: x86_64-linux
-          - target: aarch64-unknown-linux-gnu
-            suffix: aarch64-linux
+    runs-on: rust
     steps:
       - name: Checkout
         uses: https://data.forgejo.org/actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+            sh -s -- -y --default-toolchain stable --profile minimal
 
       - name: Download eBPF artifact
         uses: https://data.forgejo.org/actions/download-artifact@v4
@@ -62,43 +61,30 @@ jobs:
           name: ebpf-programs
           path: target/bpfel-unknown-none/release/
 
-      - name: Install cross dependencies
-        run: apt-get update && apt-get install -y docker.io
-
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Add target
-        run: rustup target add ${{ matrix.target }}
-
-      - name: Build with cross
-        env:
-          DOCKER_HOST: tcp://localhost:2376
-          DOCKER_TLS_VERIFY: "1"
-          DOCKER_CERT_PATH: /certs/client
+      - name: Build
         run: |
-          cross build --release --package jail-ai --target ${{ matrix.target }}
-          cross build --release --package jail-ai-ebpf-loader --target ${{ matrix.target }}
-          strip target/${{ matrix.target }}/release/jail-ai || true
-          strip target/${{ matrix.target }}/release/jail-ai-ebpf-loader || true
+          cargo build --release --package jail-ai
+          cargo build --release --package jail-ai-ebpf-loader
+          strip target/release/jail-ai || true
+          strip target/release/jail-ai-ebpf-loader || true
 
       - name: Package
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/jail-ai dist/jail-ai-${{ matrix.suffix }}
-          cp target/${{ matrix.target }}/release/jail-ai-ebpf-loader dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
+          cp target/release/jail-ai dist/jail-ai-x86_64-linux
+          cp target/release/jail-ai-ebpf-loader dist/jail-ai-ebpf-loader-x86_64-linux
 
       - name: Upload jail-ai
         uses: https://data.forgejo.org/actions/upload-artifact@v4
         with:
-          name: jail-ai-${{ matrix.suffix }}
-          path: dist/jail-ai-${{ matrix.suffix }}
+          name: jail-ai-x86_64-linux
+          path: dist/jail-ai-x86_64-linux
 
       - name: Upload loader
         uses: https://data.forgejo.org/actions/upload-artifact@v4
         with:
-          name: jail-ai-ebpf-loader-${{ matrix.suffix }}
-          path: dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
+          name: jail-ai-ebpf-loader-x86_64-linux
+          path: dist/jail-ai-ebpf-loader-x86_64-linux
 
   release:
     name: Publish Release

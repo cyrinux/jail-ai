@@ -9,19 +9,22 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_HOME: /usr/local/cargo
+  RUSTUP_HOME: /usr/local/rustup
+  PATH: /usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 jobs:
   build-ebpf:
     name: Build eBPF
-    runs-on: ubuntu-latest
-    container:
-      image: rust:latest
+    runs-on: rust
     steps:
       - name: Checkout
         uses: https://data.forgejo.org/actions/checkout@v4
 
-      - name: Install nightly + rust-src
+      - name: Install Rust
         run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+            sh -s -- -y --default-toolchain stable --profile minimal
           rustup toolchain install nightly
           rustup component add rust-src --toolchain nightly
 
@@ -43,12 +46,15 @@ jobs:
   build:
     name: Build & Test
     needs: build-ebpf
-    runs-on: ubuntu-latest
-    container:
-      image: rust:latest
+    runs-on: rust
     steps:
       - name: Checkout
         uses: https://data.forgejo.org/actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+            sh -s -- -y --default-toolchain stable --profile minimal
 
       - name: Download eBPF artifact
         uses: https://data.forgejo.org/actions/download-artifact@v4
