@@ -44,6 +44,18 @@ impl Pane {
         let mut cmd = CommandBuilder::new("podman");
         cmd.arg("exec");
         cmd.arg("-it");
+        // Forward terminal environment so colors and capabilities work correctly
+        // inside the container. Use xterm-256color as TERM: kitty's own terminfo
+        // is not installed in the container, and xterm-256color is universally
+        // available while still enabling full 256-color support.
+        cmd.arg("-e");
+        cmd.arg("TERM=xterm-256color");
+        cmd.arg("-e");
+        cmd.arg("COLORTERM=truecolor");
+        if let Ok(lang) = std::env::var("LANG") {
+            cmd.arg("-e");
+            cmd.arg(format!("LANG={lang}"));
+        }
         cmd.arg(jail_name);
         for arg in command {
             cmd.arg(arg);
@@ -210,7 +222,7 @@ impl Pane {
             for span in spans.iter_mut() {
                 let span_len = span.content.chars().count();
                 if char_pos + span_len > col {
-                    span.style = span.style.bg(Color::White).fg(Color::Black);
+                    span.style = span.style.add_modifier(Modifier::REVERSED);
                     found = true;
                     break;
                 }
@@ -220,7 +232,7 @@ impl Pane {
             if !found && col == char_pos {
                 spans.push(Span::styled(
                     " ",
-                    Style::default().bg(Color::White).fg(Color::Black),
+                    Style::default().add_modifier(Modifier::REVERSED),
                 ));
             }
         }
