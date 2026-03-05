@@ -14,6 +14,7 @@ mod jail_setup;
 mod project_detection;
 mod state;
 mod strings;
+mod tui;
 mod worktree;
 
 use clap::Parser;
@@ -97,7 +98,7 @@ async fn main() {
 
     // Initialize tracing
     let filter = if cli.verbose {
-        "jail_ai=debug,info"
+        "jail_ai=debug" // debug level includes info and warn
     } else {
         "jail_ai=warn"
     };
@@ -694,6 +695,7 @@ async fn run_agent_command(
             no_nix: common.no_nix,
             no_block_host: common.no_block_host,
             podman: common.podman,
+            tui: common.tui,
             args,
         },
     )

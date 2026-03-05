@@ -44,6 +44,7 @@ pub struct AgentCommandParams {
     pub no_nix: bool,
     pub no_block_host: bool,
     pub podman: bool,
+    pub tui: bool,
     pub args: Vec<String>,
 }
 
@@ -717,6 +718,42 @@ pub async fn run_ai_agent_command(
         .backend(backend_type)
         .verbose(params.verbose)
         .build();
+
+    // If --tui flag is set, launch the ratatui TUI with agent + shell tabs
+    if params.tui {
+        info!("Launching TUI for jail '{}'", jail_name);
+        let uses_nix_wrapper_for_tui = jail
+            .exec(
+                &[
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "[ -x /usr/local/bin/nix-wrapper ] && echo yes || echo no".to_string(),
+                ],
+                false,
+            )
+            .await
+            .map(|o| o.trim() == "yes")
+            .unwrap_or(false);
+
+        let agent_cmd = if uses_nix_wrapper_for_tui {
+            let mut cmd = vec![
+                "/usr/local/bin/nix-wrapper".to_string(),
+                agent_command.to_string(),
+            ];
+            cmd.extend(params.args.clone());
+            cmd
+        } else {
+            let mut cmd = vec![agent_command.to_string()];
+            cmd.extend(params.args.clone());
+            cmd
+        };
+
+        return tokio::task::spawn_blocking(move || {
+            crate::tui::Tui::new(&jail_name, agent_cmd).run()
+        })
+        .await
+        .map_err(|e| crate::error::JailError::Backend(format!("TUI task panicked: {e}")))?;
+    }
 
     // If --shell flag is set, start an interactive shell instead of running the agent
     if params.shell {

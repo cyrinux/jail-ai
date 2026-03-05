@@ -133,6 +133,10 @@ pub struct AgentCommandOptions {
     /// This allows running containers inside the jail (useful for MCP agents)
     #[arg(long)]
     pub podman: bool,
+
+    /// Launch the TUI with a tab for the agent and a tab for an interactive shell
+    #[arg(long)]
+    pub tui: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -774,7 +778,11 @@ mod tests {
         let cli = Cli::try_parse_from(args).unwrap();
 
         match cli.command {
-            Some(Commands::Create { host_network, no_network, .. }) => {
+            Some(Commands::Create {
+                host_network,
+                no_network,
+                ..
+            }) => {
                 assert!(host_network);
                 assert!(!no_network);
             }

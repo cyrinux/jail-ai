@@ -19,7 +19,7 @@ codegen-units = 1
 
 [package]
 name = "jail-ai"
-version = "0.47.0"
+version = "0.48.0"
 edition = "2021"
 authors = ["Cyril Levis <git@levis.name>", "Max Baz <max@baz.nu>"]
 license = "MIT OR Apache-2.0"
@@ -48,3 +48,7 @@ which = "7.0"
 indicatif = "0.18.0"
 lru = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
+ratatui = "0.30.0"
+crossterm = { version = "0.28", features = ["event-stream"] }
+portable-pty = "0.9.0"
+vt100 = "0.16.2"

@@ -722,6 +722,11 @@ pub async fn build_shared_layer(
     verbose: bool,
     force_rebuild: bool,
 ) -> Result<String> {
+    debug!(
+        "build_shared_layer called: layer={}, verbose={}, force_rebuild={}",
+        layer_name, verbose, force_rebuild
+    );
+
     let image_name = match layer_name {
         "base" => BASE_IMAGE_NAME.to_string(),
         "golang" => GOLANG_IMAGE_NAME.to_string(),
@@ -1105,12 +1110,10 @@ pub async fn build_project_image(
                 should_force_agent,
             )
             .await?;
+        } else if verbose {
+            info!("Agent image already exists, skipping");
         } else {
-            if verbose {
-                info!("Agent image already exists, skipping");
-            } else {
-                debug!("Agent image already exists: {}", final_image_name);
-            }
+            debug!("Agent image already exists: {}", final_image_name);
         }
 
         info!("Final image: {}", final_image_name);
