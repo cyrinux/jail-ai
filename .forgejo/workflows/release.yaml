@@ -1,0 +1,135 @@
+---
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-ebpf:
+    name: Build eBPF
+    runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v4
+
+      - name: Install nightly + rust-src
+        run: |
+          rustup toolchain install nightly
+          rustup component add rust-src --toolchain nightly
+
+      - name: Install bpf-linker
+        run: cargo install bpf-linker
+
+      - name: Build eBPF programs
+        run: |
+          cd jail-ai-ebpf
+          cargo +nightly build --release --target=bpfel-unknown-none -Z build-std=core
+
+      - name: Upload eBPF artifact
+        uses: https://data.forgejo.org/actions/upload-artifact@v4
+        with:
+          name: ebpf-programs
+          path: target/bpfel-unknown-none/release/jail-ai-ebpf
+          retention-days: 1
+
+  build:
+    name: Build - ${{ matrix.suffix }}
+    needs: build-ebpf
+    runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            suffix: x86_64-linux
+          - target: aarch64-unknown-linux-gnu
+            suffix: aarch64-linux
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v4
+
+      - name: Download eBPF artifact
+        uses: https://data.forgejo.org/actions/download-artifact@v4
+        with:
+          name: ebpf-programs
+          path: target/bpfel-unknown-none/release/
+
+      - name: Install cross dependencies
+        run: apt-get update && apt-get install -y docker.io
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build with cross
+        env:
+          DOCKER_HOST: tcp://localhost:2376
+          DOCKER_TLS_VERIFY: "1"
+          DOCKER_CERT_PATH: /certs/client
+        run: |
+          cross build --release --package jail-ai --target ${{ matrix.target }}
+          cross build --release --package jail-ai-ebpf-loader --target ${{ matrix.target }}
+          strip target/${{ matrix.target }}/release/jail-ai || true
+          strip target/${{ matrix.target }}/release/jail-ai-ebpf-loader || true
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/jail-ai dist/jail-ai-${{ matrix.suffix }}
+          cp target/${{ matrix.target }}/release/jail-ai-ebpf-loader dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
+
+      - name: Upload jail-ai
+        uses: https://data.forgejo.org/actions/upload-artifact@v4
+        with:
+          name: jail-ai-${{ matrix.suffix }}
+          path: dist/jail-ai-${{ matrix.suffix }}
+
+      - name: Upload loader
+        uses: https://data.forgejo.org/actions/upload-artifact@v4
+        with:
+          name: jail-ai-ebpf-loader-${{ matrix.suffix }}
+          path: dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: https://data.forgejo.org/actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "jail-ai-*"
+          merge-multiple: true
+
+      - name: Create release and upload assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE=$(curl -sf -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/releases" \
+            -d "{\"tag_name\":\"$GITHUB_REF_NAME\",\"name\":\"$GITHUB_REF_NAME\",\"generate_release_notes\":true}")
+
+          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Release ID: $RELEASE_ID"
+
+          for f in artifacts/*; do
+            echo "Uploading $(basename $f)..."
+            curl -sf -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$(basename $f)" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@$f"
+          done
