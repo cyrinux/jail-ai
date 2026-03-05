@@ -37,7 +37,7 @@ jobs:
           cargo +nightly build --release --target=bpfel-unknown-none -Z build-std=core
 
       - name: Upload eBPF artifact
-        uses: https://data.forgejo.org/actions/upload-artifact@v4
+        uses: https://data.forgejo.org/actions/upload-artifact@v3
         with:
           name: ebpf-programs
           path: target/bpfel-unknown-none/release/jail-ai-ebpf
@@ -57,7 +57,7 @@ jobs:
             sh -s -- -y --default-toolchain stable --profile minimal
 
       - name: Download eBPF artifact
-        uses: https://data.forgejo.org/actions/download-artifact@v4
+        uses: https://data.forgejo.org/actions/download-artifact@v3
         with:
           name: ebpf-programs
           path: target/bpfel-unknown-none/release/
