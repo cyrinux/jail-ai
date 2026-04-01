@@ -32,11 +32,17 @@ pub trait JailBackend: Send + Sync {
     async fn start(&self, name: &str) -> Result<()>;
 }
 
+pub mod container_app;
 pub mod podman;
 
 /// Create a backend based on the configuration
-pub fn create_backend(_config: &JailConfig) -> Box<dyn JailBackend> {
-    Box::new(podman::PodmanBackend::new())
+pub fn create_backend(config: &JailConfig) -> Box<dyn JailBackend> {
+    match config.backend {
+        crate::config::BackendType::ContainerApp => {
+            Box::new(container_app::ContainerAppBackend::new())
+        }
+        crate::config::BackendType::Podman => Box::new(podman::PodmanBackend::new()),
+    }
 }
 
 /// Helper to run a command and capture output

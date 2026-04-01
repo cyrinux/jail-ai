@@ -1,43 +1,28 @@
+#[cfg(target_os = "linux")]
 mod host_ips;
+#[cfg(target_os = "linux")]
 mod loader_client;
 
 use crate::error::Result;
 use std::net::IpAddr;
 use tracing::{debug, info};
 
+#[cfg(target_os = "linux")]
 pub use host_ips::get_host_ips;
+#[cfg(target_os = "linux")]
 use loader_client::load_ebpf_via_helper;
 
-/// eBPF-based host blocker for containers
-///
-/// This struct manages eBPF programs that block all packets from containers to host IPs.
-/// It delegates eBPF loading to a privileged helper binary (jail-ai-ebpf-loader).
-///
-/// # Requirements
-/// - jail-ai-ebpf-loader binary must be installed with CAP_BPF and CAP_NET_ADMIN capabilities
-/// - Linux kernel 4.10+ with BPF cgroup_skb support
-///
-/// # Security Architecture
-/// - Main jail-ai binary runs **without** elevated privileges
-/// - Privileged helper binary (jail-ai-ebpf-loader) performs eBPF loading
-/// - Helper binary validates inputs rigorously and drops capabilities after loading
-/// - Minimal attack surface: helper is < 500 LOC and stateless
-///
-/// # Usage
-/// ```no_run
-/// # use jail_ai::ebpf::{EbpfHostBlocker, get_host_ips};
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut blocker = EbpfHostBlocker::new();
-/// let host_ips = get_host_ips()?;
-/// blocker.attach_to_cgroup("/sys/fs/cgroup/my-container", &host_ips).await?;
-/// # Ok(())
-/// # }
-/// ```
+#[cfg(not(target_os = "linux"))]
+pub fn get_host_ips() -> Result<Vec<IpAddr>> {
+    Ok(Vec::new())
+}
+
+#[cfg(target_os = "linux")]
 pub struct EbpfHostBlocker {
-    /// Link IDs for cleanup
     link_ids: Vec<u64>,
 }
 
+#[cfg(target_os = "linux")]
 impl EbpfHostBlocker {
     /// Create a new eBPF host blocker instance
     pub fn new() -> Self {
@@ -137,12 +122,14 @@ impl EbpfHostBlocker {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for EbpfHostBlocker {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Drop for EbpfHostBlocker {
     fn drop(&mut self) {
         // eBPF programs are managed by the kernel and will be automatically
@@ -150,7 +137,7 @@ impl Drop for EbpfHostBlocker {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

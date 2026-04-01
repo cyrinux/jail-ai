@@ -1,3 +1,4 @@
+use crate::config::BackendType;
 use crate::error::{JailError, Result};
 use crate::project_detection::{
     detect_project_type_with_options, has_custom_containerfile, ProjectType,
@@ -12,6 +13,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::process::Command;
 use tracing::{debug, info};
+
+/// Return the container CLI binary name for the current platform/available backend
+fn container_cli() -> &'static str {
+    if BackendType::detect() == BackendType::ContainerApp {
+        "container"
+    } else {
+        "podman"
+    }
+}
 
 /// Base image layers (shared across all projects with :latest tag)
 const BASE_IMAGE_NAME: &str = "localhost/jail-ai-base:latest";
@@ -30,7 +40,10 @@ const AWS_IMAGE_NAME: &str = "localhost/jail-ai-aws:latest";
 const GCP_IMAGE_NAME: &str = "localhost/jail-ai-gcp:latest";
 
 /// Containerfiles embedded from the repository
+#[cfg(not(target_os = "macos"))]
 const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base.Containerfile");
+#[cfg(target_os = "macos")]
+const BASE_CONTAINERFILE: &str = include_str!("../containerfiles/base-darwin.Containerfile");
 const GOLANG_CONTAINERFILE: &str = include_str!("../containerfiles/golang.Containerfile");
 const RUST_CONTAINERFILE: &str = include_str!("../containerfiles/rust.Containerfile");
 const PYTHON_CONTAINERFILE: &str = include_str!("../containerfiles/python.Containerfile");
@@ -250,10 +263,34 @@ fn hash_containerfile(content: &str) -> String {
     hex::encode(hash)[..16].to_string() // Use first 16 chars
 }
 
+/// Check if an image exists using the native container CLI.
+/// Podman supports `image exists <name>` (exit 0/1).
+/// Apple Container uses `images --quiet <name>` and checks for non-empty output.
+async fn check_image_exists_native(image_name: &str) -> bool {
+    if BackendType::detect() == BackendType::ContainerApp {
+        let mut cmd = Command::new("container");
+        cmd.arg("images").arg("--quiet").arg(image_name);
+        match cmd.output().await {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                output.status.success() && !stdout.trim().is_empty()
+            }
+            Err(_) => false,
+        }
+    } else {
+        let mut cmd = Command::new("podman");
+        cmd.arg("image").arg("exists").arg(image_name);
+        match cmd.output().await {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        }
+    }
+}
+
 // ========== Performance Optimization: Image Existence Cache ==========
 
 /// Global LRU cache for image existence checks
-/// This prevents repeated `podman image exists` calls for the same image
+/// This prevents repeated image existence calls for the same image
 static IMAGE_EXISTS_CACHE: OnceLock<Arc<Mutex<LruCache<String, bool>>>> = OnceLock::new();
 
 fn image_cache() -> &'static Arc<Mutex<LruCache<String, bool>>> {
@@ -288,15 +325,8 @@ pub async fn image_exists(image_name: &str) -> Result<bool> {
         }
     }
 
-    // Cache miss: query podman
     debug!("🔍 Cache miss, checking image existence: {}", image_name);
-    let mut cmd = Command::new("podman");
-    cmd.arg("image").arg("exists").arg(image_name);
-
-    let exists = match cmd.output().await {
-        Ok(output) => output.status.success(),
-        Err(_) => false,
-    };
+    let exists = check_image_exists_native(image_name).await;
 
     // Update cache
     {
@@ -350,7 +380,7 @@ pub async fn get_expected_image_name(
 
 /// Get the containerfile hash label from an image
 async fn get_image_containerfile_hash(image_name: &str) -> Result<Option<String>> {
-    let mut cmd = Command::new("podman");
+    let mut cmd = Command::new(container_cli());
     cmd.arg("image")
         .arg("inspect")
         .arg(image_name)
@@ -414,7 +444,7 @@ async fn batch_check_images_need_rebuild(
         .map(|(name, _)| name.as_str())
         .collect();
 
-    let mut cmd = Command::new("podman");
+    let mut cmd = Command::new(container_cli());
     cmd.arg("image")
         .arg("inspect")
         .arg("--format")
@@ -653,7 +683,7 @@ async fn build_custom_layer(
     let containerfile_hash = hash_containerfile(&containerfile_content);
 
     // Build command
-    let mut cmd = Command::new("podman");
+    let mut cmd = Command::new(container_cli());
     cmd.arg("build").arg("-t").arg(image_tag);
 
     if no_cache {
@@ -810,7 +840,7 @@ async fn build_image_from_containerfile(
         .map_err(|e| JailError::Backend(format!("Failed to write Containerfile: {}", e)))?;
 
     // Build command
-    let mut cmd = Command::new("podman");
+    let mut cmd = Command::new(container_cli());
     cmd.arg("build").arg("-t").arg(image_tag);
 
     if no_cache {
@@ -1139,7 +1169,7 @@ pub async fn build_project_image(
         if upgrade || !image_exists(&final_image_name).await? {
             info!("Tagging custom/language image: {}", final_image_name);
 
-            let mut cmd = Command::new("podman");
+            let mut cmd = Command::new(container_cli());
             cmd.arg("tag").arg(&custom_image).arg(&final_image_name);
 
             let status = cmd

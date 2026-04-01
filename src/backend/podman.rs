@@ -3,16 +3,19 @@ use crate::config::JailConfig;
 use crate::error::{JailError, Result};
 use crate::image;
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
-// Global registry to store eBPF blockers for active containers
-// This prevents them from being dropped (which would detach the eBPF programs)
+#[cfg(target_os = "linux")]
+use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use std::sync::{Arc, Mutex, OnceLock};
+
+#[cfg(target_os = "linux")]
 static EBPF_BLOCKERS: OnceLock<Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBlocker>>>> =
     OnceLock::new();
 
+#[cfg(target_os = "linux")]
 fn ebpf_blockers() -> &'static Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBlocker>>> {
     EBPF_BLOCKERS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
 }
@@ -24,8 +27,7 @@ impl PodmanBackend {
         Self
     }
 
-    /// Check if eBPF loader is running for this container and reattach if needed
-    /// This handles cases where the system rebooted but the container auto-started
+    #[cfg(target_os = "linux")]
     async fn reattach_ebpf_if_needed(&self, name: &str) -> Result<()> {
         // Check if this container has eBPF blocking enabled by checking for the label
         // If the label doesn't exist or is false, skip eBPF reattachment
@@ -121,8 +123,7 @@ impl PodmanBackend {
         Ok(())
     }
 
-    /// Check if eBPF loader process is running for a specific container  
-    /// by checking if we have a blocker in memory AND a loader process is running
+    #[cfg(target_os = "linux")]
     async fn is_ebpf_loader_running(&self, container_name: &str) -> bool {
         // ONLY trust our in-memory map - if we don't have a blocker stored,
         // then we don't know if eBPF is active for this container
@@ -381,6 +382,7 @@ impl PodmanBackend {
     ///
     /// # Errors
     /// Returns Err if container doesn't exist or PID cannot be retrieved
+    #[cfg(target_os = "linux")]
     pub async fn get_container_pid(&self, name: &str) -> Result<u32> {
         let mut cmd = Command::new("podman");
         cmd.arg("inspect")
@@ -418,6 +420,7 @@ impl PodmanBackend {
     ///
     /// # Errors
     /// Returns Err if container doesn't exist, is not running, or cgroup path cannot be determined
+    #[cfg(target_os = "linux")]
     pub async fn get_container_cgroup_path(&self, name: &str) -> Result<String> {
         // Get container PID first
         let pid = self.get_container_pid(name).await?;
@@ -476,8 +479,7 @@ impl PodmanBackend {
     /// Ok(()) if successful
     ///
     /// # Errors
-    /// Returns Err if container is not running, cgroup path cannot be determined,
-    /// or eBPF program cannot be attached
+    #[cfg(target_os = "linux")]
     async fn apply_ebpf_host_blocking(&self, name: &str) -> Result<()> {
         // Get container's cgroup path
         let cgroup_path = self.get_container_cgroup_path(name).await?;
@@ -615,8 +617,7 @@ impl JailBackend for PodmanBackend {
         debug!("Creating container with args: {:?}", args);
         run_command(&mut cmd).await?;
 
-        // Apply eBPF host blocking if requested
-        // Skip eBPF when using host networking (container shares host's network namespace)
+        #[cfg(target_os = "linux")]
         if config.block_host {
             if config.network.host {
                 info!(
@@ -629,7 +630,6 @@ impl JailBackend for PodmanBackend {
                     "Applying eBPF host blocking for container '{}'",
                     config.name
                 );
-                // Propagate eBPF loading errors - container creation must fail if eBPF fails
                 self.apply_ebpf_host_blocking(&config.name).await?;
                 info!("✓ eBPF host blocking applied successfully");
             }
@@ -674,14 +674,16 @@ impl JailBackend for PodmanBackend {
     async fn remove(&self, name: &str, remove_volume: bool) -> Result<()> {
         info!("Removing podman jail: {}", name);
 
-        // Remove eBPF blocker if it exists
-        let blockers = ebpf_blockers();
-        if let Ok(mut blockers_map) = blockers.lock() {
-            if blockers_map.remove(name).is_some() {
-                debug!(
-                    "Removed eBPF blocker for container '{}' from registry",
-                    name
-                );
+        #[cfg(target_os = "linux")]
+        {
+            let blockers = ebpf_blockers();
+            if let Ok(mut blockers_map) = blockers.lock() {
+                if blockers_map.remove(name).is_some() {
+                    debug!(
+                        "Removed eBPF blocker for container '{}' from registry",
+                        name
+                    );
+                }
             }
         }
 
@@ -761,17 +763,15 @@ impl JailBackend for PodmanBackend {
                     run_command(&mut start_cmd).await?;
                     info!("Container {} started successfully", name);
 
-                    // Wait a bit for cgroup to be fully initialized
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-                    // Re-attach eBPF if needed after container restart
+                    #[cfg(target_os = "linux")]
                     self.reattach_ebpf_if_needed(name).await?;
                 }
             }
         }
 
-        // Always check eBPF status when entering an existing running container
-        // (in case of system reboot where container auto-starts but loader doesn't)
+        #[cfg(target_os = "linux")]
         if !was_stopped {
             self.reattach_ebpf_if_needed(name).await?;
         }

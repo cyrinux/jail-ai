@@ -73,6 +73,8 @@ fn default_true() -> bool {
 #[serde(rename_all = "lowercase")]
 pub enum BackendType {
     Podman,
+    #[serde(rename = "container-app")]
+    ContainerApp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,24 +120,42 @@ pub struct ResourceLimits {
 impl BackendType {
     /// Check if this backend is available on the system
     pub fn is_available(&self) -> bool {
-        std::process::Command::new("podman")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        match self {
+            BackendType::Podman => std::process::Command::new("podman")
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false),
+            BackendType::ContainerApp => std::process::Command::new("container")
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false),
+        }
     }
 
     /// Get all available backends on the system
     pub fn all_available() -> Vec<Self> {
-        if BackendType::Podman.is_available() {
-            vec![BackendType::Podman]
-        } else {
-            vec![]
+        let mut available = Vec::new();
+        for backend in [BackendType::Podman, BackendType::ContainerApp] {
+            if backend.is_available() {
+                available.push(backend);
+            }
         }
+        available
     }
 
-    /// Always returns Podman (only supported backend)
+    /// Detect the best available backend for the current platform
+    ///
+    /// On macOS (darwin/arm64) prefers apple/container if available,
+    /// falling back to podman. On Linux always returns Podman.
     pub fn detect() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            if BackendType::ContainerApp.is_available() {
+                return BackendType::ContainerApp;
+            }
+        }
         BackendType::Podman
     }
 }

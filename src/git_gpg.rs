@@ -319,10 +319,22 @@ pub fn prepare_gpg_config(gpg_dir: &Path) -> Result<(std::path::PathBuf, Vec<std
 
     let mut sockets = Vec::new();
 
-    // Look for GPG agent sockets in the runtime directory (/run/user/UID/gnupg/)
-    // This is where gpg-agent actually creates the sockets
-    let uid = get_user_uid()?;
-    let runtime_gpg_dir = std::path::PathBuf::from(format!("/run/user/{uid}/gnupg"));
+    // Look for GPG agent sockets in the runtime directory
+    // On Linux: /run/user/UID/gnupg/   On macOS: $GNUPGHOME or ~/.gnupg
+    #[cfg(target_os = "linux")]
+    let runtime_gpg_dir = {
+        let uid = get_user_uid()?;
+        std::path::PathBuf::from(format!("/run/user/{uid}/gnupg"))
+    };
+    #[cfg(not(target_os = "linux"))]
+    let runtime_gpg_dir = {
+        let gnupghome = std::env::var("GNUPGHOME").unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| format!("{h}/.gnupg"))
+                .unwrap_or_else(|_| "/tmp/.gnupg".to_string())
+        });
+        std::path::PathBuf::from(gnupghome)
+    };
 
     if runtime_gpg_dir.exists() {
         debug!(

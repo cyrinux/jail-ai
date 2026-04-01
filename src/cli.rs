@@ -8,7 +8,7 @@ pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
 /// Common options for AI agent commands
 #[derive(Args, Debug)]
 pub struct AgentCommandOptions {
-    /// Backend type (only 'podman' is supported, kept for compatibility)
+    /// Backend type: 'podman' (Linux) or 'container-app' (macOS/apple-container)
     #[arg(short, long)]
     pub backend: Option<String>,
 
@@ -141,7 +141,7 @@ pub struct AgentCommandOptions {
 
 #[derive(Parser, Debug)]
 #[command(name = "jail-ai")]
-#[command(about = "AI Agent Jail Manager - Sandbox AI agents using podman", long_about = None)]
+#[command(about = "AI Agent Jail Manager - Sandbox AI agents using podman or apple/container", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -469,8 +469,9 @@ impl Commands {
     pub fn parse_backend(backend: &str) -> Result<crate::config::BackendType, String> {
         match backend.to_lowercase().as_str() {
             "podman" | "pod" => Ok(crate::config::BackendType::Podman),
+            "container-app" | "container" | "apple" => Ok(crate::config::BackendType::ContainerApp),
             _ => Err(format!(
-                "Invalid backend '{backend}'. Only 'podman' is supported"
+                "Invalid backend '{backend}'. Supported: 'podman', 'container-app'"
             )),
         }
     }
@@ -636,6 +637,18 @@ mod tests {
         assert!(matches!(
             Commands::parse_backend("pod"),
             Ok(crate::config::BackendType::Podman)
+        ));
+        assert!(matches!(
+            Commands::parse_backend("container-app"),
+            Ok(crate::config::BackendType::ContainerApp)
+        ));
+        assert!(matches!(
+            Commands::parse_backend("container"),
+            Ok(crate::config::BackendType::ContainerApp)
+        ));
+        assert!(matches!(
+            Commands::parse_backend("apple"),
+            Ok(crate::config::BackendType::ContainerApp)
         ));
         assert!(Commands::parse_backend("invalid").is_err());
     }
