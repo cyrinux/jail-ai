@@ -94,32 +94,53 @@ jobs:
 
   build-macos:
     name: Build macOS - ${{ matrix.target }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04-arm
     strategy:
       matrix:
         include:
-          - runner: macos-15
-            target: aarch64-apple-darwin
+          - target: aarch64-apple-darwin
             suffix: aarch64-macos
             bottle_tag: arm64_sequoia
-          - runner: macos-13
-            target: x86_64-apple-darwin
+            linker_triple: arm64-apple-darwin20.4
+          - target: x86_64-apple-darwin
             suffix: x86_64-macos
             bottle_tag: ventura
+            linker_triple: x86_64-apple-darwin20.4
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang llvm lld cmake libxml2-dev uuid-dev libssl-dev \
+            xz-utils bzip2 cpio libbz2-dev zlib1g-dev patch
+
+      - name: Build osxcross
+        run: |
+          git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /tmp/osxcross
+          curl -fsSL --retry 3 -o /tmp/osxcross/tarballs/MacOSX11.3.sdk.tar.xz \
+            "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz"
+          cd /tmp/osxcross && UNATTENDED=1 ./build.sh
+          echo "/tmp/osxcross/target/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust target
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Build
         run: |
-          cargo build --release --package jail-ai --target ${{ matrix.target }}
-          strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
+          CARGO_TARGET_$(echo ${{ matrix.target }} | tr '[:lower:]-' '[:upper:]_')_LINKER=${{ matrix.linker_triple }}-clang \
+            AR_$(echo ${{ matrix.target }} | tr '[:lower:]-' '[:upper:]_')=${{ matrix.linker_triple }}-ar \
+            MACOSX_DEPLOYMENT_TARGET=11.3 \
+            cargo build --release --package jail-ai --target ${{ matrix.target }}
+          ${{ matrix.linker_triple }}-strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
+
+      - name: Generate completions (native build for host)
+        run: |
+          cargo build --release --package jail-ai
 
       - name: Prepare bottle
         run: |
@@ -130,12 +151,11 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} "${BOTTLE_DIR}/"
           cp docs/jail-ai.1 "jail-ai/${VERSION}/" 2>/dev/null || true
 
-          # Generate completions and store them alongside the binary
           COMP_DIR="jail-ai/${VERSION}/completions"
           mkdir -p "${COMP_DIR}"
-          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions bash  > "${COMP_DIR}/jail-ai.bash"
-          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions zsh   > "${COMP_DIR}/_jail-ai"
-          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions fish  > "${COMP_DIR}/jail-ai.fish"
+          ./target/release/${{ env.BINARY_NAME }} completions bash > "${COMP_DIR}/jail-ai.bash"
+          ./target/release/${{ env.BINARY_NAME }} completions zsh  > "${COMP_DIR}/_jail-ai"
+          ./target/release/${{ env.BINARY_NAME }} completions fish > "${COMP_DIR}/jail-ai.fish"
 
           tar -czf jail-ai-${{ matrix.bottle_tag }}.tar.gz jail-ai/
           echo "BOTTLE_SHA256=$(shasum -a 256 jail-ai-${{ matrix.bottle_tag }}.tar.gz | awk '{print $1}')" >> "$GITHUB_ENV"

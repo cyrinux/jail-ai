@@ -81,12 +81,15 @@ completions: build ## Generate shell completions into dist/completions/ (native 
 
 build-darwin-arm64: ## Cross-compile jail-ai for aarch64-apple-darwin from Linux (requires osxcross)
 	@echo "Cross-compiling for aarch64-apple-darwin..."
-	@echo "Prerequisites: osxcross in PATH, macOS SDK, rustup target aarch64-apple-darwin"
+	@echo "Prerequisites: osxcross built in /tmp/osxcross (or set OSXCROSS_ROOT), rustup target aarch64-apple-darwin"
 	rustup target add aarch64-apple-darwin
-	CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=aarch64-apple-darwin24-clang \
-	  AR_aarch64_apple_darwin=aarch64-apple-darwin24-ar \
+	PATH="$${OSXCROSS_ROOT:-/tmp/osxcross}/target/bin:$$PATH" \
+	  CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=arm64-apple-darwin20.4-clang \
+	  AR_aarch64_apple_darwin=arm64-apple-darwin20.4-ar \
+	  MACOSX_DEPLOYMENT_TARGET=11.3 \
 	  cargo build --release --package jail-ai --target aarch64-apple-darwin
 	@echo "✓ Binary: target/aarch64-apple-darwin/release/jail-ai"
+	@file target/aarch64-apple-darwin/release/jail-ai
 
 bottle-macos: build ## Build a local Homebrew bottle for the current macOS host
 	@$(MAKE) completions

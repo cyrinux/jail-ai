@@ -72,6 +72,8 @@ const AGENT_GEMINI_CONTAINERFILE: &str =
 const AGENT_CODEX_CONTAINERFILE: &str = include_str!("../containerfiles/agent-codex.Containerfile");
 const AGENT_JULES_CONTAINERFILE: &str = include_str!("../containerfiles/agent-jules.Containerfile");
 const AGENT_PI_CONTAINERFILE: &str = include_str!("../containerfiles/agent-pi.Containerfile");
+const AGENT_OPENCODE_CONTAINERFILE: &str =
+    include_str!("../containerfiles/agent-opencode.Containerfile");
 
 /// Get emoji for a layer type
 fn get_layer_emoji(layer_name: &str) -> &'static str {
@@ -100,6 +102,7 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "agent-codex" => "💻",
         "agent-jules" => "🚀",
         "agent-pi" => "🥧",
+        "agent-opencode" => "🔓",
         _ => "📦",
     }
 }
@@ -251,6 +254,7 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "agent-codex" => Some(AGENT_CODEX_CONTAINERFILE),
         "agent-jules" => Some(AGENT_JULES_CONTAINERFILE),
         "agent-pi" => Some(AGENT_PI_CONTAINERFILE),
+        "agent-opencode" => Some(AGENT_OPENCODE_CONTAINERFILE),
         _ => None,
     }
 }
