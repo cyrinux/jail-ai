@@ -1,4 +1,4 @@
-.PHONY: help all build install build-ebpf build-loader install-loader build-all clean-ebpf run test clippy fmt completions bottle-macos
+.PHONY: help all build install build-ebpf build-loader install-loader build-all clean-ebpf run test clippy fmt completions build-darwin-arm64 bottle-macos
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -9,7 +9,7 @@ help: ## Show this help message
 all: install build-ebpf install-loader ## Full install: build and install everything (main binary, eBPF programs, loader)
 
 build: ## Build the jail-ai binary (release)
-	cargo build --release
+	cargo build --release --package jail-ai
 
 install: build ## Build and install the jail-ai binary
 	cargo install --path .
@@ -72,14 +72,24 @@ rebuild-cloud-layers: ## Force rebuild cloud layers with updated versions
 	@echo "Rebuilding cloud layers..."
 	cargo run -- claude --cloud --upgrade --force-layers aws,gcp --verbose
 
-completions: build ## Generate shell completions into dist/completions/
+completions: build ## Generate shell completions into dist/completions/ (native build)
 	@mkdir -p dist/completions
 	./target/release/jail-ai completions bash > dist/completions/jail-ai.bash
 	./target/release/jail-ai completions zsh  > dist/completions/_jail-ai
 	./target/release/jail-ai completions fish > dist/completions/jail-ai.fish
 	@echo "✓ Completions written to dist/completions/"
 
-bottle-macos: build completions ## Build a local Homebrew bottle for the current macOS host
+build-darwin-arm64: ## Cross-compile jail-ai for aarch64-apple-darwin from Linux (requires osxcross)
+	@echo "Cross-compiling for aarch64-apple-darwin..."
+	@echo "Prerequisites: osxcross in PATH, macOS SDK, rustup target aarch64-apple-darwin"
+	rustup target add aarch64-apple-darwin
+	CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=aarch64-apple-darwin24-clang \
+	  AR_aarch64_apple_darwin=aarch64-apple-darwin24-ar \
+	  cargo build --release --package jail-ai --target aarch64-apple-darwin
+	@echo "✓ Binary: target/aarch64-apple-darwin/release/jail-ai"
+
+bottle-macos: build ## Build a local Homebrew bottle for the current macOS host
+	@$(MAKE) completions
 	@VERSION=$$(cargo metadata --no-deps --format-version 1 | python3 -c 'import sys,json; print(json.load(sys.stdin)["packages"][0]["version"])');\
 	OS_TAG=$$(sw_vers -productName 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr ' ' '_');\
 	BOTTLE_DIR="jail-ai/$${VERSION}/bin";\
