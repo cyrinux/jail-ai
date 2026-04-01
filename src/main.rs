@@ -186,6 +186,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 coderabbit_dir,
                 codex_dir,
                 jules_dir,
+                opencode_dir,
                 pi_dir,
                 agent_configs,
                 git_gpg,
@@ -273,6 +274,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                             coderabbit_dir,
                             codex_dir,
                             jules_dir,
+                            opencode_dir,
                             pi_dir,
                             agent_configs,
                         },
@@ -459,6 +461,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
 
             Commands::Jules { common, args } => {
                 run_agent_command(agents::Agent::Jules, common, args, verbose).await?;
+            }
+
+            Commands::OpenCode { common, args } => {
+                run_agent_command(agents::Agent::OpenCode, common, args, verbose).await?;
             }
 
             Commands::Pi { common, args } => {
@@ -654,6 +660,7 @@ async fn run_agent_command(
         coderabbit_dir: common.coderabbit_dir,
         codex_dir: common.codex_dir,
         jules_dir: common.jules_dir,
+        opencode_dir: common.opencode_dir,
         pi_dir: common.pi_dir,
         agent_configs: common.agent_configs,
     };
@@ -684,6 +691,7 @@ async fn run_agent_command(
             coderabbit_dir: common.coderabbit_dir,
             codex_dir: common.codex_dir,
             jules_dir: common.jules_dir,
+            opencode_dir: common.opencode_dir,
             pi_dir: common.pi_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,

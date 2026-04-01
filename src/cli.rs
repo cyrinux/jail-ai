@@ -86,11 +86,15 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub jules_dir: bool,
 
+    /// Mount entire ~/.config/opencode directory for OpenCode CLI
+    #[arg(long)]
+    pub opencode_dir: bool,
+
     /// Mount entire ~/.pi directory for Pi CLI
     #[arg(long)]
     pub pi_dir: bool,
 
-    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --pi-dir)
+    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --opencode-dir, --pi-dir)
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -244,11 +248,15 @@ pub enum Commands {
         #[arg(long)]
         jules_dir: bool,
 
+        /// Mount entire ~/.config/opencode directory for OpenCode CLI
+        #[arg(long)]
+        opencode_dir: bool,
+
         /// Mount entire ~/.pi directory for Pi CLI
         #[arg(long)]
         pi_dir: bool,
 
-        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --pi-dir)
+        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --opencode-dir, --pi-dir)
         #[arg(long)]
         agent_configs: bool,
 
@@ -405,6 +413,18 @@ pub enum Commands {
         common: AgentCommandOptions,
 
         /// Additional arguments to pass to jules (after --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Quick start OpenCode CLI in a jail for current directory
+    /// Use -- to separate jail-ai options from agent arguments
+    /// Example: jail-ai opencode --opencode-dir -- chat "help with this code"
+    OpenCode {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+
+        /// Additional arguments to pass to opencode (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

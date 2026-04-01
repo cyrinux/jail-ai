@@ -27,6 +27,7 @@ mod copilot;
 mod cursor;
 mod gemini;
 mod jules;
+mod opencode;
 mod pi;
 
 use std::fmt;
@@ -42,6 +43,7 @@ pub enum Agent {
     Gemini,
     Codex,
     Jules,
+    OpenCode,
     Pi,
 }
 
@@ -57,6 +59,7 @@ impl Agent {
             "gemini" => Some(Self::Gemini),
             "codex" => Some(Self::Codex),
             "jules" => Some(Self::Jules),
+            "opencode" => Some(Self::OpenCode),
             "pi" => Some(Self::Pi),
             _ => None,
         }
@@ -73,6 +76,7 @@ impl Agent {
             Self::Gemini => gemini::COMMAND_NAME,
             Self::Codex => codex::COMMAND_NAME,
             Self::Jules => jules::COMMAND_NAME,
+            Self::OpenCode => opencode::COMMAND_NAME,
             Self::Pi => pi::COMMAND_NAME,
         }
     }
@@ -88,6 +92,7 @@ impl Agent {
             Self::Gemini => gemini::NORMALIZED_NAME,
             Self::Codex => codex::NORMALIZED_NAME,
             Self::Jules => jules::NORMALIZED_NAME,
+            Self::OpenCode => opencode::NORMALIZED_NAME,
             Self::Pi => pi::NORMALIZED_NAME,
         }
     }
@@ -103,6 +108,7 @@ impl Agent {
             Self::Gemini => gemini::DISPLAY_NAME,
             Self::Codex => codex::DISPLAY_NAME,
             Self::Jules => jules::DISPLAY_NAME,
+            Self::OpenCode => opencode::DISPLAY_NAME,
             Self::Pi => pi::DISPLAY_NAME,
         }
     }
@@ -123,6 +129,7 @@ impl Agent {
             Self::Gemini => gemini::HAS_AUTO_CREDENTIALS,
             Self::Codex => codex::HAS_AUTO_CREDENTIALS,
             Self::Jules => jules::HAS_AUTO_CREDENTIALS,
+            Self::OpenCode => opencode::HAS_AUTO_CREDENTIALS,
             Self::Pi => pi::HAS_AUTO_CREDENTIALS,
         }
     }
@@ -139,6 +146,7 @@ impl Agent {
             Self::Gemini => gemini::CONFIG_DIR_PATHS.to_vec(),
             Self::Codex => codex::CONFIG_DIR_PATHS.to_vec(),
             Self::Jules => jules::CONFIG_DIR_PATHS.to_vec(),
+            Self::OpenCode => opencode::CONFIG_DIR_PATHS.to_vec(),
             Self::Pi => pi::CONFIG_DIR_PATHS.to_vec(),
         }
     }
@@ -154,6 +162,7 @@ impl Agent {
             Self::Gemini => gemini::SUPPORTS_AUTH_WORKFLOW,
             Self::Codex => codex::SUPPORTS_AUTH_WORKFLOW,
             Self::Jules => jules::SUPPORTS_AUTH_WORKFLOW,
+            Self::OpenCode => opencode::SUPPORTS_AUTH_WORKFLOW,
             Self::Pi => pi::SUPPORTS_AUTH_WORKFLOW,
         }
     }
@@ -170,6 +179,7 @@ impl Agent {
             Self::Gemini => gemini::AUTH_CREDENTIAL_PATH,
             Self::Codex => codex::AUTH_CREDENTIAL_PATH,
             Self::Jules => jules::AUTH_CREDENTIAL_PATH,
+            Self::OpenCode => opencode::AUTH_CREDENTIAL_PATH,
             Self::Pi => pi::AUTH_CREDENTIAL_PATH,
         }
     }
@@ -216,6 +226,7 @@ impl Agent {
             Self::Gemini => "gemini-dir",
             Self::Codex => "codex-dir",
             Self::Jules => "jules-dir",
+            Self::OpenCode => "opencode-dir",
             Self::Pi => "pi-dir",
         }
     }
@@ -274,6 +285,9 @@ impl Agent {
         if flags.jules_dir {
             specified_flags.push(("jules-dir", Agent::Jules));
         }
+        if flags.opencode_dir {
+            specified_flags.push(("opencode-dir", Agent::OpenCode));
+        }
         if flags.pi_dir {
             specified_flags.push(("pi-dir", Agent::Pi));
         }
@@ -314,6 +328,7 @@ pub struct AgentConfigFlags {
     pub gemini_dir: bool,
     pub codex_dir: bool,
     pub jules_dir: bool,
+    pub opencode_dir: bool,
     pub pi_dir: bool,
     pub agent_configs: bool,
 }
@@ -498,6 +513,7 @@ mod tests {
             coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
+            opencode_dir: false,
             pi_dir: false,
             agent_configs: false,
         };
@@ -512,6 +528,7 @@ mod tests {
             coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
+            opencode_dir: false,
             pi_dir: false,
             agent_configs: false,
         };
@@ -530,6 +547,7 @@ mod tests {
             coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
+            opencode_dir: false,
             pi_dir: false,
             agent_configs: false,
         };
@@ -553,6 +571,7 @@ mod tests {
             coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
+            opencode_dir: false,
             pi_dir: false,
             agent_configs: false,
         };
@@ -576,6 +595,7 @@ mod tests {
             coderabbit_dir: true,
             codex_dir: true,
             jules_dir: true,
+            opencode_dir: true,
             pi_dir: true,
             agent_configs: true, // This should allow everything
         };
@@ -600,6 +620,7 @@ mod tests {
             coderabbit_dir: false,
             codex_dir: false,
             jules_dir: false,
+            opencode_dir: false,
             pi_dir: false,
             agent_configs: false,
         };

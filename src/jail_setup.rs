@@ -103,6 +103,7 @@ pub struct AgentConfigFlags {
     pub coderabbit_dir: bool,
     pub codex_dir: bool,
     pub jules_dir: bool,
+    pub opencode_dir: bool,
     pub pi_dir: bool,
     pub agent_configs: bool,
 }
@@ -144,6 +145,7 @@ pub fn mount_agent_configs(
             crate::agents::Agent::CodeRabbit => flags.coderabbit_dir || flags.agent_configs,
             crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
             crate::agents::Agent::Jules => flags.jules_dir || flags.agent_configs,
+            crate::agents::Agent::OpenCode => flags.opencode_dir || flags.agent_configs,
             crate::agents::Agent::Pi => flags.pi_dir || flags.agent_configs,
         };
 
@@ -231,6 +233,13 @@ pub fn mount_agent_configs(
                 builder,
                 home_path.join(".config").join("jules"),
                 "/home/agent/.config/jules",
+            );
+        }
+        if flags.opencode_dir || flags.agent_configs {
+            builder = mount_config_if_exists(
+                builder,
+                home_path.join(".config").join("opencode"),
+                "/home/agent/.config/opencode",
             );
         }
         if flags.pi_dir || flags.agent_configs {
