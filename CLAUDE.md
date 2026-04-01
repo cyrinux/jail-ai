@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Build jail-ai**: `cargo build` or `make build`
 - **Build release**: `cargo build --release`
+- **Generate completions**: `make completions` (output: `dist/completions/`)
+- **Build macOS bottle**: `make bottle-macos`
 - **Run**: `cargo run -- <args>` or `make run ARGS="<args>"`
 - **Run tests**: `cargo test` or `make test`
 - **Run single test**: `cargo test <test_name>`

@@ -620,13 +620,15 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 all,
             } => {
                 if all {
-                    // Upgrade all jails
                     upgrade_all_jails(image, force, verbose).await?;
                 } else {
-                    // Upgrade single jail
                     let jail_name = resolve_jail_name(name).await?;
                     upgrade_single_jail(&jail_name, image, force, verbose).await?;
                 }
+            }
+
+            Commands::Completions { shell } => {
+                cli::Cli::generate_completions(shell);
             }
         },
     }

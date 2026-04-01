@@ -22,6 +22,28 @@ A Rust-based jail wrapper for sandboxing AI agents using podman. Provides isolat
 
 ## 🚀 Installation
 
+### Homebrew (macOS & Linux – recommended)
+
+```bash
+brew tap cyrinux/jail-ai https://github.com/cyrinux/jail-ai
+brew install jail-ai
+```
+
+This installs the `jail-ai` binary, shell completions (bash/zsh/fish) and the man page.
+
+**Container runtime (required):** pick one:
+
+| Backend | Install | Platform |
+|---------|---------|----------|
+| **podman** | `brew install podman` | macOS + Linux |
+| **apple/container** | `brew install --cask apple/container/container` | macOS only |
+
+On macOS with podman, initialise the VM once:
+
+```bash
+podman machine init && podman machine start
+```
+
 ### From Source (Standard)
 
 ```bash

@@ -1,4 +1,5 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+pub use clap_complete::Shell;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
@@ -463,6 +464,20 @@ pub enum Commands {
         #[arg(long)]
         all: bool,
     },
+
+    /// Generate shell completions and print them to stdout
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
+
+impl Cli {
+    pub fn generate_completions(shell: Shell) {
+        let mut cmd = Cli::command();
+        clap_complete::generate(shell, &mut cmd, "jail-ai", &mut std::io::stdout());
+    }
 }
 
 impl Commands {

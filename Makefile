@@ -1,4 +1,4 @@
-.PHONY: help all build install build-ebpf build-loader install-loader build-all clean-ebpf run test clippy fmt
+.PHONY: help all build install build-ebpf build-loader install-loader build-all clean-ebpf run test clippy fmt completions bottle-macos
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -71,3 +71,24 @@ update-cloud-versions: ## Update cloud provider tool versions to latest
 rebuild-cloud-layers: ## Force rebuild cloud layers with updated versions
 	@echo "Rebuilding cloud layers..."
 	cargo run -- claude --cloud --upgrade --force-layers aws,gcp --verbose
+
+completions: build ## Generate shell completions into dist/completions/
+	@mkdir -p dist/completions
+	./target/release/jail-ai completions bash > dist/completions/jail-ai.bash
+	./target/release/jail-ai completions zsh  > dist/completions/_jail-ai
+	./target/release/jail-ai completions fish > dist/completions/jail-ai.fish
+	@echo "✓ Completions written to dist/completions/"
+
+bottle-macos: build completions ## Build a local Homebrew bottle for the current macOS host
+	@VERSION=$$(cargo metadata --no-deps --format-version 1 | python3 -c 'import sys,json; print(json.load(sys.stdin)["packages"][0]["version"])');\
+	OS_TAG=$$(sw_vers -productName 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr ' ' '_');\
+	BOTTLE_DIR="jail-ai/$${VERSION}/bin";\
+	mkdir -p "$${BOTTLE_DIR}";\
+	cp target/release/jail-ai "$${BOTTLE_DIR}/";\
+	mkdir -p "jail-ai/$${VERSION}/completions";\
+	cp dist/completions/* "jail-ai/$${VERSION}/completions/";\
+	[ -f docs/jail-ai.1 ] && cp docs/jail-ai.1 "jail-ai/$${VERSION}/" || true;\
+	tar -czf "jail-ai-$${OS_TAG}.tar.gz" jail-ai/;\
+	sha256sum "jail-ai-$${OS_TAG}.tar.gz" 2>/dev/null || shasum -a 256 "jail-ai-$${OS_TAG}.tar.gz";\
+	rm -rf jail-ai/;\
+	echo "✓ Bottle: jail-ai-$${OS_TAG}.tar.gz"

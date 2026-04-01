@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: ${{ github.event.repository.name }}
+  BINARY_NAME: jail-ai
 
 jobs:
   build-ebpf:
@@ -37,18 +37,16 @@ jobs:
           path: target/bpfel-unknown-none/release/jail-ai-ebpf
           retention-days: 1
 
-  build:
-    name: Build - ${{ matrix.target }}
+  build-linux:
+    name: Build Linux - ${{ matrix.target }}
     needs: build-ebpf
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-gnu
             suffix: x86_64-linux
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
             suffix: aarch64-linux
 
     steps:
@@ -82,21 +80,151 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} dist/${{ env.BINARY_NAME }}-${{ matrix.suffix }}
           cp target/${{ matrix.target }}/release/jail-ai-ebpf-loader dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
 
-      - name: Upload main binary artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BINARY_NAME }}-${{ matrix.suffix }}
           path: dist/${{ env.BINARY_NAME }}-${{ matrix.suffix }}
 
-      - name: Upload loader binary artifact
+      - name: Upload loader binary
         uses: actions/upload-artifact@v4
         with:
           name: jail-ai-ebpf-loader-${{ matrix.suffix }}
           path: dist/jail-ai-ebpf-loader-${{ matrix.suffix }}
 
+  build-macos:
+    name: Build macOS - ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            suffix: aarch64-macos
+            bottle_tag: arm64_sequoia
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            suffix: x86_64-macos
+            bottle_tag: ventura
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: |
+          cargo build --release --package jail-ai --target ${{ matrix.target }}
+          strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
+
+      - name: Prepare bottle
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          BOTTLE_DIR="jail-ai/${VERSION}/bin"
+          mkdir -p "${BOTTLE_DIR}"
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} "${BOTTLE_DIR}/"
+          cp docs/jail-ai.1 "jail-ai/${VERSION}/" 2>/dev/null || true
+
+          # Generate completions and store them alongside the binary
+          COMP_DIR="jail-ai/${VERSION}/completions"
+          mkdir -p "${COMP_DIR}"
+          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions bash  > "${COMP_DIR}/jail-ai.bash"
+          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions zsh   > "${COMP_DIR}/_jail-ai"
+          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} completions fish  > "${COMP_DIR}/jail-ai.fish"
+
+          tar -czf jail-ai-${{ matrix.bottle_tag }}.tar.gz jail-ai/
+          echo "BOTTLE_SHA256=$(shasum -a 256 jail-ai-${{ matrix.bottle_tag }}.tar.gz | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Upload bottle tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-${{ matrix.bottle_tag }}
+          path: jail-ai-${{ matrix.bottle_tag }}.tar.gz
+
+      - name: Upload bottle sha info
+        run: |
+          echo "${{ matrix.bottle_tag }}=${{ env.BOTTLE_SHA256 }}" > bottle-sha-${{ matrix.bottle_tag }}.txt
+
+      - name: Upload sha file
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-sha-${{ matrix.bottle_tag }}
+          path: bottle-sha-${{ matrix.bottle_tag }}.txt
+
+      - name: Upload standalone binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.suffix }}
+          path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
+
+  update-homebrew-formula:
+    name: Update Homebrew formula
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all bottle sha files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bottle-sha-*
+          merge-multiple: true
+          path: bottle-shas/
+
+      - name: Compute source tarball sha256
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+          curl -sL "${URL}" -o source.tar.gz
+          echo "SOURCE_SHA256=$(sha256sum source.tar.gz | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Load bottle sha256 values
+        run: |
+          for f in bottle-shas/*.txt; do
+            while IFS='=' read -r tag sha; do
+              echo "${tag^^}_SHA256=${sha}" >> "$GITHUB_ENV"
+            done < "$f"
+          done
+
+      - name: Update formula
+        run: |
+          sed -i \
+            -e "s|url \"https://github.com/.*/archive/refs/tags/v[^\"]*\"|url \"https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz\"|" \
+            -e "s|sha256 :no_check|sha256 \"${{ env.SOURCE_SHA256 }}\"|" \
+            -e "s|version \"[^\"]*\"|version \"${{ env.VERSION }}\"|" \
+            -e "s|PLACEHOLDER_ARM64_SEQUOIA|${{ env.ARM64_SEQUOIA_SHA256 }}|" \
+            -e "s|PLACEHOLDER_ARM64_SONOMA|${{ env.ARM64_SEQUOIA_SHA256 }}|" \
+            -e "s|PLACEHOLDER_VENTURA|${{ env.VENTURA_SHA256 }}|" \
+            -e "s|PLACEHOLDER_X86_64_LINUX|${{ env.X86_64_LINUX_SHA256 }}|" \
+            homebrew/jail-ai.rb
+
+      - name: Commit updated formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add homebrew/jail-ai.rb
+          git diff --cached --quiet || git commit -m "🍺 chore: update homebrew formula to ${{ github.ref_name }}"
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
-    name: Create Release
-    needs: build
+    name: Create GitHub Release
+    needs: [build-linux, build-macos, update-homebrew-formula]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,17 +233,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: jail-ai-*
+          pattern: "jail-ai-*"
+          merge-multiple: true
+
+      - name: Download bottles
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "bottle-arm64*"
+          merge-multiple: true
+
+      - name: Download ventura bottle
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "bottle-ventura"
+          merge-multiple: true
+
+      - name: Download loader artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "jail-ai-ebpf-loader-*"
           merge-multiple: true
 
       - name: Create Release
         run: |
           gh release create ${{ github.ref_name }} \
-            -t "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
             --generate-notes \
             --latest \
             artifacts/*
