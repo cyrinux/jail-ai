@@ -7,7 +7,7 @@ A Rust-based jail wrapper for sandboxing AI agents using podman. Provides isolat
 
 ## ✨ Features
 
-- 🤖 **AI Agent Integration**: Pre-configured support for Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, Codex CLI, and Jules CLI
+- 🤖 **AI Agent Integration**: Pre-configured support for Claude Code, GitHub Copilot CLI, Cursor Agent, Gemini CLI, Codex CLI, Jules CLI, OpenCode, and Pi
 - 🏗️ **Layered Container System**: Smart image building with automatic project type detection (Rust, Go, Node.js, Python, Java, PHP, C/C++, C#, Terraform, Kubernetes)
 - ⚡ **Performance Optimizations**: LRU cache, batch operations, parallel builds, and background pre-fetching for faster execution
 - 📦 **Nix Flakes Support**: Automatic detection and loading of Nix development environments
@@ -138,6 +138,12 @@ jail-ai codex --codex-dir -- generate "create a REST API"
 # Jules CLI - Google's AI coding assistant
 jail-ai jules --jules-dir -- chat "help me refactor this code"
 
+# OpenCode - Open source AI coding agent
+jail-ai opencode --opencode-dir -- chat "help me with this code"
+
+# Pi - Open source AI coding agent
+jail-ai pi --pi-dir -- "help me with this code"
+
 # Start interactive shell in Claude jail (without running Claude)
 jail-ai claude --shell
 
@@ -226,6 +232,8 @@ jail-ai uses a smart layered image system that automatically detects your projec
    - 🔮 **Gemini**: `gemini` CLI
    - 💻 **Codex**: `codex` CLI
    - 🤖 **Jules**: `jules` CLI (Google's AI coding assistant)
+   - 🔓 **OpenCode**: `opencode` CLI (open source AI coding agent)
+   - 🥧 **Pi**: `pi` CLI (open source AI coding agent)
 
 ### Image Tagging Strategies
 
@@ -260,6 +268,8 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `jail-ai gemini` → No auth mounted (use `--gemini-dir`)
 - `jail-ai codex` → No auth mounted (use `--codex-dir`)
 - `jail-ai jules` → No auth mounted (use `--jules-dir`)
+- `jail-ai opencode` → No auth mounted (use `--opencode-dir`)
+- `jail-ai pi` → No auth mounted (use `--pi-dir`)
 
 **Opt-in Mounting**:
 
@@ -273,6 +283,8 @@ jail-ai claude --isolated  # Uses: localhost/jail-ai-agent-claude:abc12345
 - `--jules-dir`: Mount `~/.config/jules` directory
   - **First Run**: When `--jules-dir` (or `--agent-configs`) is specified and credentials are missing, automatically enters auth mode
   - **Manual Auth**: Use `--auth` to re-authenticate or update credentials
+- `--opencode-dir`: Mount `~/.config/opencode` directory
+- `--pi-dir`: Mount `~/.pi` directory
 - `--agent-configs`: Mount all of the above
 
 ### Git and GPG Configuration

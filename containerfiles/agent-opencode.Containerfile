@@ -6,7 +6,7 @@ LABEL description="jail-ai with OpenCode CLI"
 
 USER root
 
-RUN npm install -g opencode-ai
+RUN npm install -g opencode-ai@latest
 
 USER agent
 WORKDIR /workspace

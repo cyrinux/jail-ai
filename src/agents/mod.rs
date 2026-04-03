@@ -1,7 +1,7 @@
 //! Agent registry for managing AI agent configurations.
 //!
 //! This module provides a centralized way to manage different AI coding agents
-//! (Claude, Copilot, Cursor, Gemini, Codex, Jules, Claude Code Router) with type-safe configuration.
+//! (Claude, Copilot, Cursor, Gemini, Codex, Jules, OpenCode, Pi, Claude Code Router) with type-safe configuration.
 //!
 //! # Architecture
 //!
