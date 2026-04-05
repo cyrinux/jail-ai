@@ -1,0 +1,759 @@
+pub mod agent_commands;
+pub mod agents;
+pub mod backend;
+pub mod cli;
+pub mod config;
+pub mod ebpf;
+pub mod error;
+pub mod git_gpg;
+pub mod image;
+pub mod image_layers;
+pub mod image_parallel;
+pub mod jail;
+pub mod jail_setup;
+pub mod project_detection;
+pub mod state;
+pub mod strings;
+pub mod tui;
+pub mod worktree;
+
+pub use cli::{Cli, Commands};
+pub use config::JailConfig;
+pub use error::{JailError, Result};
+pub use project_detection::ProjectType;
+pub use tracing_subscriber::layer::SubscriberExt;
+pub use tracing_subscriber::util::SubscriberInitExt;
+pub use clap::Parser;
+
+pub async fn run_cli() -> Result<()> {
+    let cli = Cli::parse();
+
+    let filter = if cli.verbose {
+        "jail_ai=debug"
+    } else {
+        "jail_ai=warn"
+    };
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| filter.into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let command = cli.command;
+    let verbose = cli.verbose;
+
+    run(command, verbose).await
+}
+
+pub fn validate_mount_source(source: &std::path::Path) -> Result<()> {
+    use tracing::debug;
+
+    if !source.exists() {
+        use std::io::{self, BufRead, Write};
+        println!("⚠️  Mount source path does not exist: {}", source.display());
+        print!("Create this path? [y/N] ");
+        io::stdout().flush()?;
+        let stdin = io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line)?;
+
+        if line.trim().eq_ignore_ascii_case("y") {
+            debug!("Creating mount source directory: {}", source.display());
+            std::fs::create_dir_all(source).map_err(|e| {
+                JailError::Config(format!(
+                    "Failed to create mount source directory '{}': {}",
+                    source.display(),
+                    e
+                ))
+            })?;
+            println!("✓ Created directory: {}", source.display());
+        } else {
+            return Err(JailError::Config(format!(
+                "Mount source path does not exist: {}",
+                source.display()
+            )));
+        }
+    }
+
+    let source = source.canonicalize().map_err(JailError::Io)?;
+
+    if source == std::path::Path::new("/") {
+        return Err(JailError::UnsafeMount(
+            "Cannot mount root filesystem (/) into container".to_string(),
+        ));
+    }
+
+    let home_dir = std::env::var("HOME")
+        .map_err(|_| JailError::Config("HOME environment variable not set".to_string()))?;
+    let home_path = std::path::PathBuf::from(&home_dir)
+        .canonicalize()
+        .map_err(JailError::Io)?;
+
+    if source == home_path {
+        return Err(JailError::UnsafeMount(format!(
+            "Cannot mount entire home directory ({}) into container",
+            home_path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
+    let cwd = std::env::current_dir()?;
+    let _prefetch_handle = image_parallel::prefetch_common_layers(&cwd);
+
+    match command {
+        None => {
+            let workspace_dir = agent_commands::get_git_root().unwrap_or_else(|| cwd.clone());
+            let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
+
+            let jail_name = if matching_jails.is_empty() {
+                let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+                tracing::info!("No jail found for this directory, creating default jail...");
+                let jail_name = format!("{base_name}__default");
+
+                tracing::info!("Creating jail '{}'...", jail_name);
+                let jail = create_default_jail(&jail_name, &workspace_dir, verbose).await?;
+                jail.create().await?;
+                tracing::info!("Jail '{}' created successfully", jail_name);
+
+                jail_name
+            } else if matching_jails.len() == 1 {
+                let jail_name = matching_jails[0].clone();
+                tracing::info!("Found single jail for this directory: '{}'", jail_name);
+                jail_name
+            } else {
+                agent_commands::select_jail(&matching_jails)?
+            };
+
+            tracing::info!("Executing interactive shell in jail '{}'...", jail_name);
+            let jail = jail::JailBuilder::new(jail_name.clone())
+                .backend(config::BackendType::detect())
+                .verbose(verbose)
+                .build();
+
+            jail.exec(&["/usr/bin/zsh".to_string()], true).await?;
+        }
+        Some(command) => match command {
+            Commands::Create {
+                name,
+                backend,
+                image,
+                mount,
+                port,
+                env,
+                no_network,
+                host_network,
+                memory,
+                cpu,
+                config,
+                no_workspace,
+                workspace_path,
+                agent_configs,
+                git_gpg,
+                upgrade,
+                layers,
+                isolated,
+                no_nix,
+                no_block_host,
+                podman,
+            } => {
+                let jail = if let Some(config_path) = config {
+                    let config_str = tokio::fs::read_to_string(&config_path).await?;
+                    let config: JailConfig = serde_json::from_str(&config_str)?;
+                    jail::JailManager::new(config)
+                } else {
+                    let backend_type = if let Some(backend_str) = backend {
+                        Commands::parse_backend(&backend_str).map_err(JailError::Config)?
+                    } else {
+                        config::BackendType::detect()
+                    };
+
+                    let jail_name = if let Some(name) = name {
+                        cli::Commands::sanitize_jail_name(&name)
+                    } else {
+                        let cwd = std::env::current_dir()?;
+                        let dir_name = cwd
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("default");
+                        let generated_name = cli::Commands::sanitize_jail_name(dir_name);
+                        tracing::info!(
+                            "Auto-generated jail name from current directory: {}",
+                            generated_name
+                        );
+                        generated_name
+                    };
+
+                    let mut builder = jail::JailBuilder::new(&jail_name)
+                        .backend(backend_type)
+                        .base_image(image);
+
+                    builder = if host_network {
+                        builder.host_network(true)
+                    } else {
+                        builder.network(!no_network, true)
+                    };
+
+                    builder = jail_setup::setup_default_environment(builder);
+
+                    if !no_workspace {
+                        let workspace_dir = agent_commands::get_git_root()
+                            .unwrap_or_else(|| std::env::current_dir().unwrap());
+                        agent_commands::validate_workspace_directory(&workspace_dir)?;
+                        tracing::info!(
+                            "Auto-mounting {} to {}",
+                            workspace_dir.display(),
+                            workspace_path
+                        );
+                        builder = builder.bind_mount(workspace_dir, workspace_path, false);
+                    }
+
+                    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                    let home_path = std::path::PathBuf::from(&home);
+
+                    builder = jail_setup::mount_agent_configs(
+                        builder,
+                        &home_path,
+                        "",
+                        false,
+                        agent_configs,
+                    );
+
+                    if git_gpg {
+                        let cwd = std::env::current_dir()?;
+                        builder = git_gpg::setup_git_gpg_config(builder, &cwd, &home_path)?;
+                    }
+
+                    for mount_str in mount {
+                        let mount = Commands::parse_mount(&mount_str).map_err(JailError::Config)?;
+                        builder = builder.bind_mount(mount.source, mount.target, mount.readonly);
+                    }
+
+                    for port_str in port {
+                        let port_mapping = Commands::parse_port(&port_str).map_err(JailError::Config)?;
+                        builder = builder.port_mapping(
+                            port_mapping.host_port,
+                            port_mapping.container_port,
+                            &port_mapping.protocol,
+                        );
+                    }
+
+                    for env_str in env {
+                        let (key, value) = Commands::parse_env(&env_str).map_err(JailError::Config)?;
+                        builder = builder.env(key, value);
+                    }
+
+                    if let Some(mem) = memory {
+                        builder = builder.memory_limit(mem);
+                    }
+                    if let Some(cpu_quota) = cpu {
+                        builder = builder.cpu_quota(cpu_quota);
+                    }
+
+                    builder = builder.upgrade(upgrade);
+                    builder = builder.force_layers(layers);
+                    builder = builder.isolated(isolated);
+                    builder = builder.verbose(verbose);
+                    builder = builder.no_nix(no_nix);
+                    builder = builder.block_host(!no_block_host);
+                    builder = builder.podman_socket(podman);
+
+                    builder.build()
+                };
+
+                jail.create().await?;
+
+                if git_gpg {
+                    let cwd = std::env::current_dir()?;
+                    if let Err(e) = git_gpg::create_gitconfig_in_container(&cwd, &jail).await {
+                        tracing::warn!("Failed to create .gitconfig in container: {}", e);
+                    }
+                }
+
+                tracing::info!("Jail created: {}", jail.config().name);
+            }
+
+            Commands::Remove { name, force, volume } => {
+                let jail_name = resolve_jail_name(name).await?;
+
+                if !force {
+                    use std::io::{BufRead, Write};
+                    print!("Remove jail '{jail_name}'? [y/N] ");
+                    std::io::stdout().flush()?;
+                    let stdin = std::io::stdin();
+                    let mut line = String::new();
+                    stdin.lock().read_line(&mut line)?;
+                    if !line.trim().eq_ignore_ascii_case("y") {
+                        tracing::info!("Aborted");
+                        return Ok(());
+                    }
+                }
+
+                let config = JailConfig {
+                    name: jail_name.clone(),
+                    ..Default::default()
+                };
+                let jail = jail::JailManager::new(config);
+                jail.remove(volume).await?;
+
+                tracing::info!("Jail removed: {}", jail_name);
+            }
+
+            Commands::Status { name } => {
+                let jail_name = resolve_jail_name(name).await?;
+                let config = JailConfig {
+                    name: jail_name.clone(),
+                    ..Default::default()
+                };
+                let jail = jail::JailManager::new(config);
+                let exists = jail.exists().await?;
+                if exists {
+                    println!("✓ Jail '{}' exists", jail_name);
+                } else {
+                    println!("✗ Jail '{}' does not exist", jail_name);
+                }
+            }
+
+            Commands::Save { name, output } => {
+                let jail_name = resolve_jail_name(name).await?;
+                let temp_config = JailConfig {
+                    name: jail_name.clone(),
+                    ..Default::default()
+                };
+                let jail = jail::JailManager::new(temp_config);
+
+                if !jail.exists().await? {
+                    return Err(JailError::NotFound(format!(
+                        "Jail '{jail_name}' does not exist"
+                    )));
+                }
+
+                let config = jail.inspect().await?;
+                let json = serde_json::to_string_pretty(&config)?;
+                tokio::fs::write(&output, json).await?;
+                println!(
+                    "✓ Configuration for jail '{}' saved to: {}",
+                    jail_name,
+                    output.display()
+                );
+                tracing::info!("Configuration saved to: {}", output.display());
+            }
+
+            Commands::Claude { common, args } => run_agent_command(agents::Agent::Claude, common, args, verbose).await?,
+            Commands::ClaudeCodeRouter { common, args } => run_agent_command(agents::Agent::ClaudeCodeRouter, common, args, verbose).await?,
+            Commands::CodeRabbit { common, args } => run_agent_command(agents::Agent::CodeRabbit, common, args, verbose).await?,
+            Commands::Copilot { common, args } => run_agent_command(agents::Agent::Copilot, common, args, verbose).await?,
+            Commands::Cursor { common, args } => run_agent_command(agents::Agent::Cursor, common, args, verbose).await?,
+            Commands::Gemini { common, args } => run_agent_command(agents::Agent::Gemini, common, args, verbose).await?,
+            Commands::Codex { common, args } => run_agent_command(agents::Agent::Codex, common, args, verbose).await?,
+            Commands::Jules { common, args } => run_agent_command(agents::Agent::Jules, common, args, verbose).await?,
+            Commands::OpenCode { common, args } => run_agent_command(agents::Agent::OpenCode, common, args, verbose).await?,
+            Commands::Pi { common, args } => run_agent_command(agents::Agent::Pi, common, args, verbose).await?,
+
+            Commands::List { current, backend } => {
+                let backend_type = if let Some(backend_str) = backend {
+                    Commands::parse_backend(&backend_str).map_err(JailError::Config)?
+                } else {
+                    config::BackendType::detect()
+                };
+
+                let temp_config = JailConfig {
+                    name: "temp".to_string(),
+                    backend: backend_type,
+                    ..Default::default()
+                };
+                let backend = backend::create_backend(&temp_config);
+
+                let all_jails = backend.list_all().await?;
+
+                let jails = if current {
+                    let cwd = std::env::current_dir()?;
+                    let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
+                    let base_name = cli::Commands::generate_jail_name(&workspace_dir);
+                    all_jails
+                        .into_iter()
+                        .filter(|name| name.starts_with(&base_name))
+                        .collect::<Vec<_>>()
+                } else {
+                    all_jails
+                };
+
+                if jails.is_empty() {
+                    if current {
+                        println!("No jails found for current directory");
+                    } else {
+                        println!("No jails found");
+                    }
+                } else {
+                    println!("Jails (backend: {backend_type:?}):");
+                    for jail_name in &jails {
+                        let agent_suffix = agent_commands::extract_agent_name(jail_name);
+                        let config = JailConfig {
+                            name: jail_name.clone(),
+                            backend: backend_type,
+                            ..Default::default()
+                        };
+                        let jail = jail::JailManager::new(config);
+                        let status = if jail.exists().await? { "active" } else { "inactive" };
+                        println!("  {jail_name} [{status}] ({agent_suffix})");
+                    }
+                    println!("\nTotal: {} jail(s)", jails.len());
+                }
+            }
+
+            Commands::CleanAll { backend, force, volume } => {
+                let backends = if let Some(backend_str) = backend {
+                    vec![Commands::parse_backend(&backend_str).map_err(JailError::Config)?]
+                } else {
+                    let available = config::BackendType::all_available();
+                    if available.is_empty() {
+                        tracing::warn!("No backends are available on this system");
+                        return Ok(());
+                    }
+                    available
+                };
+
+                for backend_type in backends {
+                    tracing::info!(
+                        "Cleaning all jail-ai containers for backend: {:?}",
+                        backend_type
+                    );
+
+                    let temp_config = JailConfig {
+                        name: "temp".to_string(),
+                        backend: backend_type,
+                        ..Default::default()
+                    };
+                    let temp_jail = jail::JailManager::new(temp_config);
+
+                    let backend = backend::create_backend(temp_jail.config());
+                    let jails = backend.list_all().await?;
+
+                    if jails.is_empty() {
+                        tracing::info!("No jail-ai containers found for backend {:?}", backend_type);
+                        continue;
+                    }
+
+                    tracing::info!(
+                        "Found {} jail-ai container(s) for backend {:?}",
+                        jails.len(),
+                        backend_type
+                    );
+
+                    if !force {
+                        use std::io::{BufRead, Write};
+                        println!("Containers to be removed:");
+                        for jail_name in &jails {
+                            println!("  - {jail_name}");
+                        }
+                        print!("Remove all {} container(s)? [y/N] ", jails.len());
+                        std::io::stdout().flush()?;
+                        let stdin = std::io::stdin();
+                        let mut line = String::new();
+                        stdin.lock().read_line(&mut line)?;
+                        if !line.trim().eq_ignore_ascii_case("y") {
+                            tracing::info!("Aborted");
+                            continue;
+                        }
+                    }
+
+                    for jail_name in jails {
+                        tracing::info!("Removing jail: {}", jail_name);
+                        let config = JailConfig {
+                            name: jail_name.clone(),
+                            backend: backend_type,
+                            ..Default::default()
+                        };
+                        let jail = jail::JailManager::new(config);
+
+                        if let Err(e) = jail.remove(volume).await {
+                            tracing::error!("Failed to remove jail {}: {}", jail_name, e);
+                        } else {
+                            tracing::info!("Successfully removed jail: {}", jail_name);
+                        }
+                    }
+                }
+
+                tracing::info!("Clean-all operation completed");
+            }
+
+            Commands::Upgrade { name, image, force, all } => {
+                if all {
+                    upgrade_all_jails(image, force, verbose).await?;
+                } else {
+                    let jail_name = resolve_jail_name(name).await?;
+                    upgrade_single_jail(&jail_name, image, force, verbose).await?;
+                }
+            }
+
+            Commands::Completions { shell } => {
+                cli::Cli::generate_completions(shell);
+            }
+        },
+    }
+
+    Ok(())
+}
+
+async fn run_agent_command(
+    agent: agents::Agent,
+    common: cli::AgentCommandOptions,
+    args: Vec<String>,
+    verbose: bool,
+) -> Result<()> {
+    agent_commands::run_ai_agent_command(
+        agent.command_name(),
+        agent_commands::AgentCommandParams {
+            backend: common.backend,
+            image: common.image,
+            mount: common.mount,
+            port: common.port,
+            env: common.env,
+            no_network: common.no_network,
+            host_network: common.host_network,
+            memory: common.memory,
+            cpu: common.cpu,
+            no_workspace: common.no_workspace,
+            workspace_path: common.workspace_path,
+            agent_configs: common.agent_configs,
+            git_gpg: common.git_gpg,
+            upgrade: common.upgrade,
+            force_layers: common.layers,
+            cloud: common.cloud,
+            shell: common.shell,
+            isolated: common.isolated,
+            verbose,
+            auth: common.auth,
+            no_nix: common.no_nix,
+            no_block_host: common.no_block_host,
+            podman: common.podman,
+            tui: common.tui,
+            args,
+        },
+    )
+    .await
+}
+
+async fn create_default_jail(
+    name: &str,
+    workspace: &std::path::Path,
+    verbose: bool,
+) -> Result<jail::JailManager> {
+    let backend_type = config::BackendType::detect();
+
+    let mut builder = jail::JailBuilder::new(name)
+        .backend(backend_type)
+        .base_image(image::DEFAULT_IMAGE_NAME)
+        .network(true, true)
+        .verbose(verbose);
+
+    builder = jail_setup::setup_default_environment(builder);
+
+    let workspace_dir = agent_commands::get_git_root().unwrap_or(workspace.to_path_buf());
+    agent_commands::validate_workspace_directory(&workspace_dir)?;
+
+    tracing::info!("Auto-mounting {} to /workspace", workspace_dir.display());
+    builder = builder.bind_mount(workspace_dir, "/workspace", false);
+
+    Ok(builder.build())
+}
+
+async fn resolve_jail_name(name: Option<String>) -> Result<String> {
+    if let Some(name) = name {
+        Ok(name)
+    } else {
+        let cwd = std::env::current_dir()?;
+        let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
+        let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
+
+        let jail_name = if matching_jails.is_empty() {
+            return Err(JailError::Config(
+                "No jails found for this directory. Create one first.".to_string(),
+            ));
+        } else if matching_jails.len() == 1 {
+            matching_jails[0].clone()
+        } else {
+            agent_commands::select_jail(&matching_jails)?
+        };
+
+        tracing::info!("Auto-detected jail: {}", jail_name);
+        Ok(jail_name)
+    }
+}
+
+pub async fn upgrade_single_jail(
+    jail_name: &str,
+    image: Option<String>,
+    force: bool,
+    verbose: bool,
+) -> Result<()> {
+    let temp_config = JailConfig {
+        name: jail_name.to_string(),
+        ..Default::default()
+    };
+    let temp_jail = jail::JailManager::new(temp_config);
+
+    if !temp_jail.exists().await? {
+        return Err(JailError::NotFound(format!(
+            "Jail '{jail_name}' does not exist"
+        )));
+    }
+
+    let old_config = temp_jail.inspect().await?;
+    tracing::info!("Current jail configuration: {:?}", old_config);
+
+    let new_image = image.unwrap_or_else(|| old_config.base_image.clone());
+
+    if !force {
+        use std::io::{BufRead, Write};
+        println!("Jail '{jail_name}' will be upgraded:");
+        println!("  Current image: {}", old_config.base_image);
+        println!("  New image:     {new_image}");
+        println!("\nThis will:");
+        println!("  1. Save the current configuration");
+        println!("  2. Remove the existing jail");
+        println!("  3. Recreate the jail with the new image");
+        println!("  4. Restore the configuration (mounts, env, limits)");
+        print!("\nProceed with upgrade? [y/N] ");
+        std::io::stdout().flush()?;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line)?;
+        if !line.trim().eq_ignore_ascii_case("y") {
+            tracing::info!("Upgrade aborted");
+            return Ok(());
+        }
+    }
+
+    tracing::info!("Upgrading jail '{}'...", jail_name);
+    tracing::info!("Removing old jail...");
+    temp_jail.remove(false).await?;
+    tracing::info!("Old jail removed");
+
+    tracing::info!("Creating new jail with image '{}'...", new_image);
+    let mut builder = jail::JailBuilder::new(jail_name)
+        .backend(old_config.backend)
+        .base_image(new_image.clone())
+        .network(old_config.network.enabled, old_config.network.private)
+        .verbose(verbose);
+
+    for (key, value) in &old_config.environment {
+        builder = builder.env(key.clone(), value.clone());
+    }
+
+    for mount in &old_config.bind_mounts {
+        builder = builder.bind_mount(mount.source.clone(), mount.target.clone(), mount.readonly);
+    }
+
+    for port_mapping in &old_config.port_mappings {
+        builder = builder.port_mapping(
+            port_mapping.host_port,
+            port_mapping.container_port,
+            &port_mapping.protocol,
+        );
+    }
+
+    if let Some(memory) = old_config.limits.memory_mb {
+        builder = builder.memory_limit(memory);
+    }
+    if let Some(cpu) = old_config.limits.cpu_quota {
+        builder = builder.cpu_quota(cpu);
+    }
+
+    let new_jail = builder.build();
+    new_jail.create().await?;
+
+    if jail_name.ends_with("-claude") {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+        let home_path = std::path::PathBuf::from(&home);
+        if let Err(e) = git_gpg::create_claude_json_in_container(&home_path, &new_jail).await {
+            tracing::warn!("Failed to create .claude.json in container: {}", e);
+        }
+    }
+
+    println!("✓ Jail '{jail_name}' successfully upgraded to image '{new_image}'");
+    tracing::info!("Upgrade completed successfully");
+
+    Ok(())
+}
+
+async fn upgrade_all_jails(image: Option<String>, force: bool, verbose: bool) -> Result<()> {
+    let backends = config::BackendType::all_available();
+    if backends.is_empty() {
+        tracing::warn!("No backends are available on this system");
+        return Ok(());
+    }
+
+    let mut all_jails = Vec::new();
+
+    for backend_type in &backends {
+        let temp_config = JailConfig {
+            name: "temp".to_string(),
+            backend: *backend_type,
+            ..Default::default()
+        };
+        let backend = backend::create_backend(&temp_config);
+        let jails = backend.list_all().await?;
+
+        for jail_name in jails {
+            all_jails.push((jail_name, *backend_type));
+        }
+    }
+
+    if all_jails.is_empty() {
+        println!("No jails found to upgrade");
+        return Ok(());
+    }
+
+    tracing::info!("Found {} jail(s) to upgrade", all_jails.len());
+
+    if !force {
+        use std::io::{BufRead, Write};
+        println!(
+            "The following {} jail(s) will be upgraded:",
+            all_jails.len()
+        );
+        for (jail_name, backend_type) in &all_jails {
+            println!("  - {jail_name} (backend: {backend_type:?})");
+        }
+        if let Some(ref img) = image {
+            println!("\nAll jails will be upgraded to image: {img}");
+        } else {
+            println!("\nEach jail will be upgraded to its current image (refreshed)");
+        }
+        print!("\nProceed with upgrade? [y/N] ");
+        std::io::stdout().flush()?;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line)?;
+        if !line.trim().eq_ignore_ascii_case("y") {
+            tracing::info!("Upgrade aborted");
+            return Ok(());
+        }
+    }
+
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    for (jail_name, _backend_type) in all_jails {
+        tracing::info!("Upgrading jail: {}", jail_name);
+        match upgrade_single_jail(&jail_name, image.clone(), true, verbose).await {
+            Ok(_) => {
+                success_count += 1;
+            }
+            Err(e) => {
+                tracing::error!("Failed to upgrade jail {}: {}", jail_name, e);
+                error_count += 1;
+            }
+        }
+    }
+
+    println!("\n✓ Upgrade complete: {success_count} succeeded, {error_count} failed");
+    tracing::info!("Upgrade-all operation completed");
+
+    Ok(())
+}

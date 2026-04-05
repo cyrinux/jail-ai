@@ -183,7 +183,7 @@ pub fn prefetch_common_layers(workspace_path: &Path) -> tokio::task::JoinHandle<
 }
 
 /// Ensure a specific layer exists, building it if necessary
-async fn ensure_layer_exists(layer: &str, base_image: Option<&str>) -> Result<()> {
+pub async fn ensure_layer_exists(layer: &str, base_image: Option<&str>) -> Result<()> {
     // Get the image name for this layer
     let image_name = match layer {
         "base" => "localhost/jail-ai-base:latest",
@@ -215,25 +215,4 @@ async fn ensure_layer_exists(layer: &str, base_image: Option<&str>) -> Result<()
 
     info!("✓ Pre-fetched layer: {}", layer);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parallel_build_empty() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let result = build_language_layers_parallel("base", &[], &[], false, false).await;
-            assert!(result.is_ok());
-            assert!(result.unwrap().is_empty());
-        });
-    }
-
-    #[tokio::test]
-    async fn test_ensure_layer_exists_unknown() {
-        let result = ensure_layer_exists("unknown-layer", None).await;
-        assert!(result.is_ok()); // Should not error on unknown layers
-    }
 }

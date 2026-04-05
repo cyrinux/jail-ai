@@ -7,5 +7,4 @@ pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".coderabbit", "/home/agent/.co
 pub const SUPPORTS_AUTH_WORKFLOW: bool = true;
 pub const AUTH_CREDENTIAL_PATH: &str = ".coderabbit";
 pub const CLI_ALIASES: &[&str] = &["code-rabbit"];
-pub const CONTAINERFILE: &str =
-    include_str!("../../containerfiles/agent-coderabbit.Containerfile");
+pub const CONTAINERFILE: &str = include_str!("../../containerfiles/agent-coderabbit.Containerfile");

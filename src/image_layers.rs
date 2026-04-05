@@ -24,20 +24,20 @@ fn container_cli() -> &'static str {
 }
 
 /// Base image layers (shared across all projects with :latest tag)
-const BASE_IMAGE_NAME: &str = "localhost/jail-ai-base:latest";
-const GOLANG_IMAGE_NAME: &str = "localhost/jail-ai-golang:latest";
-const RUST_IMAGE_NAME: &str = "localhost/jail-ai-rust:latest";
-const PYTHON_IMAGE_NAME: &str = "localhost/jail-ai-python:latest";
-const NODEJS_IMAGE_NAME: &str = "localhost/jail-ai-nodejs:latest";
-const JAVA_IMAGE_NAME: &str = "localhost/jail-ai-java:latest";
-const NIX_IMAGE_NAME: &str = "localhost/jail-ai-nix:latest";
-const PHP_IMAGE_NAME: &str = "localhost/jail-ai-php:latest";
-const CPP_IMAGE_NAME: &str = "localhost/jail-ai-cpp:latest";
-const CSHARP_IMAGE_NAME: &str = "localhost/jail-ai-csharp:latest";
-const TERRAFORM_IMAGE_NAME: &str = "localhost/jail-ai-terraform:latest";
-const KUBERNETES_IMAGE_NAME: &str = "localhost/jail-ai-kubernetes:latest";
-const AWS_IMAGE_NAME: &str = "localhost/jail-ai-aws:latest";
-const GCP_IMAGE_NAME: &str = "localhost/jail-ai-gcp:latest";
+pub const BASE_IMAGE_NAME: &str = "localhost/jail-ai-base:latest";
+pub const GOLANG_IMAGE_NAME: &str = "localhost/jail-ai-golang:latest";
+pub const RUST_IMAGE_NAME: &str = "localhost/jail-ai-rust:latest";
+pub const PYTHON_IMAGE_NAME: &str = "localhost/jail-ai-python:latest";
+pub const NODEJS_IMAGE_NAME: &str = "localhost/jail-ai-nodejs:latest";
+pub const JAVA_IMAGE_NAME: &str = "localhost/jail-ai-java:latest";
+pub const NIX_IMAGE_NAME: &str = "localhost/jail-ai-nix:latest";
+pub const PHP_IMAGE_NAME: &str = "localhost/jail-ai-php:latest";
+pub const CPP_IMAGE_NAME: &str = "localhost/jail-ai-cpp:latest";
+pub const CSHARP_IMAGE_NAME: &str = "localhost/jail-ai-csharp:latest";
+pub const TERRAFORM_IMAGE_NAME: &str = "localhost/jail-ai-terraform:latest";
+pub const KUBERNETES_IMAGE_NAME: &str = "localhost/jail-ai-kubernetes:latest";
+pub const AWS_IMAGE_NAME: &str = "localhost/jail-ai-aws:latest";
+pub const GCP_IMAGE_NAME: &str = "localhost/jail-ai-gcp:latest";
 
 /// Containerfiles embedded from the repository
 #[cfg(not(target_os = "macos"))]
@@ -100,7 +100,7 @@ fn project_hash_cache() -> &'static Arc<Mutex<HashMap<PathBuf, String>>> {
 ///
 /// Performance optimization: Caches hash calculations to avoid repeated
 /// canonicalize() and SHA256 operations for the same workspace.
-fn generate_project_hash(workspace_path: &Path) -> String {
+pub fn generate_project_hash(workspace_path: &Path) -> String {
     let abs_path = workspace_path
         .canonicalize()
         .unwrap_or_else(|_| workspace_path.to_path_buf());
@@ -178,7 +178,7 @@ fn generate_layer_tag(
 }
 
 /// Get the shared language image name (with :latest tag)
-fn get_language_image_name(project_type: &ProjectType) -> &'static str {
+pub fn get_language_image_name(project_type: &ProjectType) -> &'static str {
     match project_type {
         ProjectType::Rust => RUST_IMAGE_NAME,
         ProjectType::Golang => GOLANG_IMAGE_NAME,
@@ -198,16 +198,16 @@ fn get_language_image_name(project_type: &ProjectType) -> &'static str {
 }
 
 /// Get the project-specific final image name
-fn get_project_image_name(layer_type: &str, project_hash: &str) -> String {
+pub fn get_project_image_name(layer_type: &str, project_hash: &str) -> String {
     format!("localhost/jail-ai-{layer_type}:{project_hash}")
 }
 
 /// Get the project-specific agent image name
-fn get_agent_project_image_name(agent_name: &str, project_hash: &str) -> String {
+pub fn get_agent_project_image_name(agent_name: &str, project_hash: &str) -> String {
     format!("localhost/jail-ai-agent-{agent_name}:{project_hash}")
 }
 
-fn get_containerfile_content(layer: &str) -> Option<&'static str> {
+pub fn get_containerfile_content(layer: &str) -> Option<&'static str> {
     match layer {
         "base" => Some(BASE_CONTAINERFILE),
         "golang" => Some(GOLANG_CONTAINERFILE),
@@ -1186,103 +1186,4 @@ pub async fn ensure_layered_image_available(
         no_nix,
     )
     .await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get_language_image_name() {
-        assert_eq!(get_language_image_name(&ProjectType::Rust), RUST_IMAGE_NAME);
-        assert_eq!(
-            get_language_image_name(&ProjectType::Golang),
-            GOLANG_IMAGE_NAME
-        );
-        assert_eq!(
-            get_language_image_name(&ProjectType::Python),
-            PYTHON_IMAGE_NAME
-        );
-        assert_eq!(
-            get_language_image_name(&ProjectType::NodeJS),
-            NODEJS_IMAGE_NAME
-        );
-        assert_eq!(get_language_image_name(&ProjectType::Java), JAVA_IMAGE_NAME);
-        assert_eq!(get_language_image_name(&ProjectType::Nix), NIX_IMAGE_NAME);
-        assert_eq!(get_language_image_name(&ProjectType::Php), PHP_IMAGE_NAME);
-        assert_eq!(get_language_image_name(&ProjectType::Cpp), CPP_IMAGE_NAME);
-        assert_eq!(
-            get_language_image_name(&ProjectType::CSharp),
-            CSHARP_IMAGE_NAME
-        );
-        assert_eq!(get_language_image_name(&ProjectType::Aws), AWS_IMAGE_NAME);
-        assert_eq!(get_language_image_name(&ProjectType::Gcp), GCP_IMAGE_NAME);
-        assert_eq!(
-            get_language_image_name(&ProjectType::Generic),
-            BASE_IMAGE_NAME
-        );
-    }
-
-    #[test]
-    fn test_get_agent_project_image_name() {
-        assert_eq!(
-            get_agent_project_image_name("claude", "abc12345"),
-            "localhost/jail-ai-agent-claude:abc12345"
-        );
-        assert_eq!(
-            get_agent_project_image_name("copilot", "def67890"),
-            "localhost/jail-ai-agent-copilot:def67890"
-        );
-    }
-
-    #[test]
-    fn test_generate_project_hash() {
-        use std::path::PathBuf;
-
-        let path1 = PathBuf::from("/tmp/project-a");
-        let hash1 = generate_project_hash(&path1);
-
-        // Hash should be 8 characters
-        assert_eq!(hash1.len(), 8);
-
-        // Same path should generate same hash
-        let hash2 = generate_project_hash(&path1);
-        assert_eq!(hash1, hash2);
-
-        // Different path should generate different hash
-        let path2 = PathBuf::from("/tmp/project-b");
-        let hash3 = generate_project_hash(&path2);
-        assert_ne!(hash1, hash3);
-    }
-
-    #[test]
-    fn test_get_project_image_name() {
-        assert_eq!(
-            get_project_image_name("rust", "abc12345"),
-            "localhost/jail-ai-rust:abc12345"
-        );
-        assert_eq!(
-            get_project_image_name("python", "def67890"),
-            "localhost/jail-ai-python:def67890"
-        );
-    }
-
-    #[test]
-    fn test_get_containerfile_content() {
-        assert!(get_containerfile_content("base").is_some());
-        assert!(get_containerfile_content("golang").is_some());
-        assert!(get_containerfile_content("rust").is_some());
-        assert!(get_containerfile_content("python").is_some());
-        assert!(get_containerfile_content("nodejs").is_some());
-        assert!(get_containerfile_content("java").is_some());
-        assert!(get_containerfile_content("nix").is_some());
-        assert!(get_containerfile_content("php").is_some());
-        assert!(get_containerfile_content("cpp").is_some());
-        assert!(get_containerfile_content("csharp").is_some());
-        assert!(get_containerfile_content("aws").is_some());
-        assert!(get_containerfile_content("gcp").is_some());
-        assert!(get_containerfile_content("agent-claude").is_some());
-        assert!(get_containerfile_content("agent-pi").is_some());
-        assert!(get_containerfile_content("unknown").is_none());
-    }
 }

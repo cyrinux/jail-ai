@@ -159,17 +159,3 @@ fn find_loader_binary() -> Result<std::path::PathBuf> {
             .to_string(),
     ))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_find_loader_binary() {
-        // This test will fail if the loader is not installed, which is expected
-        match find_loader_binary() {
-            Ok(path) => println!("Found loader at: {:?}", path),
-            Err(e) => println!("Loader not found (expected in test): {}", e),
-        }
-    }
-}

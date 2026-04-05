@@ -3,7 +3,8 @@ pub const NORMALIZED_NAME: &str = "copilot";
 pub const DISPLAY_NAME: &str = "Copilot";
 pub const EMOJI: &str = "🦾";
 pub const HAS_AUTO_CREDENTIALS: bool = false;
-pub const CONFIG_DIR_PATHS: &[(&str, &str)] = &[(".config/.copilot", "/home/agent/.config/.copilot")];
+pub const CONFIG_DIR_PATHS: &[(&str, &str)] =
+    &[(".config/.copilot", "/home/agent/.config/.copilot")];
 pub const SUPPORTS_AUTH_WORKFLOW: bool = false;
 pub const AUTH_CREDENTIAL_PATH: &str = ".config/.copilot";
 pub const CLI_ALIASES: &[&str] = &[];

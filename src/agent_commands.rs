@@ -23,7 +23,6 @@ pub struct AgentCommandParams {
     pub cpu: Option<u32>,
     pub no_workspace: bool,
     pub workspace_path: String,
-    pub config_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub upgrade: bool,
@@ -264,7 +263,7 @@ pub async fn run_ai_agent_command(
             // Only auto-enable auth for agents that support the auth workflow
             if agent.supports_auth_workflow() {
                 // Check if the appropriate config directory flag is set
-                let config_dir_mounted = params.config_dir || params.agent_configs;
+                let config_dir_mounted = true;
 
                 // Only check for credentials if the config directory will be mounted
                 if config_dir_mounted {
@@ -601,7 +600,7 @@ pub async fn run_ai_agent_command(
             builder,
             &home_path,
             agent_command,
-            params.config_dir,
+            true,
             params.agent_configs,
         );
 
