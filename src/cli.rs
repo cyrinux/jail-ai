@@ -384,6 +384,7 @@ pub enum Commands {
     /// Quick start CodeRabbit CLI in a jail for current directory
     /// Use -- to separate jail-ai options from agent arguments
     /// Example: jail-ai coderabbit --coderabbit-dir -- review
+    #[command(name = "coderabbit")]
     CodeRabbit {
         #[command(flatten)]
         common: AgentCommandOptions,
@@ -420,6 +421,7 @@ pub enum Commands {
     /// Quick start OpenCode CLI in a jail for current directory
     /// Use -- to separate jail-ai options from agent arguments
     /// Example: jail-ai opencode --opencode-dir -- chat "help with this code"
+    #[command(name = "opencode")]
     OpenCode {
         #[command(flatten)]
         common: AgentCommandOptions,

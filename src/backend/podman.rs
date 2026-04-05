@@ -562,10 +562,8 @@ impl JailBackend for PodmanBackend {
                 .name
                 .rsplit("__")
                 .next()
-                .and_then(|suffix| match suffix {
-                    "claude" | "claude-code-router" | "copilot" | "cursor" | "gemini" | "jules"
-                    | "codex" | "pi" => Some(suffix),
-                    _ => None,
+                .and_then(|suffix| {
+                    crate::agents::Agent::from_str(suffix).map(|a| a.normalized_name())
                 });
 
             debug!(
