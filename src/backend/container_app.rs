@@ -116,7 +116,7 @@ impl JailBackend for ContainerAppBackend {
                     .next()
                     .and_then(|suffix| match suffix {
                         "claude" | "claude-code-router" | "copilot" | "cursor" | "gemini"
-                        | "jules" | "codex" | "pi" => Some(suffix),
+                        | "jules" | "codex" | "pi" | "opencode" => Some(suffix),
                         _ => None,
                     });
 

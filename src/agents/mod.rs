@@ -377,6 +377,7 @@ mod tests {
         assert_eq!(Agent::from_str("gemini"), Some(Agent::Gemini));
         assert_eq!(Agent::from_str("codex"), Some(Agent::Codex));
         assert_eq!(Agent::from_str("jules"), Some(Agent::Jules));
+        assert_eq!(Agent::from_str("opencode"), Some(Agent::OpenCode));
         assert_eq!(Agent::from_str("unknown"), None);
         assert_eq!(Agent::from_str("CLAUDE"), Some(Agent::Claude)); // case-insensitive
     }
@@ -390,6 +391,7 @@ mod tests {
         assert_eq!(Agent::Gemini.command_name(), "gemini");
         assert_eq!(Agent::Codex.command_name(), "codex");
         assert_eq!(Agent::Jules.command_name(), "jules");
+        assert_eq!(Agent::OpenCode.command_name(), "opencode");
     }
 
     #[test]
@@ -400,6 +402,7 @@ mod tests {
             "claude-code-router"
         );
         assert_eq!(Agent::Cursor.normalized_name(), "cursor");
+        assert_eq!(Agent::OpenCode.normalized_name(), "opencode");
     }
 
     #[test]
@@ -416,6 +419,10 @@ mod tests {
             extract_agent_from_jail_name("jail__foo__12ab34cd__copilot"),
             Some(Agent::Copilot)
         );
+        assert_eq!(
+            extract_agent_from_jail_name("jail__test__abc12345__opencode"),
+            Some(Agent::OpenCode)
+        );
         assert_eq!(extract_agent_from_jail_name("not-a-jail"), None);
         assert_eq!(extract_agent_from_jail_name("jail__invalid"), None);
     }
@@ -429,6 +436,7 @@ mod tests {
         assert!(!Agent::Gemini.has_auto_credentials());
         assert!(!Agent::Codex.has_auto_credentials());
         assert!(!Agent::Jules.has_auto_credentials());
+        assert!(!Agent::OpenCode.has_auto_credentials());
     }
 
     #[test]
@@ -439,6 +447,7 @@ mod tests {
             "agent-claude-code-router"
         );
         assert_eq!(Agent::Cursor.layer_name(), "agent-cursor");
+        assert_eq!(Agent::OpenCode.layer_name(), "agent-opencode");
     }
 
     #[test]
@@ -452,6 +461,7 @@ mod tests {
         assert_eq!(Agent::Gemini.auth_credential_path(), ".gemini");
         assert_eq!(Agent::Codex.auth_credential_path(), ".codex");
         assert_eq!(Agent::Jules.auth_credential_path(), ".config/jules");
+        assert_eq!(Agent::OpenCode.auth_credential_path(), ".config/opencode");
     }
 
     #[test]
@@ -499,6 +509,7 @@ mod tests {
         assert_eq!(Agent::Gemini.config_flag_name(), "gemini-dir");
         assert_eq!(Agent::Codex.config_flag_name(), "codex-dir");
         assert_eq!(Agent::Jules.config_flag_name(), "jules-dir");
+        assert_eq!(Agent::OpenCode.config_flag_name(), "opencode-dir");
     }
 
     #[test]
