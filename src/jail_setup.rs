@@ -93,7 +93,6 @@ pub fn setup_default_environment(builder: JailBuilder) -> JailBuilder {
     builder
 }
 
-/// Agent configuration flags
 pub struct AgentConfigFlags {
     pub claude_dir: bool,
     pub claude_code_router_dir: bool,
@@ -106,6 +105,24 @@ pub struct AgentConfigFlags {
     pub opencode_dir: bool,
     pub pi_dir: bool,
     pub agent_configs: bool,
+}
+
+impl AgentConfigFlags {
+    pub fn to_agent_flags(&self) -> crate::agents::AgentConfigFlags {
+        crate::agents::AgentConfigFlags {
+            claude_dir: self.claude_dir,
+            claude_code_router_dir: self.claude_code_router_dir,
+            coderabbit_dir: self.coderabbit_dir,
+            copilot_dir: self.copilot_dir,
+            cursor_dir: self.cursor_dir,
+            gemini_dir: self.gemini_dir,
+            codex_dir: self.codex_dir,
+            jules_dir: self.jules_dir,
+            opencode_dir: self.opencode_dir,
+            pi_dir: self.pi_dir,
+            agent_configs: self.agent_configs,
+        }
+    }
 }
 
 /// Helper function to mount a config directory if it exists
@@ -122,7 +139,6 @@ fn mount_config_if_exists(
     }
 }
 
-/// Mount agent configuration directories based on flags
 pub fn mount_agent_configs(
     builder: JailBuilder,
     home_path: &Path,
@@ -130,46 +146,27 @@ pub fn mount_agent_configs(
     flags: &AgentConfigFlags,
 ) -> JailBuilder {
     let mut builder = builder;
+    let agent_flags = flags.to_agent_flags();
 
-    // Try to parse agent - if it's recognized, use Agent enum logic
     if let Some(parsed_agent) = crate::agents::Agent::from_str(agent) {
-        // Check if agent-specific config dir should be mounted
-        let should_mount = match parsed_agent {
-            crate::agents::Agent::Claude => flags.claude_dir || flags.agent_configs,
-            crate::agents::Agent::ClaudeCodeRouter => {
-                flags.claude_code_router_dir || flags.agent_configs
-            }
-            crate::agents::Agent::Copilot => flags.copilot_dir || flags.agent_configs,
-            crate::agents::Agent::Cursor => flags.cursor_dir || flags.agent_configs,
-            crate::agents::Agent::Gemini => flags.gemini_dir || flags.agent_configs,
-            crate::agents::Agent::CodeRabbit => flags.coderabbit_dir || flags.agent_configs,
-            crate::agents::Agent::Codex => flags.codex_dir || flags.agent_configs,
-            crate::agents::Agent::Jules => flags.jules_dir || flags.agent_configs,
-            crate::agents::Agent::OpenCode => flags.opencode_dir || flags.agent_configs,
-            crate::agents::Agent::Pi => flags.pi_dir || flags.agent_configs,
-        };
+        let should_mount = parsed_agent.is_config_flag_set(&agent_flags);
 
         if should_mount {
-            // Mount full config directories
             let config_paths = parsed_agent.config_dir_paths();
             for (host_path_str, container_path) in config_paths {
                 let host_path = home_path.join(host_path_str);
                 builder = mount_config_if_exists(builder, host_path, container_path);
             }
         } else if parsed_agent.has_auto_credentials() {
-            // Mount minimal auth files for agents that support it (e.g., Claude)
-            // Use the first config path for credential mounting
             let config_paths = parsed_agent.config_dir_paths();
             if let Some((host_path_str, container_path)) = config_paths.first() {
                 let config_dir = home_path.join(host_path_str);
                 let creds_file = config_dir.join(".credentials.json");
                 if creds_file.exists() {
-                    // Agent uses a .credentials.json file (e.g., Claude)
                     let target = format!("/home/agent/{}/.credentials.json", host_path_str);
                     info!("Auto-mounting {} to {}", creds_file.display(), target);
                     builder = builder.bind_mount(creds_file, target, false);
                 } else if config_dir.exists() {
-                    // Agent uses the whole config dir as credentials (e.g., Pi)
                     info!(
                         "Auto-mounting config dir {} to {}",
                         config_dir.display(),
@@ -180,70 +177,14 @@ pub fn mount_agent_configs(
             }
         }
     } else {
-        // Fallback for unknown agents: apply all flags
-        if flags.claude_dir || flags.agent_configs {
-            builder =
-                mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
-        }
-        if flags.claude_code_router_dir || flags.agent_configs {
-            builder =
-                mount_config_if_exists(builder, home_path.join(".claude"), "/home/agent/.claude");
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".claude-code-router"),
-                "/home/agent/.claude-code-router",
-            );
-        }
-        if flags.copilot_dir || flags.agent_configs {
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".config").join(".copilot"),
-                "/home/agent/.config/.copilot",
-            );
-        }
-        if flags.cursor_dir || flags.agent_configs {
-            builder =
-                mount_config_if_exists(builder, home_path.join(".cursor"), "/home/agent/.cursor");
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".config").join("cursor"),
-                "/home/agent/.config/cursor",
-            );
-        }
-        if flags.gemini_dir || flags.agent_configs {
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".config").join("gemini"),
-                "/home/agent/.config/gemini",
-            );
-        }
-        if flags.coderabbit_dir || flags.agent_configs {
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".coderabbit"),
-                "/home/agent/.coderabbit",
-            );
-        }
-        if flags.codex_dir || flags.agent_configs {
-            builder =
-                mount_config_if_exists(builder, home_path.join(".codex"), "/home/agent/.codex");
-        }
-        if flags.jules_dir || flags.agent_configs {
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".config").join("jules"),
-                "/home/agent/.config/jules",
-            );
-        }
-        if flags.opencode_dir || flags.agent_configs {
-            builder = mount_config_if_exists(
-                builder,
-                home_path.join(".config").join("opencode"),
-                "/home/agent/.config/opencode",
-            );
-        }
-        if flags.pi_dir || flags.agent_configs {
-            builder = mount_config_if_exists(builder, home_path.join(".pi"), "/home/agent/.pi");
+        for agent_enum in crate::agents::ALL_AGENTS {
+            if agent_enum.is_config_flag_set(&agent_flags) {
+                let config_paths = agent_enum.config_dir_paths();
+                for (host_path_str, container_path) in config_paths {
+                    let host_path = home_path.join(host_path_str);
+                    builder = mount_config_if_exists(builder, host_path, container_path);
+                }
+            }
         }
     }
 

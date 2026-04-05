@@ -75,7 +75,6 @@ const AGENT_PI_CONTAINERFILE: &str = include_str!("../containerfiles/agent-pi.Co
 const AGENT_OPENCODE_CONTAINERFILE: &str =
     include_str!("../containerfiles/agent-opencode.Containerfile");
 
-/// Get emoji for a layer type
 fn get_layer_emoji(layer_name: &str) -> &'static str {
     match layer_name {
         "base" => "🏗️",
@@ -93,17 +92,14 @@ fn get_layer_emoji(layer_name: &str) -> &'static str {
         "aws" => "☁️",
         "gcp" => "🌐",
         "custom" => "🎨",
-        "agent-claude-code-router" => "🔀",
-        "agent-claude" => "🤖",
-        "agent-coderabbit" => "🐰",
-        "agent-copilot" => "🦾",
-        "agent-cursor" => "➡️",
-        "agent-gemini" => "🔮",
-        "agent-codex" => "💻",
-        "agent-jules" => "🚀",
-        "agent-pi" => "🥧",
-        "agent-opencode" => "🔓",
-        _ => "📦",
+        _ => {
+            if let Some(name) = layer_name.strip_prefix("agent-") {
+                if let Some(agent) = crate::agents::Agent::from_str(name) {
+                    return agent.emoji();
+                }
+            }
+            "📦"
+        }
     }
 }
 
@@ -228,7 +224,6 @@ fn get_agent_project_image_name(agent_name: &str, project_hash: &str) -> String 
     format!("localhost/jail-ai-agent-{agent_name}:{project_hash}")
 }
 
-/// Get the Containerfile content for a layer
 fn get_containerfile_content(layer: &str) -> Option<&'static str> {
     match layer {
         "base" => Some(BASE_CONTAINERFILE),
@@ -245,8 +240,14 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "kubernetes" => Some(KUBERNETES_CONTAINERFILE),
         "aws" => Some(AWS_CONTAINERFILE),
         "gcp" => Some(GCP_CONTAINERFILE),
-        "agent-claude-code-router" => Some(AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE),
+        _ => get_agent_containerfile(layer),
+    }
+}
+
+fn get_agent_containerfile(layer: &str) -> Option<&'static str> {
+    match layer {
         "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
+        "agent-claude-code-router" => Some(AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE),
         "agent-coderabbit" => Some(AGENT_CODERABBIT_CONTAINERFILE),
         "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
         "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
