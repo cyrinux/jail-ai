@@ -55,9 +55,16 @@ pub struct AgentCommandOptions {
     pub workspace_path: String,
 
     /// Mount agent's config directory (~/.claude, ~/.gemini, etc.)
-    /// Automatically detects the correct directory based on the agent being used
-    #[arg(long)]
+    /// Enabled by default. Use --no-config-dir to disable.
+    #[arg(long, alias = "claude-dir", alias = "claude-code-router-dir",
+           alias = "copilot-dir", alias = "cursor-dir", alias = "gemini-dir",
+           alias = "coderabbit-dir", alias = "codex-dir", alias = "jules-dir",
+           alias = "opencode-dir", alias = "pi-dir", default_value_t = true)]
     pub config_dir: bool,
+
+    /// Disable mounting agent's config directory
+    #[arg(long, overrides_with = "config_dir")]
+    pub no_config_dir: bool,
 
     /// Mount all agent config directories
     #[arg(long)]

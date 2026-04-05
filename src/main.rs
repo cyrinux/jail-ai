@@ -615,7 +615,7 @@ async fn run_agent_command(
             cpu: common.cpu,
             no_workspace: common.no_workspace,
             workspace_path: common.workspace_path,
-            config_dir: common.config_dir,
+            config_dir: common.config_dir && !common.no_config_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
             upgrade: common.upgrade,
