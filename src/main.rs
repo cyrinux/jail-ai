@@ -178,16 +178,6 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 config,
                 no_workspace,
                 workspace_path,
-                claude_dir,
-                claude_code_router_dir,
-                copilot_dir,
-                cursor_dir,
-                gemini_dir,
-                coderabbit_dir,
-                codex_dir,
-                jules_dir,
-                opencode_dir,
-                pi_dir,
                 agent_configs,
                 git_gpg,
                 upgrade,
@@ -264,20 +254,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                     builder = jail_setup::mount_agent_configs(
                         builder,
                         &home_path,
-                        "", // No specific agent for create command
-                        &jail_setup::AgentConfigFlags {
-                            claude_dir,
-                            claude_code_router_dir,
-                            copilot_dir,
-                            cursor_dir,
-                            gemini_dir,
-                            coderabbit_dir,
-                            codex_dir,
-                            jules_dir,
-                            opencode_dir,
-                            pi_dir,
-                            agent_configs,
-                        },
+                        "",
+                        false,
+                        agent_configs,
                     );
 
                     // Opt-in: GPG configuration
@@ -431,45 +410,17 @@ async fn run(command: Option<Commands>, verbose: bool) -> error::Result<()> {
                 info!("Configuration saved to: {}", output.display());
             }
 
-            Commands::Claude { common, args } => {
-                run_agent_command(agents::Agent::Claude, common, args, verbose).await?;
-            }
-
-            Commands::ClaudeCodeRouter { common, args } => {
-                run_agent_command(agents::Agent::ClaudeCodeRouter, common, args, verbose).await?;
-            }
-
-            Commands::Copilot { common, args } => {
-                run_agent_command(agents::Agent::Copilot, common, args, verbose).await?;
-            }
-
-            Commands::Cursor { common, args } => {
-                run_agent_command(agents::Agent::Cursor, common, args, verbose).await?;
-            }
-
-            Commands::Gemini { common, args } => {
-                run_agent_command(agents::Agent::Gemini, common, args, verbose).await?;
-            }
-
-            Commands::CodeRabbit { common, args } => {
-                run_agent_command(agents::Agent::CodeRabbit, common, args, verbose).await?;
-            }
-
-            Commands::Codex { common, args } => {
-                run_agent_command(agents::Agent::Codex, common, args, verbose).await?;
-            }
-
-            Commands::Jules { common, args } => {
-                run_agent_command(agents::Agent::Jules, common, args, verbose).await?;
-            }
-
-            Commands::OpenCode { common, args } => {
-                run_agent_command(agents::Agent::OpenCode, common, args, verbose).await?;
-            }
-
-            Commands::Pi { common, args } => {
-                run_agent_command(agents::Agent::Pi, common, args, verbose).await?;
-            }
+            // ─── Agent dispatch (one line per agent) ─────────────────────
+            Commands::Claude { common, args } => run_agent_command(agents::Agent::Claude, common, args, verbose).await?,
+            Commands::ClaudeCodeRouter { common, args } => run_agent_command(agents::Agent::ClaudeCodeRouter, common, args, verbose).await?,
+            Commands::CodeRabbit { common, args } => run_agent_command(agents::Agent::CodeRabbit, common, args, verbose).await?,
+            Commands::Copilot { common, args } => run_agent_command(agents::Agent::Copilot, common, args, verbose).await?,
+            Commands::Cursor { common, args } => run_agent_command(agents::Agent::Cursor, common, args, verbose).await?,
+            Commands::Gemini { common, args } => run_agent_command(agents::Agent::Gemini, common, args, verbose).await?,
+            Commands::Codex { common, args } => run_agent_command(agents::Agent::Codex, common, args, verbose).await?,
+            Commands::Jules { common, args } => run_agent_command(agents::Agent::Jules, common, args, verbose).await?,
+            Commands::OpenCode { common, args } => run_agent_command(agents::Agent::OpenCode, common, args, verbose).await?,
+            Commands::Pi { common, args } => run_agent_command(agents::Agent::Pi, common, args, verbose).await?,
 
             Commands::List { current, backend } => {
                 // Determine backend to use
@@ -650,25 +601,6 @@ async fn run_agent_command(
     args: Vec<String>,
     verbose: bool,
 ) -> error::Result<()> {
-    // Validate agent-specific config flags before proceeding
-    let config_flags = agents::AgentConfigFlags {
-        claude_dir: common.claude_dir,
-        claude_code_router_dir: common.claude_code_router_dir,
-        copilot_dir: common.copilot_dir,
-        cursor_dir: common.cursor_dir,
-        gemini_dir: common.gemini_dir,
-        coderabbit_dir: common.coderabbit_dir,
-        codex_dir: common.codex_dir,
-        jules_dir: common.jules_dir,
-        opencode_dir: common.opencode_dir,
-        pi_dir: common.pi_dir,
-        agent_configs: common.agent_configs,
-    };
-
-    agent
-        .validate_config_flags(&config_flags)
-        .map_err(error::JailError::Config)?;
-
     agent_commands::run_ai_agent_command(
         agent.command_name(),
         agent_commands::AgentCommandParams {
@@ -683,16 +615,7 @@ async fn run_agent_command(
             cpu: common.cpu,
             no_workspace: common.no_workspace,
             workspace_path: common.workspace_path,
-            claude_dir: common.claude_dir,
-            claude_code_router_dir: common.claude_code_router_dir,
-            copilot_dir: common.copilot_dir,
-            cursor_dir: common.cursor_dir,
-            gemini_dir: common.gemini_dir,
-            coderabbit_dir: common.coderabbit_dir,
-            codex_dir: common.codex_dir,
-            jules_dir: common.jules_dir,
-            opencode_dir: common.opencode_dir,
-            pi_dir: common.pi_dir,
+            config_dir: common.config_dir,
             agent_configs: common.agent_configs,
             git_gpg: common.git_gpg,
             upgrade: common.upgrade,

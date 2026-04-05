@@ -3,9 +3,7 @@ use crate::jail::JailBuilder;
 use std::path::Path;
 use tracing::{info, warn};
 
-/// Get the host's timezone
 pub fn get_host_timezone() -> Option<String> {
-    // Try TZ environment variable first
     if let Ok(tz) = std::env::var("TZ") {
         if !tz.is_empty() {
             info!("Using timezone from TZ env var: {}", tz);
@@ -13,7 +11,6 @@ pub fn get_host_timezone() -> Option<String> {
         }
     }
 
-    // Try timedatectl (systemd-based systems)
     if let Ok(output) = std::process::Command::new("timedatectl")
         .arg("show")
         .arg("--property=Timezone")
@@ -29,7 +26,6 @@ pub fn get_host_timezone() -> Option<String> {
         }
     }
 
-    // Try reading /etc/timezone
     if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
         let tz = tz.trim().to_string();
         if !tz.is_empty() {
@@ -38,13 +34,8 @@ pub fn get_host_timezone() -> Option<String> {
         }
     }
 
-    // Try reading /etc/localtime symlink
     if let Ok(link) = std::fs::read_link("/etc/localtime") {
         if let Some(tz) = link.to_str() {
-            // Extract timezone from paths like:
-            // - /usr/share/zoneinfo/Europe/Paris
-            // - /run/current-system/sw/share/zoneinfo/Europe/Paris (NixOS)
-            // - ../usr/share/zoneinfo/Europe/Paris (relative symlinks)
             for prefix in [
                 "/usr/share/zoneinfo/",
                 "/run/current-system/sw/share/zoneinfo/",
@@ -55,7 +46,6 @@ pub fn get_host_timezone() -> Option<String> {
                     return Some(tz_name.to_string());
                 }
             }
-            // Try extracting from any path containing "zoneinfo/"
             if let Some(pos) = tz.find("zoneinfo/") {
                 let tz_name = &tz[pos + "zoneinfo/".len()..];
                 if !tz_name.is_empty() {
@@ -73,59 +63,22 @@ pub fn get_host_timezone() -> Option<String> {
     None
 }
 
-/// Setup default environment variables for a jail
 pub fn setup_default_environment(builder: JailBuilder) -> JailBuilder {
     let mut builder = builder;
 
-    // Set timezone from host
     if let Some(tz) = get_host_timezone() {
         builder = builder.env("TZ", tz);
     }
 
-    // Inherit TERM from host
     if let Ok(term) = std::env::var("TERM") {
         builder = builder.env("TERM", term);
     }
 
-    // Set default editor to vim
     builder = builder.env("EDITOR", "vim");
 
     builder
 }
 
-pub struct AgentConfigFlags {
-    pub claude_dir: bool,
-    pub claude_code_router_dir: bool,
-    pub copilot_dir: bool,
-    pub cursor_dir: bool,
-    pub gemini_dir: bool,
-    pub coderabbit_dir: bool,
-    pub codex_dir: bool,
-    pub jules_dir: bool,
-    pub opencode_dir: bool,
-    pub pi_dir: bool,
-    pub agent_configs: bool,
-}
-
-impl AgentConfigFlags {
-    pub fn to_agent_flags(&self) -> crate::agents::AgentConfigFlags {
-        crate::agents::AgentConfigFlags {
-            claude_dir: self.claude_dir,
-            claude_code_router_dir: self.claude_code_router_dir,
-            coderabbit_dir: self.coderabbit_dir,
-            copilot_dir: self.copilot_dir,
-            cursor_dir: self.cursor_dir,
-            gemini_dir: self.gemini_dir,
-            codex_dir: self.codex_dir,
-            jules_dir: self.jules_dir,
-            opencode_dir: self.opencode_dir,
-            pi_dir: self.pi_dir,
-            agent_configs: self.agent_configs,
-        }
-    }
-}
-
-/// Helper function to mount a config directory if it exists
 fn mount_config_if_exists(
     builder: JailBuilder,
     source_path: std::path::PathBuf,
@@ -143,13 +96,13 @@ pub fn mount_agent_configs(
     builder: JailBuilder,
     home_path: &Path,
     agent: &str,
-    flags: &AgentConfigFlags,
+    config_dir: bool,
+    agent_configs: bool,
 ) -> JailBuilder {
     let mut builder = builder;
-    let agent_flags = flags.to_agent_flags();
 
     if let Some(parsed_agent) = crate::agents::Agent::from_str(agent) {
-        let should_mount = parsed_agent.is_config_flag_set(&agent_flags);
+        let should_mount = config_dir || agent_configs;
 
         if should_mount {
             let config_paths = parsed_agent.config_dir_paths();
@@ -176,14 +129,12 @@ pub fn mount_agent_configs(
                 }
             }
         }
-    } else {
+    } else if agent_configs {
         for agent_enum in crate::agents::ALL_AGENTS {
-            if agent_enum.is_config_flag_set(&agent_flags) {
-                let config_paths = agent_enum.config_dir_paths();
-                for (host_path_str, container_path) in config_paths {
-                    let host_path = home_path.join(host_path_str);
-                    builder = mount_config_if_exists(builder, host_path, container_path);
-                }
+            let config_paths = agent_enum.config_dir_paths();
+            for (host_path_str, container_path) in config_paths {
+                let host_path = home_path.join(host_path_str);
+                builder = mount_config_if_exists(builder, host_path, container_path);
             }
         }
     }
@@ -191,7 +142,6 @@ pub fn mount_agent_configs(
     builder
 }
 
-/// Get the user's UID for runtime directory detection
 #[cfg(unix)]
 pub fn get_user_uid() -> Result<u32> {
     use std::os::unix::fs::MetadataExt;
@@ -209,7 +159,6 @@ pub fn get_user_uid() -> Result<u32> {
     ))
 }
 
-/// Get the jail-ai config directory path (XDG_CONFIG_HOME or ~/.config/jail-ai)
 pub fn get_jail_ai_config_dir() -> Result<std::path::PathBuf> {
     let base_dir = if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
         std::path::PathBuf::from(config_home)
@@ -224,7 +173,6 @@ pub fn get_jail_ai_config_dir() -> Result<std::path::PathBuf> {
     Ok(base_dir.join("jail-ai"))
 }
 
-/// Recursively copy a directory
 pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     use tracing::debug;
 
@@ -234,7 +182,6 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
 
-        // Skip GPG lockfiles (.#lk0*)
         if file_name_str.starts_with(".#lk0") {
             debug!("Skipping GPG lockfile: {}", file_name_str);
             continue;
@@ -249,11 +196,9 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
             std::fs::create_dir_all(&dst_path)?;
             copy_dir_recursive(&path, &dst_path)?;
         } else if file_type.is_file() || file_type.is_symlink() {
-            // Resolve symlinks and copy content
             let content = std::fs::read(&path)?;
             std::fs::write(&dst_path, content)?;
 
-            // Preserve permissions
             #[cfg(unix)]
             {
                 let perms = std::fs::metadata(&path)?.permissions();
@@ -262,7 +207,6 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
 
             debug!("Copied {} to {}", path.display(), dst_path.display());
         }
-        // Skip sockets and other special files in subdirectories
     }
 
     Ok(())

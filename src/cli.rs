@@ -54,47 +54,12 @@ pub struct AgentCommandOptions {
     #[arg(long, default_value = "/workspace")]
     pub workspace_path: String,
 
-    /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
+    /// Mount agent's config directory (~/.claude, ~/.gemini, etc.)
+    /// Automatically detects the correct directory based on the agent being used
     #[arg(long)]
-    pub claude_dir: bool,
+    pub config_dir: bool,
 
-    /// Mount entire ~/.claude and ~/.claude-code-router directories for Claude Code Router
-    #[arg(long)]
-    pub claude_code_router_dir: bool,
-
-    /// Mount entire ~/.copilot directory for GitHub Copilot
-    #[arg(long)]
-    pub copilot_dir: bool,
-
-    /// Mount entire ~/.cursor directory for Cursor Agent
-    #[arg(long)]
-    pub cursor_dir: bool,
-
-    /// Mount entire ~/.gemini directory for Gemini CLI
-    #[arg(long)]
-    pub gemini_dir: bool,
-
-    /// Mount entire ~/.coderabbit directory for CodeRabbit CLI
-    #[arg(long)]
-    pub coderabbit_dir: bool,
-
-    /// Mount entire ~/.config/codex directory for Codex CLI
-    #[arg(long)]
-    pub codex_dir: bool,
-
-    /// Mount entire ~/.config/jules directory for Jules CLI
-    #[arg(long)]
-    pub jules_dir: bool,
-
-    /// Mount entire ~/.config/opencode directory for OpenCode CLI
-    #[arg(long)]
-    pub opencode_dir: bool,
-
-    /// Mount entire ~/.pi directory for Pi CLI
-    #[arg(long)]
-    pub pi_dir: bool,
-
-    /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --opencode-dir, --pi-dir)
+    /// Mount all agent config directories
     #[arg(long)]
     pub agent_configs: bool,
 
@@ -216,47 +181,7 @@ pub enum Commands {
         #[arg(long, default_value = "/workspace")]
         workspace_path: String,
 
-        /// Mount entire ~/.claude directory (default: only .claude/.credentials.json)
-        #[arg(long)]
-        claude_dir: bool,
-
-        /// Mount entire ~/.claude and ~/.claude-code-router directories for Claude Code Router
-        #[arg(long)]
-        claude_code_router_dir: bool,
-
-        /// Mount entire ~/.copilot directory for GitHub Copilot
-        #[arg(long)]
-        copilot_dir: bool,
-
-        /// Mount entire ~/.cursor directory for Cursor Agent
-        #[arg(long)]
-        cursor_dir: bool,
-
-        /// Mount entire ~/.gemini directory for Gemini CLI
-        #[arg(long)]
-        gemini_dir: bool,
-
-        /// Mount entire ~/.coderabbit directory for CodeRabbit CLI
-        #[arg(long)]
-        coderabbit_dir: bool,
-
-        /// Mount entire ~/.config/codex directory for Codex CLI
-        #[arg(long)]
-        codex_dir: bool,
-
-        /// Mount entire ~/.config/jules directory for Jules CLI
-        #[arg(long)]
-        jules_dir: bool,
-
-        /// Mount entire ~/.config/opencode directory for OpenCode CLI
-        #[arg(long)]
-        opencode_dir: bool,
-
-        /// Mount entire ~/.pi directory for Pi CLI
-        #[arg(long)]
-        pi_dir: bool,
-
-        /// Mount all agent config directories (combines --claude-dir, --claude-code-router-dir, --copilot-dir, --cursor-dir, --gemini-dir, --coderabbit-dir, --codex-dir, --jules-dir, --opencode-dir, --pi-dir)
+        /// Mount all agent config directories
         #[arg(long)]
         agent_configs: bool,
 
@@ -320,125 +245,86 @@ pub enum Commands {
         output: PathBuf,
     },
 
-    /// Quick start Claude Code in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai claude --claude-dir -- --help
+    /// ─── Agent subcommands ──────────────────────────────────────────
+    /// To add a new agent: add one variant here, one match arm in main.rs,
+    /// plus the agent module and Containerfile. See docs/ADDING_AGENTS.md.
+
+    #[command(name = "claude")]
     Claude {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to claude (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start Claude Code Router in a jail for current directory
-    /// Claude Code Router wraps Claude Code and routes requests to different models
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai claude-code-router --claude-code-router-dir -- chat "help me"
+    #[command(name = "claude-code-router")]
     ClaudeCodeRouter {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to ccr (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start GitHub Copilot CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai copilot --copilot-dir -- suggest "write tests"
-    Copilot {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-
-        /// Additional arguments to pass to copilot (after --)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Quick start Cursor Agent in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai cursor --cursor-dir -- --help
-    Cursor {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-
-        /// Additional arguments to pass to cursor-agent (after --)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Quick start Gemini CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai gemini --gemini-dir -- --model gemini-pro "query"
-    Gemini {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-
-        /// Additional arguments to pass to gemini (after --)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Quick start CodeRabbit CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai coderabbit --coderabbit-dir -- review
     #[command(name = "coderabbit")]
     CodeRabbit {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to coderabbit (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start Codex CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai codex --codex-dir -- generate "create API"
+    #[command(name = "copilot")]
+    Copilot {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    #[command(name = "cursor")]
+    Cursor {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    #[command(name = "gemini")]
+    Gemini {
+        #[command(flatten)]
+        common: AgentCommandOptions,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    #[command(name = "codex")]
     Codex {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to codex (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start Jules CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai jules --jules-dir -- chat "help with this code"
+    #[command(name = "jules")]
     Jules {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to jules (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start OpenCode CLI in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai opencode --opencode-dir -- chat "help with this code"
     #[command(name = "opencode")]
     OpenCode {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to opencode (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
-    /// Quick start Pi in a jail for current directory
-    /// Use -- to separate jail-ai options from agent arguments
-    /// Example: jail-ai pi --pi-dir -- "help with this code"
+    #[command(name = "pi")]
     Pi {
         #[command(flatten)]
         common: AgentCommandOptions,
-
-        /// Additional arguments to pass to pi (after --)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -842,14 +728,13 @@ mod tests {
 
     #[test]
     fn test_auth_flag_parsing() {
-        // Test that the --auth flag is properly parsed
-        let args = vec!["jail-ai", "codex", "--auth", "--codex-dir"];
+        let args = vec!["jail-ai", "codex", "--auth", "--config-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
 
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert!(common.auth);
-                assert!(common.codex_dir);
+                assert!(common.config_dir);
             }
             _ => panic!("Expected Codex command"),
         }
@@ -857,14 +742,13 @@ mod tests {
 
     #[test]
     fn test_auth_flag_optional() {
-        // Test that the --auth flag is optional
-        let args = vec!["jail-ai", "codex", "--codex-dir"];
+        let args = vec!["jail-ai", "codex", "--config-dir"];
         let cli = Cli::try_parse_from(args).unwrap();
 
         match cli.command {
             Some(Commands::Codex { common, .. }) => {
                 assert!(!common.auth);
-                assert!(common.codex_dir);
+                assert!(common.config_dir);
             }
             _ => panic!("Expected Codex command"),
         }

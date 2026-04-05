@@ -11,127 +11,107 @@ mod pi;
 
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Agent {
-    Claude,
-    ClaudeCodeRouter,
-    CodeRabbit,
-    Copilot,
-    Cursor,
-    Gemini,
-    Codex,
-    Jules,
-    OpenCode,
-    Pi,
-}
-
-pub const ALL_AGENTS: &[Agent] = &[
-    Agent::Claude,
-    Agent::ClaudeCodeRouter,
-    Agent::CodeRabbit,
-    Agent::Copilot,
-    Agent::Cursor,
-    Agent::Gemini,
-    Agent::Codex,
-    Agent::Jules,
-    Agent::OpenCode,
-    Agent::Pi,
-];
-
-macro_rules! agent_dispatch {
-    ($self:expr, $field:ident) => {
-        match $self {
-            Self::Claude => claude::$field,
-            Self::ClaudeCodeRouter => claude_code_router::$field,
-            Self::CodeRabbit => coderabbit::$field,
-            Self::Copilot => copilot::$field,
-            Self::Cursor => cursor::$field,
-            Self::Gemini => gemini::$field,
-            Self::Codex => codex::$field,
-            Self::Jules => jules::$field,
-            Self::OpenCode => opencode::$field,
-            Self::Pi => pi::$field,
+/// ─── AGENT REGISTRY ─────────────────────────────────────────────────
+/// To add a new agent, add ONE line here. All enum variants, match arms,
+/// CLI subcommands, image layer lookups, and config flag wiring are
+/// generated automatically from this list.
+///
+/// Format: (VariantName, module_name, "cli-name")
+///   - VariantName: PascalCase enum variant
+///   - module_name: snake_case module in src/agents/
+///   - "cli-name":  subcommand name on the CLI (e.g. `jail-ai claude`)
+///
+/// Everything else (command binary, display name, emoji, config paths,
+/// aliases, containerfile) lives in the agent's own module file.
+#[macro_export]
+macro_rules! for_each_agent {
+    ($callback:ident) => {
+        $callback! {
+            (Claude, claude, "claude"),
+            (ClaudeCodeRouter, claude_code_router, "claude-code-router"),
+            (CodeRabbit, coderabbit, "coderabbit"),
+            (Copilot, copilot, "copilot"),
+            (Cursor, cursor, "cursor"),
+            (Gemini, gemini, "gemini"),
+            (Codex, codex, "codex"),
+            (Jules, jules, "jules"),
+            (OpenCode, opencode, "opencode"),
+            (Pi, pi, "pi"),
         }
     };
 }
 
-impl Agent {
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "claude" => Some(Self::Claude),
-            "claude-code-router" | "ccr" => Some(Self::ClaudeCodeRouter),
-            "coderabbit" | "code-rabbit" => Some(Self::CodeRabbit),
-            "copilot" => Some(Self::Copilot),
-            "cursor" | "cursor-agent" => Some(Self::Cursor),
-            "gemini" => Some(Self::Gemini),
-            "codex" => Some(Self::Codex),
-            "jules" => Some(Self::Jules),
-            "opencode" => Some(Self::OpenCode),
-            "pi" => Some(Self::Pi),
-            _ => None,
+macro_rules! define_agent_enum {
+    ($(($Variant:ident, $mod:ident, $cli_name:literal)),* $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum Agent {
+            $($Variant,)*
         }
-    }
 
-    pub fn command_name(&self) -> &'static str {
-        agent_dispatch!(self, COMMAND_NAME)
-    }
+        pub const ALL_AGENTS: &[Agent] = &[$(Agent::$Variant,)*];
 
-    pub fn normalized_name(&self) -> &'static str {
-        agent_dispatch!(self, NORMALIZED_NAME)
-    }
+        impl Agent {
+            pub fn from_str(s: &str) -> Option<Self> {
+                let s_lower = s.to_lowercase();
+                $(
+                    if s_lower == $mod::NORMALIZED_NAME
+                        || $mod::CLI_ALIASES.contains(&s_lower.as_str())
+                    {
+                        return Some(Self::$Variant);
+                    }
+                )*
+                None
+            }
 
-    pub fn display_name(&self) -> &'static str {
-        agent_dispatch!(self, DISPLAY_NAME)
-    }
+            pub fn command_name(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::COMMAND_NAME,)* }
+            }
 
+            pub fn normalized_name(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::NORMALIZED_NAME,)* }
+            }
+
+            pub fn display_name(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::DISPLAY_NAME,)* }
+            }
+
+            pub fn emoji(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::EMOJI,)* }
+            }
+
+            pub fn has_auto_credentials(&self) -> bool {
+                match self { $(Self::$Variant => $mod::HAS_AUTO_CREDENTIALS,)* }
+            }
+
+            pub fn config_dir_paths(&self) -> Vec<(&'static str, &'static str)> {
+                match self { $(Self::$Variant => $mod::CONFIG_DIR_PATHS.to_vec(),)* }
+            }
+
+            pub fn supports_auth_workflow(&self) -> bool {
+                match self { $(Self::$Variant => $mod::SUPPORTS_AUTH_WORKFLOW,)* }
+            }
+
+            pub fn auth_credential_path(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::AUTH_CREDENTIAL_PATH,)* }
+            }
+
+            pub fn containerfile(&self) -> &'static str {
+                match self { $(Self::$Variant => $mod::CONTAINERFILE,)* }
+            }
+        }
+    };
+}
+
+for_each_agent!(define_agent_enum);
+
+impl Agent {
     pub fn layer_name(&self) -> String {
         format!("agent-{}", self.normalized_name())
     }
 
-    pub fn has_auto_credentials(&self) -> bool {
-        agent_dispatch!(self, HAS_AUTO_CREDENTIALS)
-    }
-
-    pub fn config_dir_paths(&self) -> Vec<(&'static str, &'static str)> {
-        agent_dispatch!(self, CONFIG_DIR_PATHS).to_vec()
-    }
-
-    pub fn supports_auth_workflow(&self) -> bool {
-        agent_dispatch!(self, SUPPORTS_AUTH_WORKFLOW)
-    }
-
-    pub fn auth_credential_path(&self) -> &'static str {
-        agent_dispatch!(self, AUTH_CREDENTIAL_PATH)
-    }
-
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            Self::Claude => "🤖",
-            Self::ClaudeCodeRouter => "🔀",
-            Self::CodeRabbit => "🐰",
-            Self::Copilot => "🦾",
-            Self::Cursor => "➡️",
-            Self::Gemini => "🔮",
-            Self::Codex => "💻",
-            Self::Jules => "🚀",
-            Self::OpenCode => "🔓",
-            Self::Pi => "🥧",
-        }
-    }
-
-    pub fn config_flag_name(&self) -> &'static str {
-        match self {
-            Self::Claude => "claude-dir",
-            Self::ClaudeCodeRouter => "claude-code-router-dir",
-            Self::CodeRabbit => "coderabbit-dir",
-            Self::Copilot => "copilot-dir",
-            Self::Cursor => "cursor-dir",
-            Self::Gemini => "gemini-dir",
-            Self::Codex => "codex-dir",
-            Self::Jules => "jules-dir",
-            Self::OpenCode => "opencode-dir",
-            Self::Pi => "pi-dir",
-        }
+    #[allow(dead_code)]
+    pub fn config_flag_name(&self) -> String {
+        format!("{}-dir", self.normalized_name())
     }
 
     pub fn requires_server_start(&self) -> bool {
@@ -180,66 +160,6 @@ impl Agent {
 
         false
     }
-
-    pub fn is_config_flag_set(&self, flags: &AgentConfigFlags) -> bool {
-        flags.agent_configs || flags.get(self)
-    }
-
-    pub fn validate_config_flags(&self, flags: &AgentConfigFlags) -> Result<(), String> {
-        if flags.agent_configs {
-            return Ok(());
-        }
-
-        let incompatible_flags: Vec<&str> = ALL_AGENTS
-            .iter()
-            .filter(|a| *a != self && flags.get(a))
-            .map(|a| a.config_flag_name())
-            .collect();
-
-        if !incompatible_flags.is_empty() {
-            let flags_list = incompatible_flags.join(", ");
-            return Err(format!(
-                "Cannot use --{} with {} agent. Use --{} instead, or use --agent-configs to mount all agent directories.",
-                flags_list,
-                self.display_name(),
-                self.config_flag_name()
-            ));
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct AgentConfigFlags {
-    pub claude_dir: bool,
-    pub claude_code_router_dir: bool,
-    pub coderabbit_dir: bool,
-    pub copilot_dir: bool,
-    pub cursor_dir: bool,
-    pub gemini_dir: bool,
-    pub codex_dir: bool,
-    pub jules_dir: bool,
-    pub opencode_dir: bool,
-    pub pi_dir: bool,
-    pub agent_configs: bool,
-}
-
-impl AgentConfigFlags {
-    pub fn get(&self, agent: &Agent) -> bool {
-        match agent {
-            Agent::Claude => self.claude_dir,
-            Agent::ClaudeCodeRouter => self.claude_code_router_dir,
-            Agent::CodeRabbit => self.coderabbit_dir,
-            Agent::Copilot => self.copilot_dir,
-            Agent::Cursor => self.cursor_dir,
-            Agent::Gemini => self.gemini_dir,
-            Agent::Codex => self.codex_dir,
-            Agent::Jules => self.jules_dir,
-            Agent::OpenCode => self.opencode_dir,
-            Agent::Pi => self.pi_dir,
-        }
-    }
 }
 
 impl fmt::Display for Agent {
@@ -252,7 +172,6 @@ pub fn extract_agent_from_jail_name(jail_name: &str) -> Option<Agent> {
     if !jail_name.starts_with("jail__") {
         return None;
     }
-
     jail_name.rsplit("__").next().and_then(Agent::from_str)
 }
 
@@ -260,6 +179,12 @@ pub fn get_agent_display_name(jail_name: &str) -> &'static str {
     extract_agent_from_jail_name(jail_name)
         .map(|a| a.display_name())
         .unwrap_or("unknown")
+}
+
+pub fn get_agent_containerfile(layer: &str) -> Option<&'static str> {
+    let name = layer.strip_prefix("agent-")?;
+    let agent = Agent::from_str(name)?;
+    Some(agent.containerfile())
 }
 
 #[cfg(test)]
@@ -281,6 +206,8 @@ mod tests {
         assert_eq!(Agent::from_str("codex"), Some(Agent::Codex));
         assert_eq!(Agent::from_str("jules"), Some(Agent::Jules));
         assert_eq!(Agent::from_str("opencode"), Some(Agent::OpenCode));
+        assert_eq!(Agent::from_str("coderabbit"), Some(Agent::CodeRabbit));
+        assert_eq!(Agent::from_str("code-rabbit"), Some(Agent::CodeRabbit));
         assert_eq!(Agent::from_str("unknown"), None);
         assert_eq!(Agent::from_str("CLAUDE"), Some(Agent::Claude));
     }
@@ -395,98 +322,6 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_config_flag_name() {
-        assert_eq!(Agent::Claude.config_flag_name(), "claude-dir");
-        assert_eq!(
-            Agent::ClaudeCodeRouter.config_flag_name(),
-            "claude-code-router-dir"
-        );
-        assert_eq!(Agent::Copilot.config_flag_name(), "copilot-dir");
-        assert_eq!(Agent::Cursor.config_flag_name(), "cursor-dir");
-        assert_eq!(Agent::Gemini.config_flag_name(), "gemini-dir");
-        assert_eq!(Agent::Codex.config_flag_name(), "codex-dir");
-        assert_eq!(Agent::Jules.config_flag_name(), "jules-dir");
-        assert_eq!(Agent::OpenCode.config_flag_name(), "opencode-dir");
-    }
-
-    #[test]
-    fn test_validate_config_flags_matching_agent() {
-        let flags = AgentConfigFlags {
-            claude_dir: true,
-            ..Default::default()
-        };
-        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
-
-        let flags = AgentConfigFlags {
-            copilot_dir: true,
-            ..Default::default()
-        };
-        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
-    }
-
-    #[test]
-    fn test_validate_config_flags_mismatched_agent() {
-        let flags = AgentConfigFlags {
-            gemini_dir: true,
-            ..Default::default()
-        };
-        let result = Agent::Cursor.validate_config_flags(&flags);
-        assert!(result.is_err());
-        let error_msg = result.unwrap_err();
-        assert!(error_msg.contains("gemini-dir"));
-        assert!(error_msg.contains("Cursor agent"));
-        assert!(error_msg.contains("cursor-dir"));
-    }
-
-    #[test]
-    fn test_validate_config_flags_multiple_wrong_flags() {
-        let flags = AgentConfigFlags {
-            claude_dir: true,
-            copilot_dir: true,
-            gemini_dir: true,
-            ..Default::default()
-        };
-        let result = Agent::Cursor.validate_config_flags(&flags);
-        assert!(result.is_err());
-        let error_msg = result.unwrap_err();
-        assert!(error_msg.contains("claude-dir"));
-        assert!(error_msg.contains("copilot-dir"));
-        assert!(error_msg.contains("gemini-dir"));
-    }
-
-    #[test]
-    fn test_validate_config_flags_with_agent_configs() {
-        let flags = AgentConfigFlags {
-            claude_dir: true,
-            claude_code_router_dir: true,
-            copilot_dir: true,
-            cursor_dir: true,
-            gemini_dir: true,
-            coderabbit_dir: true,
-            codex_dir: true,
-            jules_dir: true,
-            opencode_dir: true,
-            pi_dir: true,
-            agent_configs: true,
-        };
-        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Cursor.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Gemini.validate_config_flags(&flags).is_ok());
-        assert!(Agent::CodeRabbit.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Codex.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Jules.validate_config_flags(&flags).is_ok());
-    }
-
-    #[test]
-    fn test_validate_config_flags_no_flags() {
-        let flags = AgentConfigFlags::default();
-        assert!(Agent::Claude.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Copilot.validate_config_flags(&flags).is_ok());
-        assert!(Agent::Cursor.validate_config_flags(&flags).is_ok());
-    }
-
-    #[test]
     fn test_all_agents_have_from_str_roundtrip() {
         for agent in ALL_AGENTS {
             let name = agent.normalized_name();
@@ -504,9 +339,8 @@ mod tests {
     #[test]
     fn test_all_agents_have_emoji() {
         for agent in ALL_AGENTS {
-            let emoji = agent.emoji();
             assert!(
-                !emoji.is_empty(),
+                !agent.emoji().is_empty(),
                 "Agent {:?} should have a non-empty emoji",
                 agent
             );
@@ -514,42 +348,22 @@ mod tests {
     }
 
     #[test]
-    fn test_all_agents_have_config_flag() {
-        for agent in ALL_AGENTS {
-            let flag = agent.config_flag_name();
-            assert!(
-                flag.ends_with("-dir"),
-                "Agent {:?} config flag {:?} should end with -dir",
-                agent,
-                flag
-            );
-        }
-    }
-
-    #[test]
-    fn test_agent_config_flags_get() {
-        let flags = AgentConfigFlags {
-            claude_dir: true,
-            opencode_dir: true,
-            ..Default::default()
-        };
-        assert!(flags.get(&Agent::Claude));
-        assert!(flags.get(&Agent::OpenCode));
-        assert!(!flags.get(&Agent::Copilot));
-    }
-
-    #[test]
-    fn test_is_config_flag_set_with_agent_configs() {
-        let flags = AgentConfigFlags {
-            agent_configs: true,
-            ..Default::default()
-        };
+    fn test_all_agents_have_containerfile() {
         for agent in ALL_AGENTS {
             assert!(
-                agent.is_config_flag_set(&flags),
-                "Agent {:?} should report config flag set when agent_configs=true",
+                !agent.containerfile().is_empty(),
+                "Agent {:?} should have a non-empty containerfile",
                 agent
             );
         }
+    }
+
+    #[test]
+    fn test_get_agent_containerfile() {
+        assert!(get_agent_containerfile("agent-claude").is_some());
+        assert!(get_agent_containerfile("agent-opencode").is_some());
+        assert!(get_agent_containerfile("agent-pi").is_some());
+        assert!(get_agent_containerfile("agent-unknown").is_none());
+        assert!(get_agent_containerfile("base").is_none());
     }
 }

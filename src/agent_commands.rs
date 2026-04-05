@@ -5,7 +5,7 @@ use crate::git_gpg::{
     create_claude_json_in_container, create_gitconfig_in_container, setup_git_gpg_config,
 };
 use crate::jail::{JailBuilder, JailManager};
-use crate::jail_setup::{self, mount_agent_configs, setup_default_environment};
+use crate::jail_setup::{mount_agent_configs, setup_default_environment};
 use crate::strings;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -23,16 +23,7 @@ pub struct AgentCommandParams {
     pub cpu: Option<u32>,
     pub no_workspace: bool,
     pub workspace_path: String,
-    pub claude_dir: bool,
-    pub claude_code_router_dir: bool,
-    pub copilot_dir: bool,
-    pub cursor_dir: bool,
-    pub gemini_dir: bool,
-    pub coderabbit_dir: bool,
-    pub codex_dir: bool,
-    pub jules_dir: bool,
-    pub opencode_dir: bool,
-    pub pi_dir: bool,
+    pub config_dir: bool,
     pub agent_configs: bool,
     pub git_gpg: bool,
     pub upgrade: bool,
@@ -273,11 +264,7 @@ pub async fn run_ai_agent_command(
             // Only auto-enable auth for agents that support the auth workflow
             if agent.supports_auth_workflow() {
                 // Check if the appropriate config directory flag is set
-                let config_dir_mounted = match agent {
-                    crate::agents::Agent::Codex => params.codex_dir || params.agent_configs,
-                    crate::agents::Agent::Jules => params.jules_dir || params.agent_configs,
-                    _ => false, // Other agents don't use this auto-detection
-                };
+                let config_dir_mounted = params.config_dir || params.agent_configs;
 
                 // Only check for credentials if the config directory will be mounted
                 if config_dir_mounted {
@@ -614,19 +601,8 @@ pub async fn run_ai_agent_command(
             builder,
             &home_path,
             agent_command,
-            &jail_setup::AgentConfigFlags {
-                claude_dir: params.claude_dir,
-                claude_code_router_dir: params.claude_code_router_dir,
-                copilot_dir: params.copilot_dir,
-                cursor_dir: params.cursor_dir,
-                gemini_dir: params.gemini_dir,
-                coderabbit_dir: params.coderabbit_dir,
-                codex_dir: params.codex_dir,
-                jules_dir: params.jules_dir,
-                opencode_dir: params.opencode_dir,
-                pi_dir: params.pi_dir,
-                agent_configs: params.agent_configs,
-            },
+            params.config_dir,
+            params.agent_configs,
         );
 
         // Opt-in: GPG configuration

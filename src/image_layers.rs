@@ -57,23 +57,6 @@ const TERRAFORM_CONTAINERFILE: &str = include_str!("../containerfiles/terraform.
 const KUBERNETES_CONTAINERFILE: &str = include_str!("../containerfiles/kubernetes.Containerfile");
 const AWS_CONTAINERFILE: &str = include_str!("../containerfiles/aws.Containerfile");
 const GCP_CONTAINERFILE: &str = include_str!("../containerfiles/gcp.Containerfile");
-const AGENT_CLAUDE_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-claude.Containerfile");
-const AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-claude-code-router.Containerfile");
-const AGENT_CODERABBIT_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-coderabbit.Containerfile");
-const AGENT_COPILOT_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-copilot.Containerfile");
-const AGENT_CURSOR_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-cursor.Containerfile");
-const AGENT_GEMINI_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-gemini.Containerfile");
-const AGENT_CODEX_CONTAINERFILE: &str = include_str!("../containerfiles/agent-codex.Containerfile");
-const AGENT_JULES_CONTAINERFILE: &str = include_str!("../containerfiles/agent-jules.Containerfile");
-const AGENT_PI_CONTAINERFILE: &str = include_str!("../containerfiles/agent-pi.Containerfile");
-const AGENT_OPENCODE_CONTAINERFILE: &str =
-    include_str!("../containerfiles/agent-opencode.Containerfile");
 
 fn get_layer_emoji(layer_name: &str) -> &'static str {
     match layer_name {
@@ -240,23 +223,7 @@ fn get_containerfile_content(layer: &str) -> Option<&'static str> {
         "kubernetes" => Some(KUBERNETES_CONTAINERFILE),
         "aws" => Some(AWS_CONTAINERFILE),
         "gcp" => Some(GCP_CONTAINERFILE),
-        _ => get_agent_containerfile(layer),
-    }
-}
-
-fn get_agent_containerfile(layer: &str) -> Option<&'static str> {
-    match layer {
-        "agent-claude" => Some(AGENT_CLAUDE_CONTAINERFILE),
-        "agent-claude-code-router" => Some(AGENT_CLAUDE_CODE_ROUTER_CONTAINERFILE),
-        "agent-coderabbit" => Some(AGENT_CODERABBIT_CONTAINERFILE),
-        "agent-copilot" => Some(AGENT_COPILOT_CONTAINERFILE),
-        "agent-cursor" => Some(AGENT_CURSOR_CONTAINERFILE),
-        "agent-gemini" => Some(AGENT_GEMINI_CONTAINERFILE),
-        "agent-codex" => Some(AGENT_CODEX_CONTAINERFILE),
-        "agent-jules" => Some(AGENT_JULES_CONTAINERFILE),
-        "agent-pi" => Some(AGENT_PI_CONTAINERFILE),
-        "agent-opencode" => Some(AGENT_OPENCODE_CONTAINERFILE),
-        _ => None,
+        _ => crate::agents::get_agent_containerfile(layer),
     }
 }
 
