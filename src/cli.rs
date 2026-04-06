@@ -6,6 +6,9 @@ use std::path::PathBuf;
 /// Default image name
 pub const DEFAULT_IMAGE: &str = "localhost/jail-ai-env:latest";
 
+/// Alias for backward compatibility
+pub const DEFAULT_IMAGE_NAME: &str = DEFAULT_IMAGE;
+
 /// Common options for AI agent commands
 #[derive(Args, Debug)]
 pub struct AgentCommandOptions {
