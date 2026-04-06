@@ -10,6 +10,7 @@ pub mod image;
 pub mod image_layers;
 pub mod image_parallel;
 pub mod jail;
+pub mod jail_detection;
 pub mod jail_setup;
 pub mod project_detection;
 pub mod state;
@@ -108,8 +109,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
 
     match command {
         None => {
-            let workspace_dir = agent_commands::get_git_root().unwrap_or_else(|| cwd.clone());
-            let matching_jails = agent_commands::find_jails_for_directory(&workspace_dir).await?;
+            let workspace_dir = jail_detection::get_git_root().unwrap_or_else(|| cwd.clone());
+            let matching_jails = jail_detection::find_jails_for_directory(&workspace_dir).await?;
 
             let jail_name = if matching_jails.is_empty() {
                 let base_name = cli::Commands::generate_jail_name(&workspace_dir);
@@ -202,9 +203,9 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                     builder = jail_setup::setup_default_environment(builder);
 
                     if !no_workspace {
-                        let workspace_dir = agent_commands::get_git_root()
+                        let workspace_dir = jail_detection::get_git_root()
                             .unwrap_or_else(|| std::env::current_dir().unwrap());
-                        agent_commands::validate_workspace_directory(&workspace_dir)?;
+                        jail_detection::validate_workspace_directory(&workspace_dir)?;
                         tracing::info!(
                             "Auto-mounting {} to {}",
                             workspace_dir.display(),
@@ -368,7 +369,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
 
                 let jails = if current {
                     let cwd = std::env::current_dir()?;
-                    let workspace_dir = agent_commands::get_git_root().unwrap_or(cwd);
+                    let workspace_dir = jail_detection::get_git_root().unwrap_or(cwd);
                     let base_name = cli::Commands::generate_jail_name(&workspace_dir);
                     all_jails
                         .into_iter()
@@ -387,7 +388,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                 } else {
                     println!("Jails (backend: {backend_type:?}):");
                     for jail_name in &jails {
-                        let agent_suffix = agent_commands::extract_agent_name(jail_name);
+                        let agent_suffix = jail_detection::extract_agent_name(jail_name);
                         let config = JailConfig {
                             name: jail_name.clone(),
                             backend: backend_type,
@@ -549,8 +550,8 @@ async fn create_default_jail(
 
     builder = jail_setup::setup_default_environment(builder);
 
-    let workspace_dir = agent_commands::get_git_root().unwrap_or(workspace.to_path_buf());
-    agent_commands::validate_workspace_directory(&workspace_dir)?;
+    let workspace_dir = jail_detection::get_git_root().unwrap_or(workspace.to_path_buf());
+    jail_detection::validate_workspace_directory(&workspace_dir)?;
 
     tracing::info!("Auto-mounting {} to /workspace", workspace_dir.display());
     builder = builder.bind_mount(workspace_dir, "/workspace", false);

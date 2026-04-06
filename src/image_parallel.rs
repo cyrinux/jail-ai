@@ -1,39 +1,31 @@
 /// Parallel image building and pre-fetching for multi-language projects
 ///
 /// This module provides:
-/// 1. Optimized parallel building of independent language layers
+/// 1. Sequential building of language layers (base first, then each language)
 /// 2. Background pre-fetching of commonly needed layers
 ///
-/// For projects with multiple language stacks (e.g., Rust + Node.js + Python),
-/// layers can be built concurrently instead of sequentially.
+/// Note: True parallelization isn't possible because each language layer
+/// depends on the base image via Dockerfile FROM directive.
 use crate::error::Result;
-use crate::image_layers::{build_shared_layer, image_exists};
+use crate::image_layers::{build_shared_layer, get_language_image_name, image_exists};
 use crate::project_detection::{detect_project_type_with_options, ProjectType};
 use std::collections::HashMap;
 use std::path::Path;
-use tokio::task::JoinSet;
 use tracing::{debug, info};
 
-/// Build multiple independent language layers in parallel
+/// Build language layers efficiently - base first, then language layers
 ///
-/// # Performance
-/// For a project with N language layers, this can provide up to N× speedup
-/// compared to sequential building, as layers depending only on base can
-/// be built concurrently.
+/// This function ensures:
+/// 1. Base image is built once (if needed)
+/// 2. Each language layer is built on top of base sequentially
 ///
-/// # Arguments
-/// * `base_image` - The base image all language layers depend on
-/// * `lang_types` - List of language types to build
-/// * `force_layers` - Layers to force rebuild (currently unused in parallel mode)
-/// * `_upgrade` - Whether to upgrade all layers (currently unused in parallel mode)
-/// * `verbose` - Whether to show verbose build output
-///
-/// # Returns
-/// HashMap mapping layer names to their built image names
+/// Note: True parallelization isn't possible because each language layer
+/// depends on the base image via Dockerfile FROM directive. We build sequentially
+/// but this function provides a clean API for the workflow.
 pub async fn build_language_layers_parallel(
     base_image: &str,
     lang_types: &[ProjectType],
-    _force_layers: &[String],
+    force_layers: &[String],
     upgrade: bool,
     verbose: bool,
 ) -> Result<HashMap<String, String>> {
@@ -42,58 +34,40 @@ pub async fn build_language_layers_parallel(
     }
 
     info!(
-        "🚀 Building {} language layers in parallel...",
-        lang_types.len()
+        "Building {} language layers on top of {}...",
+        lang_types.len(),
+        base_image
     );
 
-    let mut join_set = JoinSet::new();
+    // Step 1: Ensure base image exists (build once)
+    let base_exists = image_exists(base_image).await?;
+    if !base_exists || upgrade || force_layers.contains(&"base".to_string()) {
+        info!("Building base layer...");
+        build_shared_layer("base", None, verbose, upgrade).await?;
+    }
 
-    // Spawn parallel builds for each language layer
+    // Step 2: Build each language layer sequentially (can't parallelize due to FROM dependencies)
+    let mut results = HashMap::new();
+    let mut current_image = base_image.to_string();
+
     for lang_type in lang_types {
         let layer_name = lang_type.language_layer().to_string();
-        let base_image = base_image.to_string();
+        let lang_image_name = get_language_image_name(lang_type);
+        
+        let should_force = upgrade || force_layers.contains(&layer_name);
+        let needs_build = should_force || !image_exists(lang_image_name).await?;
 
-        debug!("Spawning parallel build task for layer: {}", layer_name);
-
-        join_set.spawn(async move {
-            let result =
-                build_shared_layer(&layer_name, Some(&base_image), verbose, upgrade).await?;
-            Ok::<_, crate::error::JailError>((layer_name, result))
-        });
-    }
-
-    // Collect results
-    let mut results = HashMap::new();
-    let mut errors = Vec::new();
-
-    while let Some(res) = join_set.join_next().await {
-        match res {
-            Ok(Ok((layer_name, image_name))) => {
-                debug!(
-                    "✓ Parallel build completed: {} -> {}",
-                    layer_name, image_name
-                );
-                results.insert(layer_name, image_name);
-            }
-            Ok(Err(e)) => {
-                errors.push(format!("Build error: {}", e));
-            }
-            Err(e) => {
-                errors.push(format!("Task join error: {}", e));
-            }
+        if needs_build {
+            info!("Building {} layer on top of {}...", layer_name, current_image);
+            current_image = build_shared_layer(&layer_name, Some(&current_image), verbose, should_force).await?;
+        } else {
+            current_image = lang_image_name.to_string();
         }
+
+        results.insert(layer_name, current_image.clone());
     }
 
-    // If any builds failed, return error with all failures
-    if !errors.is_empty() {
-        return Err(crate::error::JailError::Backend(format!(
-            "Parallel build failed:\n{}",
-            errors.join("\n")
-        )));
-    }
-
-    info!("✓ Successfully built {} layers in parallel", results.len());
-
+    info!("✓ Successfully built {} language layers", results.len());
     Ok(results)
 }
 

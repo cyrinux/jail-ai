@@ -9,6 +9,8 @@ use crate::jail_setup::{mount_agent_configs, setup_default_environment};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
+pub use crate::jail_detection::{auto_detect_jail_name, get_git_root, validate_workspace_directory, find_jails_for_directory, extract_agent_name};
+
 mod strings {
     pub const UPDATE_AVAILABLE: &str = "\n🔄 Update available for your jail environment!";
     pub const OUTDATED_LAYERS_DETECTED: &str = "\n📦 Outdated layers detected:";
@@ -64,111 +66,6 @@ pub struct AgentCommandParams {
     pub podman: bool,
     pub tui: bool,
     pub args: Vec<String>,
-}
-
-/// Auto-detect jail name from current directory (or git root if available)
-pub fn auto_detect_jail_name() -> Result<String> {
-    let cwd = std::env::current_dir()?;
-    let workspace_dir = get_git_root().unwrap_or(cwd);
-    let jail_name = Commands::generate_jail_name(&workspace_dir);
-    info!("Auto-detected jail name from workspace: {}", jail_name);
-    Ok(jail_name)
-}
-
-/// Get the git root directory if the current directory is within a git repository
-pub fn get_git_root() -> Option<PathBuf> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output();
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let git_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !git_root.is_empty() {
-                let path = PathBuf::from(git_root);
-                if path.exists() {
-                    info!("Found git root: {}", path.display());
-                    return Some(path);
-                }
-            }
-        }
-        _ => {
-            // Not a git repository or git command failed
-        }
-    }
-
-    None
-}
-
-/// Validate that a workspace directory is safe for jail execution
-/// Prevents execution in home directory root and system directories
-pub fn validate_workspace_directory(workspace_dir: &Path) -> Result<()> {
-    let workspace_dir = workspace_dir.canonicalize().map_err(error::JailError::Io)?;
-
-    // Get the user's home directory
-    let home_dir = std::env::var("HOME")
-        .map_err(|_| error::JailError::Config("HOME environment variable not set".to_string()))?;
-    let home_path = PathBuf::from(&home_dir)
-        .canonicalize()
-        .map_err(error::JailError::Io)?;
-
-    // Check if workspace is the home directory root
-    if workspace_dir == home_path {
-        return Err(error::JailError::UnsafeWorkspace(format!(
-            "Cannot run jail-ai in home directory root: {}",
-            workspace_dir.display()
-        )));
-    }
-
-    // Check if workspace is a system directory
-    let system_dirs = [
-        "/",
-        "/bin",
-        "/sbin",
-        "/usr",
-        "/usr/bin",
-        "/usr/sbin",
-        "/usr/local",
-        "/etc",
-        "/var",
-        "/lib",
-        "/lib64",
-        "/opt",
-        "/root",
-        "/sys",
-        "/proc",
-        "/dev",
-    ];
-
-    for system_dir in &system_dirs {
-        if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
-            if workspace_dir == system_path {
-                return Err(error::JailError::UnsafeWorkspace(format!(
-                    "Cannot run jail-ai in system directory: {}",
-                    workspace_dir.display()
-                )));
-            }
-        }
-    }
-
-    // Check if workspace is inside a system directory (but not root)
-    for system_dir in &system_dirs {
-        if *system_dir == "/" {
-            // Skip root directory check as everything is under root
-            continue;
-        }
-
-        if let Ok(system_path) = PathBuf::from(system_dir).canonicalize() {
-            if workspace_dir.starts_with(&system_path) && workspace_dir != system_path {
-                return Err(error::JailError::UnsafeWorkspace(format!(
-                    "Cannot run jail-ai in system subdirectory: {}",
-                    workspace_dir.display()
-                )));
-            }
-        }
-    }
-
-    Ok(())
 }
 
 /// Map agent command names to normalized agent identifiers
@@ -877,31 +774,6 @@ pub async fn run_ai_agent_command(
     Ok(())
 }
 
-/// Find all jails matching the current directory pattern
-pub async fn find_jails_for_directory(workspace_dir: &Path) -> Result<Vec<String>> {
-    let base_name = Commands::generate_jail_name(workspace_dir);
-    let backend_type = BackendType::detect();
-
-    // Create a temporary config just to access the backend
-    let temp_config = JailConfig {
-        name: "temp".to_string(),
-        backend: backend_type,
-        ..Default::default()
-    };
-    let backend = crate::backend::create_backend(&temp_config);
-
-    // List all jails
-    let all_jails = backend.list_all().await?;
-
-    // Filter jails that match the base pattern (jail-{project}-{hash}-)
-    let matching_jails: Vec<String> = all_jails
-        .into_iter()
-        .filter(|name| name.starts_with(&base_name) && name.len() > base_name.len())
-        .collect();
-
-    Ok(matching_jails)
-}
-
 /// Handle OAuth authentication workflow for agents that support it
 /// This opens an interactive shell in the container with network=host for OAuth callbacks
 async fn handle_auth_workflow(
@@ -1018,13 +890,6 @@ async fn handle_auth_workflow(
     }
 
     Ok(())
-}
-
-/// Extract agent name from jail name for display purposes
-/// Jail name format: jail-{project}-{hash}-{agent}
-/// Returns a simplified agent name for display (e.g., "cursor" instead of "cursor-agent")
-pub fn extract_agent_name(jail_name: &str) -> &'static str {
-    crate::agents::get_agent_display_name(jail_name)
 }
 
 /// Prompt user to select a jail from a list
