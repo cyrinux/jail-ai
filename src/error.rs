@@ -28,6 +28,9 @@ pub enum JailError {
 
     #[error("Unsafe mount source: {0}")]
     UnsafeMount(String),
+
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, JailError>;

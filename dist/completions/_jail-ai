@@ -1,0 +1,824 @@
+#compdef jail-ai
+
+autoload -U is-at-least
+
+_jail-ai() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_jail-ai_commands" \
+"*::: :->jail-ai" \
+&& ret=0
+    case $state in
+    (jail-ai)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:jail-ai-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+'-b+[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'--backend=[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'-i+[Base image (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'--image=[Base image (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'*-m+[Bind mount (format\: source\:target\[\:ro\])]:MOUNT:_default' \
+'*--mount=[Bind mount (format\: source\:target\[\:ro\])]:MOUNT:_default' \
+'*-p+[Port mapping from host to container (format\: host_port\:container_port or host_port\:container_port/protocol)]:PORT:_default' \
+'*--port=[Port mapping from host to container (format\: host_port\:container_port or host_port\:container_port/protocol)]:PORT:_default' \
+'*-e+[Environment variable (format\: KEY=VALUE)]:ENV:_default' \
+'*--env=[Environment variable (format\: KEY=VALUE)]:ENV:_default' \
+'--memory=[Memory limit in MB]:MEMORY:_default' \
+'--cpu=[CPU quota percentage (0-100)]:CPU:_default' \
+'-c+[Load configuration from file]:CONFIG:_files' \
+'--config=[Load configuration from file]:CONFIG:_files' \
+'--workspace-path=[Custom workspace path inside jail (default\: /workspace)]:WORKSPACE_PATH:_default' \
+'*--layers=[Force specific layers (comma-separated, e.g., "base,rust,python")]:LAYERS:_default' \
+'--no-network[Disable network access]' \
+'(--no-network)--host-network[Use host networking (--network=host) instead of private networking Less secure but provides full access to host network services]' \
+'--no-workspace[Skip auto-mounting current working directory to /workspace]' \
+'--agent-configs[Mount all agent config directories]' \
+'--git-gpg[Enable git and GPG configuration mapping]' \
+'--upgrade[Upgrade\: rebuild outdated layers and recreate container]' \
+'--isolated[Use isolated project-specific images (workspace hash tag) instead of shared layer-based images]' \
+'--no-nix[Skip nix layer (by default, nix takes precedence over other language layers)]' \
+'--no-block-host[Disable eBPF-based host blocking (allows connections to host IPs) \[default\: enabled\]]' \
+'--podman[Enable Podman-in-Podman by mounting the host'\''s Podman socket This allows running containers inside the jail (useful for MCP agents)]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Name of the jail (auto-generated from current directory if not provided):_default' \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'-f[Force removal without confirmation]' \
+'--force[Force removal without confirmation]' \
+'--volume[Remove associated volume (persistent data)]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Name of the jail (auto-detected from current directory if not provided):_default' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Name of the jail (auto-detected from current directory if not provided):_default' \
+&& ret=0
+;;
+(save)
+_arguments "${_arguments_options[@]}" : \
+'-o+[Output file path]:OUTPUT:_files' \
+'--output=[Output file path]:OUTPUT:_files' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Name of the jail (auto-detected from current directory if not provided):_default' \
+&& ret=0
+;;
+(agents)
+_arguments "${_arguments_options[@]}" : \
+'-b+[Backend type\: '\''podman'\'' (Linux) or '\''container-app'\'' (macOS/apple-container)]:BACKEND:_default' \
+'--backend=[Backend type\: '\''podman'\'' (Linux) or '\''container-app'\'' (macOS/apple-container)]:BACKEND:_default' \
+'-i+[Base image (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'--image=[Base image (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'*-m+[Bind mount (format\: source\:target\[\:ro\])]:MOUNT:_default' \
+'*--mount=[Bind mount (format\: source\:target\[\:ro\])]:MOUNT:_default' \
+'*-p+[Port mapping from host to container (format\: host_port\:container_port or host_port\:container_port/protocol)]:PORT:_default' \
+'*--port=[Port mapping from host to container (format\: host_port\:container_port or host_port\:container_port/protocol)]:PORT:_default' \
+'*-e+[Environment variable (format\: KEY=VALUE)]:ENV:_default' \
+'*--env=[Environment variable (format\: KEY=VALUE)]:ENV:_default' \
+'--memory=[Memory limit in MB]:MEMORY:_default' \
+'--cpu=[CPU quota percentage (0-100)]:CPU:_default' \
+'--workspace-path=[Custom workspace path inside jail (default\: /workspace)]:WORKSPACE_PATH:_default' \
+'*--layers=[Force specific layers (comma-separated, e.g., "base,rust,python")]:LAYERS:_default' \
+'--no-network[Disable network access]' \
+'(--no-network)--host-network[Use host networking (--network=host) instead of private networking Less secure but provides full access to host network services]' \
+'--no-workspace[Skip auto-mounting current working directory to /workspace]' \
+'--agent-configs[Mount all agent config directories]' \
+'--git-gpg[Enable git and GPG configuration mapping]' \
+'--upgrade[Upgrade\: rebuild outdated layers and recreate container]' \
+'--cloud[Include cloud provider layers (AWS + GCP tools)]' \
+'--shell[Start an interactive shell instead of running the agent command]' \
+'--isolated[Use isolated project-specific images (workspace hash tag) instead of shared layer-based images]' \
+'--auth[Open interactive shell for OAuth authentication (joins running container or starts stopped one)]' \
+'--no-nix[Skip nix layer (by default, nix takes precedence over other language layers)]' \
+'--no-block-host[Disable eBPF-based host blocking (allows connections to host IPs) \[default\: enabled\]]' \
+'--podman[Enable Podman-in-Podman by mounting the host'\''s Podman socket This allows running containers inside the jail (useful for MCP agents)]' \
+'--tui[Launch the TUI with a tab for the agent and a tab for an interactive shell]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_jail-ai__agents_commands" \
+"*::: :->agents" \
+&& ret=0
+
+    case $state in
+    (agents)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:jail-ai-agents-command-$line[1]:"
+        case $line[1] in
+            (claude)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(claude-code-router)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(coderabbit)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(codex)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(copilot)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(cursor)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(gemini)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(jules)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(opencode)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(pi)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::args:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_jail-ai__agents__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:jail-ai-agents-help-command-$line[1]:"
+        case $line[1] in
+            (claude)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(claude-code-router)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(coderabbit)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(codex)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(copilot)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cursor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(gemini)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(jules)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(opencode)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pi)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'-b+[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'--backend=[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'-c[Show only jails for current directory]' \
+'--current[Show only jails for current directory]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(clean-all)
+_arguments "${_arguments_options[@]}" : \
+'-b+[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'--backend=[Backend type (only '\''podman'\'' is supported, kept for compatibility)]:BACKEND:_default' \
+'-f[Force removal without confirmation]' \
+'--force[Force removal without confirmation]' \
+'--volume[Remove associated volumes (persistent data)]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(upgrade)
+_arguments "${_arguments_options[@]}" : \
+'-i+[Base image to upgrade to (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'--image=[Base image to upgrade to (e.g., localhost/jail-ai-env\:latest, alpine\:latest)]:IMAGE:_default' \
+'-f[Force upgrade without confirmation]' \
+'--force[Force upgrade without confirmation]' \
+'--all[Upgrade all jails]' \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Name of the jail (auto-detected from current directory if not provided):_default' \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'-v[Enable verbose logging]' \
+'--verbose[Enable verbose logging]' \
+'(-v --verbose)-q[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'(-v --verbose)--quiet[Quiet mode (suppress INFO logs, only show warnings and errors)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':shell -- Shell to generate completions for:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_jail-ai__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:jail-ai-help-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(save)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(agents)
+_arguments "${_arguments_options[@]}" : \
+":: :_jail-ai__help__agents_commands" \
+"*::: :->agents" \
+&& ret=0
+
+    case $state in
+    (agents)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:jail-ai-help-agents-command-$line[1]:"
+        case $line[1] in
+            (claude)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(claude-code-router)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(coderabbit)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(codex)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(copilot)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cursor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(gemini)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(jules)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(opencode)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pi)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(clean-all)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(upgrade)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_jail-ai_commands] )) ||
+_jail-ai_commands() {
+    local commands; commands=(
+'create:Create a new jail' \
+'remove:Remove a jail' \
+'status:Show jail status' \
+'save:Save jail configuration to file' \
+'agents:Run AI agents. Agent variants are auto-generated from agents/mod.rs' \
+'list:List all jails' \
+'clean-all:Stop and remove all jail-ai containers' \
+'upgrade:Upgrade jail by recreating it with the latest image' \
+'completions:Generate shell completions and print them to stdout' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'jail-ai commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents_commands] )) ||
+_jail-ai__agents_commands() {
+    local commands; commands=(
+'claude:' \
+'claude-code-router:' \
+'coderabbit:' \
+'codex:' \
+'copilot:' \
+'cursor:' \
+'gemini:' \
+'jules:' \
+'opencode:' \
+'pi:' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'jail-ai agents commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__claude_commands] )) ||
+_jail-ai__agents__claude_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents claude commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__claude-code-router_commands] )) ||
+_jail-ai__agents__claude-code-router_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents claude-code-router commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__coderabbit_commands] )) ||
+_jail-ai__agents__coderabbit_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents coderabbit commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__codex_commands] )) ||
+_jail-ai__agents__codex_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents codex commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__copilot_commands] )) ||
+_jail-ai__agents__copilot_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents copilot commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__cursor_commands] )) ||
+_jail-ai__agents__cursor_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents cursor commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__gemini_commands] )) ||
+_jail-ai__agents__gemini_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents gemini commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help_commands] )) ||
+_jail-ai__agents__help_commands() {
+    local commands; commands=(
+'claude:' \
+'claude-code-router:' \
+'coderabbit:' \
+'codex:' \
+'copilot:' \
+'cursor:' \
+'gemini:' \
+'jules:' \
+'opencode:' \
+'pi:' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'jail-ai agents help commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__claude_commands] )) ||
+_jail-ai__agents__help__claude_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help claude commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__claude-code-router_commands] )) ||
+_jail-ai__agents__help__claude-code-router_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help claude-code-router commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__coderabbit_commands] )) ||
+_jail-ai__agents__help__coderabbit_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help coderabbit commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__codex_commands] )) ||
+_jail-ai__agents__help__codex_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help codex commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__copilot_commands] )) ||
+_jail-ai__agents__help__copilot_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help copilot commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__cursor_commands] )) ||
+_jail-ai__agents__help__cursor_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help cursor commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__gemini_commands] )) ||
+_jail-ai__agents__help__gemini_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help gemini commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__help_commands] )) ||
+_jail-ai__agents__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help help commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__jules_commands] )) ||
+_jail-ai__agents__help__jules_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help jules commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__opencode_commands] )) ||
+_jail-ai__agents__help__opencode_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help opencode commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__help__pi_commands] )) ||
+_jail-ai__agents__help__pi_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents help pi commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__jules_commands] )) ||
+_jail-ai__agents__jules_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents jules commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__opencode_commands] )) ||
+_jail-ai__agents__opencode_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents opencode commands' commands "$@"
+}
+(( $+functions[_jail-ai__agents__pi_commands] )) ||
+_jail-ai__agents__pi_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai agents pi commands' commands "$@"
+}
+(( $+functions[_jail-ai__clean-all_commands] )) ||
+_jail-ai__clean-all_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai clean-all commands' commands "$@"
+}
+(( $+functions[_jail-ai__completions_commands] )) ||
+_jail-ai__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai completions commands' commands "$@"
+}
+(( $+functions[_jail-ai__create_commands] )) ||
+_jail-ai__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai create commands' commands "$@"
+}
+(( $+functions[_jail-ai__help_commands] )) ||
+_jail-ai__help_commands() {
+    local commands; commands=(
+'create:Create a new jail' \
+'remove:Remove a jail' \
+'status:Show jail status' \
+'save:Save jail configuration to file' \
+'agents:Run AI agents. Agent variants are auto-generated from agents/mod.rs' \
+'list:List all jails' \
+'clean-all:Stop and remove all jail-ai containers' \
+'upgrade:Upgrade jail by recreating it with the latest image' \
+'completions:Generate shell completions and print them to stdout' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'jail-ai help commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents_commands] )) ||
+_jail-ai__help__agents_commands() {
+    local commands; commands=(
+'claude:' \
+'claude-code-router:' \
+'coderabbit:' \
+'codex:' \
+'copilot:' \
+'cursor:' \
+'gemini:' \
+'jules:' \
+'opencode:' \
+'pi:' \
+    )
+    _describe -t commands 'jail-ai help agents commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__claude_commands] )) ||
+_jail-ai__help__agents__claude_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents claude commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__claude-code-router_commands] )) ||
+_jail-ai__help__agents__claude-code-router_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents claude-code-router commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__coderabbit_commands] )) ||
+_jail-ai__help__agents__coderabbit_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents coderabbit commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__codex_commands] )) ||
+_jail-ai__help__agents__codex_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents codex commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__copilot_commands] )) ||
+_jail-ai__help__agents__copilot_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents copilot commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__cursor_commands] )) ||
+_jail-ai__help__agents__cursor_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents cursor commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__gemini_commands] )) ||
+_jail-ai__help__agents__gemini_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents gemini commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__jules_commands] )) ||
+_jail-ai__help__agents__jules_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents jules commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__opencode_commands] )) ||
+_jail-ai__help__agents__opencode_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents opencode commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__agents__pi_commands] )) ||
+_jail-ai__help__agents__pi_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help agents pi commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__clean-all_commands] )) ||
+_jail-ai__help__clean-all_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help clean-all commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__completions_commands] )) ||
+_jail-ai__help__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help completions commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__create_commands] )) ||
+_jail-ai__help__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help create commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__help_commands] )) ||
+_jail-ai__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help help commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__list_commands] )) ||
+_jail-ai__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help list commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__remove_commands] )) ||
+_jail-ai__help__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help remove commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__save_commands] )) ||
+_jail-ai__help__save_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help save commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__status_commands] )) ||
+_jail-ai__help__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help status commands' commands "$@"
+}
+(( $+functions[_jail-ai__help__upgrade_commands] )) ||
+_jail-ai__help__upgrade_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai help upgrade commands' commands "$@"
+}
+(( $+functions[_jail-ai__list_commands] )) ||
+_jail-ai__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai list commands' commands "$@"
+}
+(( $+functions[_jail-ai__remove_commands] )) ||
+_jail-ai__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai remove commands' commands "$@"
+}
+(( $+functions[_jail-ai__save_commands] )) ||
+_jail-ai__save_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai save commands' commands "$@"
+}
+(( $+functions[_jail-ai__status_commands] )) ||
+_jail-ai__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai status commands' commands "$@"
+}
+(( $+functions[_jail-ai__upgrade_commands] )) ||
+_jail-ai__upgrade_commands() {
+    local commands; commands=()
+    _describe -t commands 'jail-ai upgrade commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_jail-ai" ]; then
+    _jail-ai "$@"
+else
+    compdef _jail-ai jail-ai
+fi

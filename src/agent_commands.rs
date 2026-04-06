@@ -838,12 +838,12 @@ async fn handle_auth_workflow(
     }
 
     // Check if container is running
-    let is_running = backend.is_running(jail_name).await?;
+    let _is_running = backend.is_running(jail_name).await?;
 
     // Note: Container should already have been recreated with host networking
     // by the main flow when --auth flag was detected
 
-    if is_running {
+    if _is_running {
         // Container is already running, just join it with an interactive shell
         info!("Container is running with host networking. Opening shell for authentication...");
         println!("\n🔐 Authentication Mode - {}", agent.display_name());
