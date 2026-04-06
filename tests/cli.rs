@@ -1,4 +1,4 @@
-use jail_ai::{cli::Commands, config, Cli, Parser};
+use jail_ai::{agents::AgentCommands, cli::Commands, config, Cli, Parser};
 
 #[test]
 fn test_parse_backend() {
@@ -116,21 +116,30 @@ fn test_generate_jail_name_sanitization() {
 
 #[test]
 fn test_host_network_flag_parsing() {
-    let args = vec!["jail-ai", "claude", "--host-network"];
+    let args = vec!["jail-ai", "agents", "--host-network", "claude"];
     let cli = Cli::try_parse_from(args).unwrap();
 
     match cli.command {
-        Some(Commands::Claude { common, .. }) => {
+        Some(Commands::Agents {
+            common,
+            subcommand: AgentCommands::Claude { .. },
+        }) => {
             assert!(common.host_network);
             assert!(!common.no_network);
         }
-        _ => panic!("Expected Claude command"),
+        _ => panic!("Expected Agents Claude command"),
     }
 }
 
 #[test]
 fn test_host_network_conflicts_with_no_network() {
-    let args = vec!["jail-ai", "claude", "--host-network", "--no-network"];
+    let args = vec![
+        "jail-ai",
+        "agents",
+        "--host-network",
+        "--no-network",
+        "claude",
+    ];
     assert!(Cli::try_parse_from(args).is_err());
 }
 
@@ -154,27 +163,33 @@ fn test_host_network_flag_create_command() {
 
 #[test]
 fn test_auth_flag_parsing() {
-    let args = vec!["jail-ai", "codex", "--auth", "--config-dir"];
+    let args = vec!["jail-ai", "agents", "--auth", "codex"];
     let cli = Cli::try_parse_from(args).unwrap();
 
     match cli.command {
-        Some(Commands::Codex { common, .. }) => {
+        Some(Commands::Agents {
+            common,
+            subcommand: AgentCommands::Codex { .. },
+        }) => {
             assert!(common.auth);
         }
-        _ => panic!("Expected Codex command"),
+        _ => panic!("Expected Agents Codex command"),
     }
 }
 
 #[test]
 fn test_auth_flag_optional() {
-    let args = vec!["jail-ai", "codex", "--config-dir"];
+    let args = vec!["jail-ai", "agents", "codex"];
     let cli = Cli::try_parse_from(args).unwrap();
 
     match cli.command {
-        Some(Commands::Codex { common, .. }) => {
+        Some(Commands::Agents {
+            common,
+            subcommand: AgentCommands::Codex { .. },
+        }) => {
             assert!(!common.auth);
         }
-        _ => panic!("Expected Codex command"),
+        _ => panic!("Expected Agents Codex command"),
     }
 }
 

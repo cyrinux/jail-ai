@@ -109,7 +109,7 @@ cargo run -- create my-agent --workspace-path /app
 cargo run -- create my-agent --no-nix
 
 # Create jail with cloud provider tools (AWS CLI + GCP gcloud)
-cargo run -- claude --cloud
+cargo run -- agents claude --cloud
 
 # Execute command in jail (non-interactive)
 cargo run -- exec my-agent -- ls -la /workspace
@@ -121,54 +121,54 @@ cargo run -- exec my-agent --interactive -- bash
 make dev-jail
 
 # AI Agent commands with parameters (use -- to separate jail-ai params from agent params)
-cargo run -- claude -- chat "help me debug this code"
-cargo run -- claude -- --help
-cargo run -- claude -- --version
+cargo run -- agents claude -- chat "help me debug this code"
+cargo run -- agents claude -- --help
+cargo run -- agents claude -- --version
 # Claude Code Router - Automatically starts server with "ccr start" then runs "ccr code"
-cargo run -- claude-code-router --claude-code-router-dir -- chat "help me debug this code"
-cargo run -- copilot --copilot-dir -- suggest "write tests"
-cargo run -- gemini --gemini-dir -- --model gemini-pro "explain this"
+cargo run -- agents claude-code-router --claude-code-router-dir -- chat "help me debug this code"
+cargo run -- agents copilot --copilot-dir -- suggest "write tests"
+cargo run -- agents gemini --gemini-dir -- --model gemini-pro "explain this"
 # CodeRabbit CLI - AI-powered code review assistant
-cargo run -- code-rabbit --coderabbit-dir -- review
-cargo run -- code-rabbit --coderabbit-dir -- --help
+cargo run -- agents code-rabbit --coderabbit-dir -- review
+cargo run -- agents code-rabbit --coderabbit-dir -- --help
 # Codex CLI - Open interactive shell for OAuth authentication
-cargo run -- codex --codex-dir --auth
+cargo run -- agents codex --codex-dir --auth
 
 # Codex CLI - Run agent after authentication is complete
-cargo run -- codex --codex-dir -- generate "create a REST API"
-cargo run -- jules --jules-dir -- chat "help me debug this code"
-cargo run -- jules --jules-dir -- --help
+cargo run -- agents codex --codex-dir -- generate "create a REST API"
+cargo run -- agents jules --jules-dir -- chat "help me debug this code"
+cargo run -- agents jules --jules-dir -- --help
 
 # AI Agent with host networking (full access to host network)
-cargo run -- claude --host-network -- chat "help me with this service"
+cargo run -- agents claude --host-network -- chat "help me with this service"
 
 # AI Agent with port mapping (e.g., for connecting to host PostgreSQL)
-cargo run -- claude -p 5432:5432 -- chat "help me with database queries"
-cargo run -- claude -p 8080:80 -p 5432:5432 -- chat "debug my web app and database"
+cargo run -- agents claude -p 5432:5432 -- chat "help me with database queries"
+cargo run -- agents claude -p 8080:80 -p 5432:5432 -- chat "debug my web app and database"
 
 # AI Agent with Podman-in-Podman support (for running MCP agents inside the jail)
-cargo run -- claude --podman -- chat "help me run containers"
+cargo run -- agents claude --podman -- chat "help me run containers"
 
 # AI Agent commands skipping nix layer (use other detected languages instead)
-cargo run -- claude --no-nix -- chat "help me debug this code"
-cargo run -- copilot --no-nix --copilot-dir -- suggest "write tests"
+cargo run -- agents claude --no-nix -- chat "help me debug this code"
+cargo run -- agents copilot --no-nix --copilot-dir -- suggest "write tests"
 
 # Codex CLI with manual authentication (interactive shell)
-cargo run -- codex --codex-dir --shell
+cargo run -- agents codex --codex-dir --shell
 
 # Start interactive shell in agent jail (without running the agent)
-cargo run -- claude --shell
-cargo run -- claude-code-router --claude-code-router-dir --shell
-cargo run -- copilot --copilot-dir --shell
-cargo run -- code-rabbit --coderabbit-dir --shell
-cargo run -- jules --jules-dir --shell
+cargo run -- agents claude --shell
+cargo run -- agents claude-code-router --claude-code-router-dir --shell
+cargo run -- agents copilot --copilot-dir --shell
+cargo run -- agents code-rabbit --coderabbit-dir --shell
+cargo run -- agents jules --jules-dir --shell
 
 # Layer-based (shared) vs Isolated images
 # By default, jail-ai uses layer-based tagging for image sharing across projects
-cargo run -- claude  # Uses shared image: localhost/jail-ai-agent-claude:base-rust-nodejs
+cargo run -- agents claude  # Uses shared image: localhost/jail-ai-agent-claude:base-rust-nodejs
 
 # Use --isolated flag for project-specific images (workspace hash)
-cargo run -- claude --isolated  # Uses isolated image: localhost/jail-ai-agent-claude:abc12345
+cargo run -- agents claude --isolated  # Uses isolated image: localhost/jail-ai-agent-claude:abc12345
 ```
 
 ### Container Upgrade Detection
@@ -219,7 +219,7 @@ Would you like to rebuild now? (y/N):
 **To force a rebuild without prompting:**
 
 ```bash
-cargo run -- claude --upgrade
+cargo run -- agents claude --upgrade
 ```
 
 **Common scenarios:**
@@ -361,14 +361,14 @@ The AI coding agents require authentication.
 
 **Default behavior (minimal auth):**
 
-- `jail-ai claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
-- `jail-ai claude-code-router` → No auth mounted (use `--claude-code-router-dir` to mount both `~/.claude` and `~/.claude-code-router`)
-- `jail-ai copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
-- `jail-ai cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
-- `jail-ai gemini` → No auth mounted (use `--gemini-dir` to mount `~/.gemini`)
-- `jail-ai code-rabbit` → No auth mounted (use `--coderabbit-dir` to mount `~/.coderabbit`)
-- `jail-ai codex` → No auth mounted (use `--codex-dir` to mount `~/.codex`)
-- `jail-ai jules` → No auth mounted (use `--jules-dir` to mount `~/.config/jules`)
+- `jail-ai agents claude` → Auto-mounts `~/.claude/.credentials.json` → `/home/agent/.claude/.credentials.json` (API keys only)
+- `jail-ai agents claude-code-router` → No auth mounted (use `--claude-code-router-dir` to mount both `~/.claude` and `~/.claude-code-router`)
+- `jail-ai agents copilot` → No auth mounted (use `--copilot-dir` to mount `~/.config/.copilot`)
+- `jail-ai agents cursor` → No auth mounted (use `--cursor-dir` to mount `~/.cursor`)
+- `jail-ai agents gemini` → No auth mounted (use `--gemini-dir` to mount `~/.gemini`)
+- `jail-ai agents code-rabbit` → No auth mounted (use `--coderabbit-dir` to mount `~/.coderabbit`)
+- `jail-ai agents codex` → No auth mounted (use `--codex-dir` to mount `~/.codex`)
+- `jail-ai agents jules` → No auth mounted (use `--jules-dir` to mount `~/.config/jules`)
 
 **Opt-in mounting** (use flags to enable):
 
@@ -379,22 +379,22 @@ The AI coding agents require authentication.
 - `--gemini-dir`: Mount `~/.gemini` → `/home/agent/.gemini` directory (Gemini CLI authentication and settings)
 - `--coderabbit-dir`: Mount `~/.coderabbit` → `/home/agent/.coderabbit` directory (CodeRabbit CLI authentication and settings)
   - **Authentication**: Use `--auth` flag to open interactive shell for OAuth authentication
-    - `jail-ai code-rabbit --coderabbit-dir --auth` opens a shell for running `coderabbit auth`
+    - `jail-ai agents code-rabbit --coderabbit-dir --auth` opens a shell for running `coderabbit auth`
     - If container is running: joins the running container
     - If container is stopped: starts the container and opens a shell
-  - **Security Note**: After authentication, restart the container with `jail-ai code-rabbit` to restore secure network isolation
+  - **Security Note**: After authentication, restart the container with `jail-ai agents code-rabbit` to restore secure network isolation
 - `--codex-dir`: Mount `~/.codex` → `/home/agent/.codex` directory (Codex CLI authentication and settings)
   - **Authentication**: Use `--auth` flag to open interactive shell for OAuth authentication
-    - `jail-ai codex --codex-dir --auth` opens a shell for running `codex auth login`
+    - `jail-ai agents codex --codex-dir --auth` opens a shell for running `codex auth login`
     - If container is running: joins the running container
     - If container is stopped: starts the container and opens a shell
-  - **Security Note**: After authentication, restart the container with `jail-ai codex` to restore secure network isolation
+  - **Security Note**: After authentication, restart the container with `jail-ai agents codex` to restore secure network isolation
 - `--jules-dir`: Mount `~/.config/jules` → `/home/agent/.config/jules` directory (Jules CLI authentication and settings)
   - **Authentication**: Use `--auth` flag to open interactive shell for OAuth authentication
-    - `jail-ai jules --jules-dir --auth` opens a shell for running `jules auth`
+    - `jail-ai agents jules --jules-dir --auth` opens a shell for running `jules auth`
     - If container is running: joins the running container
     - If container is stopped: starts the container and opens a shell
-  - **Security Note**: After authentication, restart the container with `jail-ai jules` to restore secure network isolation
+  - **Security Note**: After authentication, restart the container with `jail-ai agents jules` to restore secure network isolation
 - `--agent-configs`: Mount all of the above (combines `--claude-dir`, `--claude-code-router-dir`, `--copilot-dir`, `--cursor-dir`, `--gemini-dir`, `--coderabbit-dir`, `--codex-dir`, `--jules-dir`)
 
 **Note**:
@@ -405,31 +405,31 @@ Example aliases for different security levels:
 
 ```bash
 # Claude: minimal auth by default
-alias jail-claude='jail-ai claude'
+alias jail-claude='jail-ai agents claude'
 
 # Claude Code Router: needs explicit config for auth (requires both Claude and CCR configs)
-alias jail-ccr='jail-ai claude-code-router --claude-code-router-dir'
+alias jail-ccr='jail-ai agents claude-code-router --claude-code-router-dir'
 
 # Copilot: needs explicit config for auth
-alias jail-copilot='jail-ai copilot --copilot-dir'
+alias jail-copilot='jail-ai agents copilot --copilot-dir'
 
 # Cursor: needs explicit config for auth
-alias jail-cursor='jail-ai cursor --cursor-dir'
+alias jail-cursor='jail-ai agents cursor --cursor-dir'
 
 # Gemini: needs explicit config for auth
-alias jail-gemini='jail-ai gemini --gemini-dir'
+alias jail-gemini='jail-ai agents gemini --gemini-dir'
 
 # CodeRabbit: needs explicit config for auth
-alias jail-coderabbit='jail-ai code-rabbit --coderabbit-dir'
+alias jail-coderabbit='jail-ai agents code-rabbit --coderabbit-dir'
 
 # Codex: needs explicit config for auth
-alias jail-codex='jail-ai codex --codex-dir'
+alias jail-codex='jail-ai agents codex --codex-dir'
 
 # Jules: needs explicit config for auth
-alias jail-jules='jail-ai jules --jules-dir'
+alias jail-jules='jail-ai agents jules --jules-dir'
 
 # Claude with full config + git/GPG
-alias jail-claude-full='jail-ai claude --claude-dir --git-gpg'
+alias jail-claude-full='jail-ai agents claude --claude-dir --git-gpg'
 ```
 
 ### Git and GPG Configuration Mapping
@@ -476,10 +476,10 @@ Use the `--podman` flag to enable Podman-in-Podman support:
 cargo run -- create my-agent --podman
 
 # Run Claude with Podman-in-Podman support
-cargo run -- claude --podman
+cargo run -- agents claude --podman
 
 # Combine with other options
-cargo run -- claude --podman --claude-dir --git-gpg
+cargo run -- agents claude --podman --claude-dir --git-gpg
 ```
 
 ### How it Works
@@ -506,7 +506,7 @@ When `--podman` is enabled, jail-ai:
 
 ```bash
 # Start Claude with Podman support for MCP agents
-jail-ai claude --podman --claude-dir
+jail-ai agents claude --podman --claude-dir
 
 # Inside the jail, you can now use podman commands
 podman run --rm alpine echo "Hello from nested container"

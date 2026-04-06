@@ -952,13 +952,8 @@ pub async fn build_project_image(
     let language_image = match project_type {
         ProjectType::Generic => base_image.clone(),
         ProjectType::Multi(ref types) => {
-            // 🚀 Feature: Parallel building for multi-language projects
-            // Enable with: JAIL_AI_PARALLEL_BUILD=1
-            let parallel_enabled = std::env::var("JAIL_AI_PARALLEL_BUILD")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-
-            if parallel_enabled && types.len() > 1 {
+            // 🚀 Parallel building for multi-language projects
+            if types.len() > 1 {
                 info!(
                     "🚀 Parallel build enabled for {} language layers",
                     types.len()
@@ -981,11 +976,7 @@ pub async fn build_project_image(
                     .cloned()
                     .unwrap_or(base_image.clone())
             } else {
-                // Sequential building (default, safer)
-                if parallel_enabled {
-                    debug!("Parallel build skipped: only {} layer(s)", types.len());
-                }
-
+                // Single language type - sequential building
                 let mut current_image = base_image.clone();
                 for lang_type in types {
                     let layer_name = lang_type.language_layer();

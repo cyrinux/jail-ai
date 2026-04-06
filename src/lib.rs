@@ -343,16 +343,11 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                 tracing::info!("Configuration saved to: {}", output.display());
             }
 
-            Commands::Claude { common, args } => run_agent_command(agents::Agent::Claude, common, args, verbose).await?,
-            Commands::ClaudeCodeRouter { common, args } => run_agent_command(agents::Agent::ClaudeCodeRouter, common, args, verbose).await?,
-            Commands::CodeRabbit { common, args } => run_agent_command(agents::Agent::CodeRabbit, common, args, verbose).await?,
-            Commands::Copilot { common, args } => run_agent_command(agents::Agent::Copilot, common, args, verbose).await?,
-            Commands::Cursor { common, args } => run_agent_command(agents::Agent::Cursor, common, args, verbose).await?,
-            Commands::Gemini { common, args } => run_agent_command(agents::Agent::Gemini, common, args, verbose).await?,
-            Commands::Codex { common, args } => run_agent_command(agents::Agent::Codex, common, args, verbose).await?,
-            Commands::Jules { common, args } => run_agent_command(agents::Agent::Jules, common, args, verbose).await?,
-            Commands::OpenCode { common, args } => run_agent_command(agents::Agent::OpenCode, common, args, verbose).await?,
-            Commands::Pi { common, args } => run_agent_command(agents::Agent::Pi, common, args, verbose).await?,
+            Commands::Agents { common, subcommand } => {
+                let agent = subcommand.to_agent();
+                let args = subcommand.args();
+                run_agent_command(agent, common, args, verbose).await?
+            }
 
             Commands::List { current, backend } => {
                 let backend_type = if let Some(backend_str) = backend {

@@ -103,9 +103,6 @@ pub async fn build_language_layers_parallel(
 /// to be needed based on the project type. This can significantly reduce perceived
 /// latency for subsequent operations.
 ///
-/// # Feature Flag
-/// Enable with: JAIL_AI_PREFETCH=1
-///
 /// # Arguments
 /// * `workspace_path` - Path to the workspace to analyze
 ///
@@ -116,15 +113,6 @@ pub fn prefetch_common_layers(workspace_path: &Path) -> tokio::task::JoinHandle<
     let workspace_path = workspace_path.to_path_buf();
 
     tokio::spawn(async move {
-        // Check if pre-fetching is enabled
-        let prefetch_enabled = std::env::var("JAIL_AI_PREFETCH")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-
-        if !prefetch_enabled {
-            debug!("Pre-fetching disabled (JAIL_AI_PREFETCH not set)");
-            return;
-        }
 
         info!("🔮 Starting background pre-fetch of common layers...");
 

@@ -14,9 +14,9 @@ fn test_agent_from_str() {
     assert_eq!(Agent::from_str("gemini"), Some(Agent::Gemini));
     assert_eq!(Agent::from_str("codex"), Some(Agent::Codex));
     assert_eq!(Agent::from_str("jules"), Some(Agent::Jules));
-    assert_eq!(Agent::from_str("opencode"), Some(Agent::OpenCode));
-    assert_eq!(Agent::from_str("coderabbit"), Some(Agent::CodeRabbit));
-    assert_eq!(Agent::from_str("code-rabbit"), Some(Agent::CodeRabbit));
+    assert_eq!(Agent::from_str("opencode"), Some(Agent::Opencode));
+    assert_eq!(Agent::from_str("coderabbit"), Some(Agent::Coderabbit));
+    assert_eq!(Agent::from_str("code-rabbit"), Some(Agent::Coderabbit));
     assert_eq!(Agent::from_str("unknown"), None);
     assert_eq!(Agent::from_str("CLAUDE"), Some(Agent::Claude));
 }
@@ -30,7 +30,7 @@ fn test_agent_command_name() {
     assert_eq!(Agent::Gemini.command_name(), "gemini");
     assert_eq!(Agent::Codex.command_name(), "codex");
     assert_eq!(Agent::Jules.command_name(), "jules");
-    assert_eq!(Agent::OpenCode.command_name(), "opencode");
+    assert_eq!(Agent::Opencode.command_name(), "opencode");
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn test_agent_normalized_name() {
         "claude-code-router"
     );
     assert_eq!(Agent::Cursor.normalized_name(), "cursor");
-    assert_eq!(Agent::OpenCode.normalized_name(), "opencode");
+    assert_eq!(Agent::Opencode.normalized_name(), "opencode");
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn test_extract_agent_from_jail_name() {
     );
     assert_eq!(
         extract_agent_from_jail_name("jail__test__abc12345__opencode"),
-        Some(Agent::OpenCode)
+        Some(Agent::Opencode)
     );
     assert_eq!(extract_agent_from_jail_name("not-a-jail"), None);
     assert_eq!(extract_agent_from_jail_name("jail__invalid"), None);
@@ -75,7 +75,7 @@ fn test_agent_has_auto_credentials() {
     assert!(!Agent::Gemini.has_auto_credentials());
     assert!(!Agent::Codex.has_auto_credentials());
     assert!(!Agent::Jules.has_auto_credentials());
-    assert!(!Agent::OpenCode.has_auto_credentials());
+    assert!(!Agent::Opencode.has_auto_credentials());
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn test_agent_layer_name() {
         "agent-claude-code-router"
     );
     assert_eq!(Agent::Cursor.layer_name(), "agent-cursor");
-    assert_eq!(Agent::OpenCode.layer_name(), "agent-opencode");
+    assert_eq!(Agent::Opencode.layer_name(), "agent-opencode");
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn test_agent_auth_credential_path() {
     assert_eq!(Agent::Gemini.auth_credential_path(), ".gemini");
     assert_eq!(Agent::Codex.auth_credential_path(), ".codex");
     assert_eq!(Agent::Jules.auth_credential_path(), ".config/jules");
-    assert_eq!(Agent::OpenCode.auth_credential_path(), ".config/opencode");
+    assert_eq!(Agent::Opencode.auth_credential_path(), ".config/opencode");
 }
 
 #[test]

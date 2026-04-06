@@ -240,88 +240,12 @@ pub enum Commands {
         output: PathBuf,
     },
 
-    /// ─── Agent subcommands ──────────────────────────────────────────
-    /// To add a new agent: add one variant here, one match arm in main.rs,
-    /// plus the agent module and Containerfile. See docs/ADDING_AGENTS.md.
-
-    #[command(name = "claude")]
-    Claude {
+    /// Run AI agents. Agent variants are auto-generated from agents/mod.rs
+    Agents {
         #[command(flatten)]
         common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "claude-code-router")]
-    ClaudeCodeRouter {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "coderabbit")]
-    CodeRabbit {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "copilot")]
-    Copilot {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "cursor")]
-    Cursor {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "gemini")]
-    Gemini {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "codex")]
-    Codex {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "jules")]
-    Jules {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "opencode")]
-    OpenCode {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    #[command(name = "pi")]
-    Pi {
-        #[command(flatten)]
-        common: AgentCommandOptions,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
+        #[command(subcommand)]
+        subcommand: crate::agents::AgentCommands,
     },
 
     /// List all jails

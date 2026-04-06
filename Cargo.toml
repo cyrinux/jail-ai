@@ -1,20 +1,10 @@
 [workspace]
 members = ["jail-ai-ebpf", "jail-ai-ebpf-loader"]
-# Exclude eBPF crate from default builds (requires special build flags)
-default-members = [".", "jail-ai-ebpf-loader"]
 resolver = "2"
 
 [workspace.dependencies]
 aya = "0.12"
 aya-ebpf = "0.1"
-
-# eBPF-specific profile overrides
-[profile.dev.package.jail-ai-ebpf]
-opt-level = 3
-
-[profile.release.package.jail-ai-ebpf]
-opt-level = 3
-codegen-units = 1
 
 
 [package]
@@ -31,6 +21,7 @@ documentation = "https://docs.rs/jail-ai"
 keywords = ["podman", "sandbox", "container", "ai-agent", "isolation"]
 categories = ["command-line-utilities", "development-tools", "virtualization"]
 default-run = "jail-ai"
+build = "build.rs"
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
