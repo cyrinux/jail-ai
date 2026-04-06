@@ -1,4 +1,4 @@
-use jail_ai::{config::JailConfig, error, upgrade_single_jail, cli};
+use jail_ai::{cli, config::JailConfig, error, upgrade_single_jail};
 
 #[tokio::test]
 async fn test_jail_config_serialization() {
@@ -57,7 +57,8 @@ fn test_resolve_jail_name_logic() {
 
 #[tokio::test]
 async fn test_upgrade_single_jail_nonexistent() {
-    let result: Result<(), error::JailError> = upgrade_single_jail("nonexistent-jail", None, true, false).await;
+    let result: Result<(), error::JailError> =
+        upgrade_single_jail("nonexistent-jail", None, true, false).await;
     assert!(result.is_err());
     if let Err(e) = result {
         match e {

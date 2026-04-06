@@ -558,13 +558,9 @@ impl JailBackend for PodmanBackend {
                 });
 
             // Try to detect agent from jail name (format: jail__{project}__{hash}__{agent})
-            let agent_name = config
-                .name
-                .rsplit("__")
-                .next()
-                .and_then(|suffix| {
-                    crate::agents::Agent::from_str(suffix).map(|a| a.normalized_name())
-                });
+            let agent_name = config.name.rsplit("__").next().and_then(|suffix| {
+                crate::agents::Agent::from_str(suffix).map(|a| a.normalized_name())
+            });
 
             debug!(
                 "Workspace path: {:?}, Agent: {:?}",

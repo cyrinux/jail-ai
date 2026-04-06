@@ -5,7 +5,8 @@ use std::collections::HashMap;
 fn test_parallel_build_empty() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let result: Result<HashMap<String, String>, _> = build_language_layers_parallel("base", &[], &[], false, false).await;
+        let result: Result<HashMap<String, String>, _> =
+            build_language_layers_parallel("base", &[], &[], false, false).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     });

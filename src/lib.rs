@@ -14,18 +14,19 @@ pub mod jail_detection;
 pub mod jail_setup;
 pub mod project_detection;
 pub mod state;
+#[cfg(feature = "tui")]
 pub mod tui;
 pub mod upgrade;
 pub mod worktree;
 
+pub use clap::Parser;
 pub use cli::{Cli, Commands};
 pub use config::JailConfig;
 pub use error::{JailError, Result};
 pub use project_detection::ProjectType;
 pub use tracing_subscriber::layer::SubscriberExt;
 pub use tracing_subscriber::util::SubscriberInitExt;
-pub use clap::Parser;
-pub use upgrade::{upgrade_single_jail, upgrade_all_jails, resolve_jail_name};
+pub use upgrade::{resolve_jail_name, upgrade_all_jails, upgrade_single_jail};
 
 pub async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
@@ -236,7 +237,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                     }
 
                     for port_str in port {
-                        let port_mapping = Commands::parse_port(&port_str).map_err(JailError::Config)?;
+                        let port_mapping =
+                            Commands::parse_port(&port_str).map_err(JailError::Config)?;
                         builder = builder.port_mapping(
                             port_mapping.host_port,
                             port_mapping.container_port,
@@ -245,7 +247,8 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                     }
 
                     for env_str in env {
-                        let (key, value) = Commands::parse_env(&env_str).map_err(JailError::Config)?;
+                        let (key, value) =
+                            Commands::parse_env(&env_str).map_err(JailError::Config)?;
                         builder = builder.env(key, value);
                     }
 
@@ -279,7 +282,11 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                 tracing::info!("Jail created: {}", jail.config().name);
             }
 
-            Commands::Remove { name, force, volume } => {
+            Commands::Remove {
+                name,
+                force,
+                volume,
+            } => {
                 let jail_name = upgrade::resolve_jail_name(name).await?;
 
                 if !force {
@@ -395,14 +402,22 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                             ..Default::default()
                         };
                         let jail = jail::JailManager::new(config);
-                        let status = if jail.exists().await? { "active" } else { "inactive" };
+                        let status = if jail.exists().await? {
+                            "active"
+                        } else {
+                            "inactive"
+                        };
                         println!("  {jail_name} [{status}] ({agent_suffix})");
                     }
                     println!("\nTotal: {} jail(s)", jails.len());
                 }
             }
 
-            Commands::CleanAll { backend, force, volume } => {
+            Commands::CleanAll {
+                backend,
+                force,
+                volume,
+            } => {
                 let backends = if let Some(backend_str) = backend {
                     vec![Commands::parse_backend(&backend_str).map_err(JailError::Config)?]
                 } else {
@@ -431,7 +446,10 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                     let jails = backend.list_all().await?;
 
                     if jails.is_empty() {
-                        tracing::info!("No jail-ai containers found for backend {:?}", backend_type);
+                        tracing::info!(
+                            "No jail-ai containers found for backend {:?}",
+                            backend_type
+                        );
                         continue;
                     }
 
@@ -478,7 +496,12 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                 tracing::info!("Clean-all operation completed");
             }
 
-            Commands::Upgrade { name, image, force, all } => {
+            Commands::Upgrade {
+                name,
+                image,
+                force,
+                all,
+            } => {
                 if all {
                     upgrade::upgrade_all_jails(image, force, verbose).await?;
                 } else {

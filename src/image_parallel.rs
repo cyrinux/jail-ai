@@ -53,13 +53,18 @@ pub async fn build_language_layers_parallel(
     for lang_type in lang_types {
         let layer_name = lang_type.language_layer().to_string();
         let lang_image_name = get_language_image_name(lang_type);
-        
+
         let should_force = upgrade || force_layers.contains(&layer_name);
         let needs_build = should_force || !image_exists(lang_image_name).await?;
 
         if needs_build {
-            info!("Building {} layer on top of {}...", layer_name, current_image);
-            current_image = build_shared_layer(&layer_name, Some(&current_image), verbose, should_force).await?;
+            info!(
+                "Building {} layer on top of {}...",
+                layer_name, current_image
+            );
+            current_image =
+                build_shared_layer(&layer_name, Some(&current_image), verbose, should_force)
+                    .await?;
         } else {
             current_image = lang_image_name.to_string();
         }
@@ -87,7 +92,6 @@ pub fn prefetch_common_layers(workspace_path: &Path) -> tokio::task::JoinHandle<
     let workspace_path = workspace_path.to_path_buf();
 
     tokio::spawn(async move {
-
         info!("🔮 Starting background pre-fetch of common layers...");
 
         // Detect project type (fast operation)

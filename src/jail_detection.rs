@@ -149,14 +149,16 @@ pub fn select_jail(jails: &[String]) -> Result<String> {
         return Err(crate::error::JailError::Config("Aborted".to_string()));
     }
 
-    let idx: usize = choice.parse().map_err(|_| {
-        crate::error::JailError::Config("Invalid selection".to_string())
-    })?;
+    let idx: usize = choice
+        .parse()
+        .map_err(|_| crate::error::JailError::Config("Invalid selection".to_string()))?;
 
     let idx = idx.saturating_sub(1);
 
     if idx >= jails.len() {
-        return Err(crate::error::JailError::Config("Invalid selection".to_string()));
+        return Err(crate::error::JailError::Config(
+            "Invalid selection".to_string(),
+        ));
     }
 
     Ok(jails[idx].clone())

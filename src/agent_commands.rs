@@ -9,7 +9,10 @@ use crate::jail_setup::{mount_agent_configs, setup_default_environment};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-pub use crate::jail_detection::{auto_detect_jail_name, get_git_root, validate_workspace_directory, find_jails_for_directory, extract_agent_name};
+pub use crate::jail_detection::{
+    auto_detect_jail_name, extract_agent_name, find_jails_for_directory, get_git_root,
+    validate_workspace_directory,
+};
 
 mod strings {
     pub const UPDATE_AVAILABLE: &str = "\n🔄 Update available for your jail environment!";
@@ -21,18 +24,22 @@ mod strings {
     pub const RECOMMENDATION_USE_UPGRADE: &str = "\n💡 Recommendation: Use --upgrade to:";
     pub const REBUILD_OUTDATED_LAYERS: &str = "  • Rebuild outdated layers with latest definitions";
     pub const RECREATE_CONTAINER: &str = "  • Recreate container with the correct image";
-    pub const ENSURE_LATEST_TOOLS: &str = "  • Ensure you have the latest tools and security patches";
-    pub const DATA_PRESERVED: &str = "\nYour data in /home/agent will be preserved during the rebuild.";
+    pub const ENSURE_LATEST_TOOLS: &str =
+        "  • Ensure you have the latest tools and security patches";
+    pub const DATA_PRESERVED: &str =
+        "\nYour data in /home/agent will be preserved during the rebuild.";
     pub const WOULD_YOU_LIKE_REBUILD: &str = "\nWould you like to rebuild now? (y/N): ";
 
     pub const CHECKING_UPDATES: &str = "Checking for updates...";
     pub const USER_CHOSE_UPGRADE: &str = "User chose to upgrade";
-    pub const USER_DECLINED_UPGRADE: &str = "User declined rebuild, continuing with existing container";
+    pub const USER_DECLINED_UPGRADE: &str =
+        "User declined rebuild, continuing with existing container";
     pub const CONTAINER_UP_TO_DATE: &str = "Container and layers are up to date";
 
     pub const CREATING_NEW_JAIL: &str = "Creating new jail: {}";
     pub const RECREATING_JAIL_UPGRADE: &str = "Recreating jail '{}' due to --upgrade or --layers";
-    pub const RECREATING_JAIL_DETECTED_UPDATES: &str = "Recreating jail '{}' due to detected updates";
+    pub const RECREATING_JAIL_DETECTED_UPDATES: &str =
+        "Recreating jail '{}' due to detected updates";
 
     pub fn format_string(template: &str, arg: &dyn std::fmt::Display) -> String {
         template.replace("{}", &arg.to_string())
@@ -621,6 +628,7 @@ pub async fn run_ai_agent_command(
         .build();
 
     // If --tui flag is set, launch the ratatui TUI with agent + shell tabs
+    #[cfg(feature = "tui")]
     if params.tui {
         info!("Launching TUI for jail '{}'", jail_name);
         let uses_nix_wrapper_for_tui = jail
@@ -654,6 +662,13 @@ pub async fn run_ai_agent_command(
         })
         .await
         .map_err(|e| crate::error::JailError::Backend(format!("TUI task panicked: {e}")))?;
+    }
+
+    #[cfg(not(feature = "tui"))]
+    if params.tui {
+        return Err(crate::error::JailError::Config(
+            "TUI feature is not enabled. Rebuild with --features tui".to_string(),
+        ));
     }
 
     // If --shell flag is set, start an interactive shell instead of running the agent

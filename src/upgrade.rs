@@ -11,7 +11,8 @@ pub async fn resolve_jail_name(name: Option<String>) -> Result<String> {
     } else {
         let cwd = std::env::current_dir()?;
         let workspace_dir = crate::agent_commands::get_git_root().unwrap_or(cwd);
-        let matching_jails = crate::agent_commands::find_jails_for_directory(&workspace_dir).await?;
+        let matching_jails =
+            crate::agent_commands::find_jails_for_directory(&workspace_dir).await?;
 
         let jail_name = if matching_jails.is_empty() {
             return Err(crate::error::JailError::Config(
