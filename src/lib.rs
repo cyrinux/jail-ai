@@ -13,7 +13,6 @@ pub mod jail;
 pub mod jail_setup;
 pub mod project_detection;
 pub mod state;
-pub mod strings;
 pub mod tui;
 pub mod upgrade;
 pub mod worktree;
