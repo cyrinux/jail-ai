@@ -7,7 +7,7 @@ LABEL description="jail-ai with Pi"
 USER root
 
 # Install Pi
-RUN npm install -g @mariozechner/pi-coding-agent
+RUN npm install -g @earendil-works/pi-coding-agent
 
 USER agent
 WORKDIR /workspace
