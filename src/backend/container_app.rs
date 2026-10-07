@@ -143,17 +143,28 @@ impl JailBackend for ContainerAppBackend {
                         .await
                         .map_err(|e| JailError::Backend(format!("Failed to pull image: {e}")))?;
                 }
-                config.base_image.clone()
+                crate::image_layers::ResolvedImage {
+                    name: config.base_image.clone(),
+                    uses_nix: config.uses_nix,
+                }
             };
 
         let mut modified_config = config.clone();
-        modified_config.base_image = actual_image;
+        modified_config.base_image = actual_image.name;
+        modified_config.uses_nix = actual_image.uses_nix;
         let args = self.build_run_args(&modified_config);
         let mut cmd = Command::new("container");
         cmd.args(&args);
 
         debug!("Creating container with args: {:?}", args);
         run_command(&mut cmd).await?;
+
+        if config.nix_store == crate::config::NixStoreMode::Host {
+            warn!(
+                "--nix-store host is not supported by the apple/container backend, Nix in '{}' uses the container's own store",
+                config.name
+            );
+        }
 
         if config.block_host {
             warn!(
@@ -422,6 +433,8 @@ impl JailBackend for ContainerAppBackend {
             no_nix: false,
             block_host: false,
             podman_socket: false,
+            nix_store: crate::config::NixStoreMode::default(),
+            uses_nix: false,
         })
     }
 }

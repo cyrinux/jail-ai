@@ -63,6 +63,57 @@ pub struct JailConfig {
     /// Enable Podman-in-Podman by mounting the host's Podman socket
     #[serde(default)]
     pub podman_socket: bool,
+
+    /// Where the Nix store (/nix) of Nix-enabled jails lives
+    #[serde(default)]
+    pub nix_store: NixStoreMode,
+
+    /// Whether the resolved image contains the nix layer, as reported by image
+    /// resolution. Set from the detected project type, so it stays correct for
+    /// `--isolated` images whose tag is a workspace hash and carries no `nix`
+    /// component. Defaults to false; `PodmanBackend` falls back to inspecting
+    /// the image name when this is not set.
+    #[serde(default)]
+    pub uses_nix: bool,
+}
+
+/// Storage strategy for /nix in jails whose image contains the nix layer
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum NixStoreMode {
+    /// One volume per project (`{jail}__nix`), not shared with other projects
+    Project,
+    /// One global volume (`jail-ai-nix`) shared by all jails
+    #[default]
+    Shared,
+    /// Use the host's Nix store read-only and build through the host nix-daemon
+    Host,
+}
+
+impl NixStoreMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            NixStoreMode::Project => "project",
+            NixStoreMode::Shared => "shared",
+            NixStoreMode::Host => "host",
+        }
+    }
+
+    /// Parse the value stored in the `jail-ai.nix-store` container label
+    pub fn from_label(label: &str) -> Option<Self> {
+        match label {
+            "project" => Some(NixStoreMode::Project),
+            "shared" => Some(NixStoreMode::Shared),
+            "host" => Some(NixStoreMode::Host),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for NixStoreMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 fn default_true() -> bool {
@@ -187,6 +238,8 @@ impl Default for JailConfig {
             no_nix: false,
             block_host: true,
             podman_socket: false,
+            nix_store: NixStoreMode::default(),
+            uses_nix: false,
         }
     }
 }

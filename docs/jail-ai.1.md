@@ -112,7 +112,8 @@ The following options are available for the **create**, **claude**, **copilot**,
 | `--force-rebuild` | Force rebuild of the default image, even if it already exists. Useful after modifying `~/.config/jail-ai/Containerfile`. |
 | `--layers LAYER[,LAYER...]` | Force specific image layers (comma-separated). Available layers: base, rust, python, nodejs, golang, java, php, cpp, csharp, nix, kubernetes, terraform, and agent-specific layers (agent-claude, agent-copilot, agent-cursor, agent-gemini, agent-codex). Example: `--layers base,rust,python` |
 | `--shell` | Start an interactive shell instead of running the agent command. This allows you to use the jail environment without executing the AI agent. Example: `jail-ai claude --shell` |
-| `--no-nix-flake` | Ignore flake.nix file and skip nix layer if present. By default, jail-ai automatically detects and builds nix layer when flake.nix is found in the workspace. Use this flag to disable nix detection and layer building. |
+| `--no-nix` | Ignore flake.nix file and skip nix layer if present. By default, jail-ai automatically detects and builds nix layer when flake.nix is found in the workspace. Use this flag to disable nix detection and layer building. |
+| `--nix-store MODE` | Where `/nix` lives for Nix jails. `shared` (default for new jails): one global `jail-ai-nix` volume reused by all projects. `project`: one `<jail>__nix` volume per project (the previous default). `host`: bind-mount the host's `/nix/store` read-only and build through the host nix-daemon (requires a Nix host). **Security:** the jail inherits your host user's nix-daemon trust level, so if that user is in the daemon's `trusted-users` the jail can set substituters and build hooks and import paths into the host store. See `docs/specs/NIX_FLAKES_SUPPORT.md`. Existing jails keep their mode unless this flag is given. |
 
 ## EXAMPLES
 
@@ -135,7 +136,7 @@ jail-ai create my-agent --no-workspace
 
 Create a jail ignoring flake.nix file (skip nix layer):
 ```bash
-jail-ai create my-agent --no-nix-flake
+jail-ai create my-agent --no-nix
 ```
 
 Execute command in jail (non-interactive):
@@ -192,8 +193,8 @@ jail-ai copilot --copilot-dir --shell
 
 AI agent commands ignoring flake.nix file (skip nix layer):
 ```bash
-jail-ai claude --no-nix-flake -- chat "help me debug this code"
-jail-ai copilot --no-nix-flake --copilot-dir -- suggest "write tests"
+jail-ai claude --no-nix -- chat "help me debug this code"
+jail-ai copilot --no-nix --copilot-dir -- suggest "write tests"
 ```
 
 ### Configuration Mounting
@@ -383,6 +384,10 @@ Jail names are automatically generated from the current directory path using a h
 
 ### Nix Flakes Support
 When a `flake.nix` file is detected in the workspace, jail-ai automatically loads the Nix development environment using 'nix develop' when entering the jail.
+
+Nix is configured with `max-jobs = auto`, so independent derivations are built in parallel (Nix itself defaults to `max-jobs = 1`).
+
+By default all Nix jails share the `jail-ai-nix` store volume, so paths downloaded or built in one project are reused in the others. Removing a jail never removes this volume; use `nix-collect-garbage` inside a jail or `podman volume rm jail-ai-nix` to reclaim space. Use `--nix-store host` on a Nix host to reuse the host's store directly; note that this grants the jail your host user's nix-daemon trust level, and that `max-jobs = auto` no longer applies because the host daemon schedules the builds.
 
 ## AUTHORS
 

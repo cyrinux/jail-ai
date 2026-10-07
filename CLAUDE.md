@@ -108,6 +108,11 @@ cargo run -- create my-agent --workspace-path /app
 # Create jail skipping nix layer (when flake.nix is present, use other detected languages instead)
 cargo run -- create my-agent --no-nix
 
+# Nix store location (nix jails only): shared global volume (default), per-project volume, or host store via nix-daemon
+cargo run -- create my-agent --nix-store shared
+cargo run -- create my-agent --nix-store project
+cargo run -- agents claude --nix-store host
+
 # Create jail with cloud provider tools (AWS CLI + GCP gcloud)
 cargo run -- agents claude --cloud
 
@@ -253,6 +258,8 @@ cargo run -- agents claude --upgrade
 - **Custom Development Image**: Pre-built container with bash, ripgrep, cargo, go, node, python, nix, and essential dev tools
 - **AI Agent Integration**: Claude Code, Claude Code Router, GitHub Copilot CLI, Cursor Agent, Gemini CLI, Codex CLI, and Jules CLI pre-installed
 - **Nix Flakes Support**: When `flake.nix` is detected, Nix takes precedence and only base + nix + agent layers are used (excluding rust/node/etc). Use `--no-nix` to skip nix and activate other language layers instead
+- **Nix Parallel Builds**: `/etc/nix/nix.conf` sets `max-jobs = auto` (Nix itself defaults to 1 and the single-user installer writes no config)
+- **Nix Store Sharing** (`--nix-store`): `shared` (default) mounts the global `jail-ai-nix` volume in every nix jail; `project` keeps one `<jail>__nix` volume per project (legacy behaviour, assumed for jails without the `jail-ai.nix-store` label); `host` mounts the host `/nix/store` read-only plus the nix-daemon socket (`NIX_REMOTE=daemon`). Existing jails keep their mode unless the flag is passed. `jail-ai-nix-seed` restores the image's Nix into volumes that lack it and pins it with a GC root. The shared volume is never removed with a jail
 - **Automatic Upgrade Detection**: When re-entering an existing container, jail-ai automatically checks for outdated layers and container image mismatches, prompting you to rebuild. This ensures a smooth experience after upgrading the jail-ai binary.
 - **Workspace Auto-mounting**: Current working directory is automatically mounted to `/workspace` in the jail (configurable)
 - **Environment Inheritance**: Automatically inherits `TERM` and timezone (`TZ`) from host environment, sets `EDITOR=vim`, and configures `SSH_AUTH_SOCK` when GPG SSH agent socket is available

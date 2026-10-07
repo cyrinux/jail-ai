@@ -47,6 +47,9 @@ complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l cpu -d 'CPU q
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -s c -l config -d 'Load configuration from file' -r -F
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l workspace-path -d 'Custom workspace path inside jail (default: /workspace)' -r
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l layers -d 'Force specific layers (comma-separated, e.g., "base,rust,python")' -r
+complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l nix-store -d 'Where /nix lives for Nix jails: \'shared\' (one global volume, default), \'project\' (one volume per project) or \'host\' (host store via nix-daemon)' -r -f -a "project\t'One volume per project (`{jail}__nix`), not shared with other projects'
+shared\t'One global volume (`jail-ai-nix`) shared by all jails'
+host\t'Use the host\'s Nix store read-only and build through the host nix-daemon'"
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l no-network -d 'Disable network access'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l host-network -d 'Use host networking (--network=host) instead of private networking Less secure but provides full access to host network services'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l no-workspace -d 'Skip auto-mounting current working directory to /workspace'
@@ -59,7 +62,7 @@ complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l no-block-host
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -l podman -d 'Enable Podman-in-Podman by mounting the host\'s Podman socket This allows running containers inside the jail (useful for MCP agents)'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -s v -l verbose -d 'Enable verbose logging'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -s q -l quiet -d 'Quiet mode (suppress INFO logs, only show warnings and errors)'
-complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -s h -l help -d 'Print help'
+complete -c jail-ai -n "__fish_jail_ai_using_subcommand create" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand remove" -s f -l force -d 'Force removal without confirmation'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand remove" -l volume -d 'Remove associated volume (persistent data)'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand remove" -s v -l verbose -d 'Enable verbose logging'
@@ -81,6 +84,9 @@ complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_s
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l cpu -d 'CPU quota percentage (0-100)' -r
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l workspace-path -d 'Custom workspace path inside jail (default: /workspace)' -r
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l layers -d 'Force specific layers (comma-separated, e.g., "base,rust,python")' -r
+complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l nix-store -d 'Where /nix lives for Nix jails: \'shared\' (one global volume, default), \'project\' (one volume per project) or \'host\' (host store via nix-daemon)' -r -f -a "project\t'One volume per project (`{jail}__nix`), not shared with other projects'
+shared\t'One global volume (`jail-ai-nix`) shared by all jails'
+host\t'Use the host\'s Nix store read-only and build through the host nix-daemon'"
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l no-network -d 'Disable network access'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l host-network -d 'Use host networking (--network=host) instead of private networking Less secure but provides full access to host network services'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l no-workspace -d 'Skip auto-mounting current working directory to /workspace'
@@ -97,7 +103,7 @@ complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_s
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -l tui -d 'Launch the TUI with a tab for the agent and a tab for an interactive shell'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -s v -l verbose -d 'Enable verbose logging'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -s q -l quiet -d 'Quiet mode (suppress INFO logs, only show warnings and errors)'
-complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -s h -l help -d 'Print help'
+complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -f -a "claude"
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -f -a "claude-code-router"
 complete -c jail-ai -n "__fish_jail_ai_using_subcommand agents; and not __fish_seen_subcommand_from claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help" -f -a "coderabbit"

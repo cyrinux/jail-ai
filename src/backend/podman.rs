@@ -1,5 +1,5 @@
 use super::{run_command, JailBackend};
-use crate::config::JailConfig;
+use crate::config::{JailConfig, NixStoreMode};
 use crate::error::{JailError, Result};
 use crate::image;
 use async_trait::async_trait;
@@ -8,6 +8,7 @@ use tracing::{debug, info, warn};
 
 #[cfg(target_os = "linux")]
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -21,6 +22,124 @@ fn ebpf_blockers() -> &'static Arc<Mutex<HashMap<String, crate::ebpf::EbpfHostBl
 }
 
 pub struct PodmanBackend;
+
+/// Global /nix volume shared by all jails in `NixStoreMode::Shared`
+pub const SHARED_NIX_VOLUME: &str = "jail-ai-nix";
+
+/// Container label recording the Nix store mode of a jail
+const NIX_STORE_LABEL: &str = "jail-ai.nix-store";
+
+/// Mount targets and env vars managed by jail-ai for Nix jails.
+/// They are re-derived on every create, so `inspect` must not report them as user config
+/// (otherwise an upgrade would pass them twice).
+const NIX_MANAGED_MOUNT_TARGETS: &[&str] = &["/nix/store", "/nix/var/nix/daemon-socket"];
+const NIX_MANAGED_ENV: &[&str] = &["NIX_REMOTE", "JAIL_AI_HOST_NIX_BIN"];
+
+/// Host paths used to set up /nix inside a jail (injectable for tests)
+#[derive(Debug, Clone)]
+struct NixHostPaths {
+    /// Directory holding the host nix-daemon socket
+    daemon_socket_dir: PathBuf,
+    /// Host `bin/` directory of the nix client, inside /nix/store
+    nix_bin_dir: Option<PathBuf>,
+}
+
+impl NixHostPaths {
+    fn detect() -> Self {
+        Self {
+            daemon_socket_dir: PathBuf::from("/nix/var/nix/daemon-socket"),
+            nix_bin_dir: find_host_nix_bin_dir(),
+        }
+    }
+}
+
+/// Locate the host's nix client and return its store `bin/` directory
+/// (e.g. /nix/store/...-nix-2.28.3/bin), which is visible in the jail via the
+/// read-only /nix/store mount.
+fn find_host_nix_bin_dir() -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    std::env::split_paths(&path_var)
+        .map(|dir| dir.join("nix"))
+        .find(|candidate| candidate.is_file())
+        .and_then(|nix| std::fs::canonicalize(nix).ok())
+        .filter(|nix| nix.starts_with("/nix/store"))
+        .and_then(|nix| nix.parent().map(Path::to_path_buf))
+}
+
+/// Ask the host nix-daemon whether it treats us as a trusted client.
+///
+/// Returns None when the answer cannot be determined (old nix, no daemon,
+/// unexpected output) -- in that case we stay quiet rather than guess.
+async fn host_daemon_trusts_us() -> Option<bool> {
+    let mut cmd = Command::new("nix");
+    cmd.args(["store", "info", "--json"]);
+    let out = cmd.output().await.ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    let trusted = json.get("trusted")?;
+    // nix >= 2.19 reports a bool; older versions report 1/0
+    trusted
+        .as_bool()
+        .or_else(|| trusted.as_i64().map(|n| n != 0))
+}
+
+/// Build the podman arguments that provide /nix for a Nix-enabled jail
+fn nix_run_args(config: &JailConfig, base_name: &str, host: &NixHostPaths) -> Result<Vec<String>> {
+    let mut args = vec![
+        "--label".to_string(),
+        format!("{NIX_STORE_LABEL}={}", config.nix_store),
+    ];
+
+    match config.nix_store {
+        NixStoreMode::Project => {
+            let nix_volume = format!("{base_name}__nix");
+            debug!("Mounting per-project Nix store volume: {}", nix_volume);
+            args.extend(["-v".to_string(), format!("{nix_volume}:/nix")]);
+        }
+        NixStoreMode::Shared => {
+            debug!("Mounting shared Nix store volume: {}", SHARED_NIX_VOLUME);
+            args.extend(["-v".to_string(), format!("{SHARED_NIX_VOLUME}:/nix")]);
+        }
+        NixStoreMode::Host => {
+            let socket = host.daemon_socket_dir.join("socket");
+            if !socket.exists() {
+                return Err(JailError::Config(format!(
+                    "--nix-store host requires a Nix host with a running nix-daemon, but {} does not exist. \
+                     Use --nix-store shared instead.",
+                    socket.display()
+                )));
+            }
+            let nix_bin_dir = host.nix_bin_dir.as_ref().ok_or_else(|| {
+                JailError::Config(
+                    "--nix-store host requires the nix client on PATH, resolving into /nix/store"
+                        .to_string(),
+                )
+            })?;
+            debug!(
+                "Using host Nix store via daemon socket {} (client: {})",
+                socket.display(),
+                nix_bin_dir.display()
+            );
+            args.extend([
+                "-v".to_string(),
+                "/nix/store:/nix/store:ro".to_string(),
+                "-v".to_string(),
+                format!(
+                    "{}:/nix/var/nix/daemon-socket",
+                    host.daemon_socket_dir.display()
+                ),
+                "-e".to_string(),
+                "NIX_REMOTE=daemon".to_string(),
+                "-e".to_string(),
+                format!("JAIL_AI_HOST_NIX_BIN={}", nix_bin_dir.display()),
+            ]);
+        }
+    }
+
+    Ok(args)
+}
 
 impl PodmanBackend {
     pub fn new() -> Self {
@@ -180,7 +299,7 @@ impl PodmanBackend {
 
     /// Check if an image uses Nix by examining its name/tag
     /// Images with Nix will have "nix" in their layer tag or be the nix base image
-    fn image_uses_nix(image: &str) -> bool {
+    pub fn image_uses_nix(image: &str) -> bool {
         // Check if it's the Nix base image
         if image.contains("jail-ai-nix:") {
             return true;
@@ -230,7 +349,7 @@ impl PodmanBackend {
         }
     }
 
-    fn build_run_args(&self, config: &JailConfig) -> Vec<String> {
+    fn build_run_args(&self, config: &JailConfig) -> Result<Vec<String>> {
         let mut args = vec![
             "run".to_string(),
             "-d".to_string(),
@@ -261,16 +380,11 @@ impl PodmanBackend {
         // jail__project__abc123__claude -> jail__project__abc123
         let base_name = Self::extract_base_name(&config.name);
 
-        // Per-jail Nix store volume for containers using Nix
-        // Shared across all agents working on the same project
-        if Self::image_uses_nix(&config.base_image) {
-            let nix_volume = format!("{}__nix", base_name);
-            debug!(
-                "Detected Nix in image, mounting per-jail Nix store volume: {}",
-                nix_volume
-            );
-            args.push("-v".to_string());
-            args.push(format!("{nix_volume}:/nix"));
+        // Nix store for containers using Nix (per-project, shared or host, see NixStoreMode)
+        // Prefer the fact reported by image resolution; fall back to the image
+        // name for paths that only have that (custom images, upgrade, inspect).
+        if config.uses_nix || Self::image_uses_nix(&config.base_image) {
+            args.extend(nix_run_args(config, &base_name, &NixHostPaths::detect())?);
         }
 
         // Podman-in-Podman: mount host's Podman socket
@@ -369,7 +483,7 @@ impl PodmanBackend {
         args.push("sleep".to_string());
         args.push("infinity".to_string());
 
-        args
+        Ok(args)
     }
 
     /// Get the PID of the container's main process
@@ -598,18 +712,33 @@ impl JailBackend for PodmanBackend {
             } else {
                 debug!("Using local image: {}", config.base_image);
             }
-            config.base_image.clone()
+            crate::image_layers::ResolvedImage {
+                name: config.base_image.clone(),
+                uses_nix: config.uses_nix,
+            }
         };
 
         // Create and start the container with the determined image
         let mut modified_config = config.clone();
-        modified_config.base_image = actual_image.clone();
-        let args = self.build_run_args(&modified_config);
+        modified_config.base_image = actual_image.name.clone();
+        modified_config.uses_nix = actual_image.uses_nix;
+        let args = self.build_run_args(&modified_config)?;
         let mut cmd = Command::new("podman");
         cmd.args(&args);
 
         debug!("Creating container with args: {:?}", args);
         run_command(&mut cmd).await?;
+
+        if modified_config.nix_store == NixStoreMode::Host
+            && host_daemon_trusts_us().await == Some(true)
+        {
+            warn!(
+                "--nix-store host: '{}' is a trusted client of the host nix-daemon, so it can set \
+                 substituters and build hooks and import paths into the host /nix/store. \
+                 Use --nix-store shared if the agent should not be able to do that.",
+                config.name
+            );
+        }
 
         #[cfg(target_os = "linux")]
         if config.block_host {
@@ -718,6 +847,12 @@ impl JailBackend for PodmanBackend {
                     nix_volume, e
                 ),
             }
+
+            // The shared store outlives individual jails; it is only removed explicitly
+            debug!(
+                "Keeping shared Nix store volume {} (remove with: podman volume rm {})",
+                SHARED_NIX_VOLUME, SHARED_NIX_VOLUME
+            );
 
             info!(
                 "Jail {} removed (attempted to remove volumes {}, {})",
@@ -903,6 +1038,11 @@ impl JailBackend for PodmanBackend {
                     let destination = mount["Destination"].as_str().unwrap_or("").to_string();
                     let readonly = mount["RW"].as_bool().map(|rw| !rw).unwrap_or(false);
 
+                    if NIX_MANAGED_MOUNT_TARGETS.contains(&destination.as_str()) {
+                        // Re-derived from the nix-store label on create
+                        continue;
+                    }
+
                     if !source.is_empty() && !destination.is_empty() {
                         bind_mounts.push(crate::config::BindMount {
                             source: source.into(),
@@ -923,7 +1063,10 @@ impl JailBackend for PodmanBackend {
                         let key = env_str[..pos].to_string();
                         let value = env_str[pos + 1..].to_string();
                         // Skip system environment variables
-                        if !key.starts_with("PATH") && !key.starts_with("HOME") && key != "HOSTNAME"
+                        if !key.starts_with("PATH")
+                            && !key.starts_with("HOME")
+                            && key != "HOSTNAME"
+                            && !NIX_MANAGED_ENV.contains(&key.as_str())
                         {
                             environment.push((key, value));
                         }
@@ -995,6 +1138,18 @@ impl JailBackend for PodmanBackend {
             .map(|s| s == "true")
             .unwrap_or(false);
 
+        // Extract Nix store mode from label (jails created before the label existed
+        // always used a per-project volume)
+        let nix_store_label = container["Config"]["Labels"][NIX_STORE_LABEL].as_str();
+        let nix_store = nix_store_label
+            .and_then(NixStoreMode::from_label)
+            .unwrap_or(NixStoreMode::Project);
+
+        // The label is only ever written for nix-backed jails, so its presence
+        // is a reliable signal even when the image tag has no `nix` component
+        // (isolated images are tagged with a workspace hash).
+        let uses_nix = nix_store_label.is_some();
+
         Ok(JailConfig {
             name: name.to_string(),
             backend: crate::config::BackendType::Podman,
@@ -1016,6 +1171,242 @@ impl JailBackend for PodmanBackend {
             no_nix: false,
             block_host,
             podman_socket: false, // Not persisted in container metadata
+            nix_store,
+            uses_nix,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn nix_config(mode: NixStoreMode) -> JailConfig {
+        JailConfig {
+            name: "jail__proj__abc12345__claude".to_string(),
+            base_image: "localhost/jail-ai-agent-claude:base-nix".to_string(),
+            nix_store: mode,
+            ..Default::default()
+        }
+    }
+
+    fn host_paths(daemon_socket_dir: PathBuf) -> NixHostPaths {
+        NixHostPaths {
+            daemon_socket_dir,
+            nix_bin_dir: Some(PathBuf::from("/nix/store/aaaa-nix-2.28.3/bin")),
+        }
+    }
+
+    fn contains_pair(args: &[String], flag: &str, value: &str) -> bool {
+        args.windows(2).any(|w| w[0] == flag && w[1] == value)
+    }
+
+    #[test]
+    fn project_mode_uses_per_project_volume() {
+        let host = host_paths(PathBuf::from("/nonexistent"));
+        let args = nix_run_args(
+            &nix_config(NixStoreMode::Project),
+            "jail__proj__abc12345",
+            &host,
+        )
+        .unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail__proj__abc12345__nix:/nix"));
+        assert!(contains_pair(&args, "--label", "jail-ai.nix-store=project"));
+    }
+
+    #[test]
+    fn shared_mode_uses_global_volume() {
+        let host = host_paths(PathBuf::from("/nonexistent"));
+        let args = nix_run_args(
+            &nix_config(NixStoreMode::Shared),
+            "jail__proj__abc12345",
+            &host,
+        )
+        .unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail-ai-nix:/nix"));
+        assert!(contains_pair(&args, "--label", "jail-ai.nix-store=shared"));
+        assert!(!args.iter().any(|a| a.contains("__nix")));
+    }
+
+    #[test]
+    fn host_mode_mounts_store_and_daemon_socket() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("socket"), "").unwrap();
+        let host = host_paths(dir.path().to_path_buf());
+
+        let args = nix_run_args(
+            &nix_config(NixStoreMode::Host),
+            "jail__proj__abc12345",
+            &host,
+        )
+        .unwrap();
+
+        assert!(contains_pair(&args, "-v", "/nix/store:/nix/store:ro"));
+        assert!(contains_pair(
+            &args,
+            "-v",
+            &format!("{}:/nix/var/nix/daemon-socket", dir.path().display())
+        ));
+        assert!(contains_pair(&args, "-e", "NIX_REMOTE=daemon"));
+        assert!(contains_pair(
+            &args,
+            "-e",
+            "JAIL_AI_HOST_NIX_BIN=/nix/store/aaaa-nix-2.28.3/bin"
+        ));
+        assert!(contains_pair(&args, "--label", "jail-ai.nix-store=host"));
+        // The host store replaces the volume entirely
+        assert!(!args.iter().any(|a| a.ends_with(":/nix")));
+    }
+
+    #[test]
+    fn host_mode_without_daemon_socket_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = host_paths(dir.path().to_path_buf());
+
+        let err = nix_run_args(
+            &nix_config(NixStoreMode::Host),
+            "jail__proj__abc12345",
+            &host,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("nix-daemon"));
+    }
+
+    #[test]
+    fn host_mode_without_nix_client_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("socket"), "").unwrap();
+        let host = NixHostPaths {
+            nix_bin_dir: None,
+            ..host_paths(dir.path().to_path_buf())
+        };
+
+        assert!(nix_run_args(
+            &nix_config(NixStoreMode::Host),
+            "jail__proj__abc12345",
+            &host
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn non_nix_image_gets_no_nix_store() {
+        let config = JailConfig {
+            base_image: "localhost/jail-ai-agent-claude:base-rust".to_string(),
+            nix_store: NixStoreMode::Shared,
+            block_host: false,
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(!args.iter().any(|a| a.ends_with(":/nix")));
+        assert!(!args.iter().any(|a| a.starts_with(NIX_STORE_LABEL)));
+    }
+
+    #[test]
+    fn nix_image_uses_shared_store_by_default() {
+        let config = JailConfig {
+            name: "jail__proj__abc12345__claude".to_string(),
+            base_image: "localhost/jail-ai-agent-claude:base-nix".to_string(),
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail-ai-nix:/nix"));
+    }
+
+    #[test]
+    fn isolated_nix_image_gets_nix_store_from_uses_nix() {
+        // --isolated tags the final agent image with a workspace hash, so the
+        // name carries no `nix` component and image_uses_nix() cannot see it.
+        let image = "localhost/jail-ai-agent-claude:a1b2c3d4";
+        assert!(!PodmanBackend::image_uses_nix(image));
+
+        let config = JailConfig {
+            name: "jail__proj__a1b2c3d4__claude".to_string(),
+            base_image: image.to_string(),
+            nix_store: NixStoreMode::Shared,
+            isolated: true,
+            uses_nix: true,
+            block_host: false,
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail-ai-nix:/nix"));
+        assert!(contains_pair(
+            &args,
+            "--label",
+            &format!("{NIX_STORE_LABEL}=shared")
+        ));
+    }
+
+    #[test]
+    fn isolated_nix_image_honours_project_mode() {
+        let config = JailConfig {
+            name: "jail__proj__a1b2c3d4__claude".to_string(),
+            base_image: "localhost/jail-ai-agent-claude:a1b2c3d4".to_string(),
+            nix_store: NixStoreMode::Project,
+            isolated: true,
+            uses_nix: true,
+            block_host: false,
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail__proj__a1b2c3d4__nix:/nix"));
+    }
+
+    #[test]
+    fn isolated_non_nix_image_still_gets_no_nix_store() {
+        // The fix must not hand /nix to every isolated jail: without uses_nix
+        // and without a nix-ish image name, nothing is mounted.
+        let config = JailConfig {
+            name: "jail__proj__a1b2c3d4__claude".to_string(),
+            base_image: "localhost/jail-ai-agent-claude:a1b2c3d4".to_string(),
+            nix_store: NixStoreMode::Shared,
+            isolated: true,
+            uses_nix: false,
+            block_host: false,
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(!args.iter().any(|a| a.ends_with(":/nix")));
+        assert!(!args.iter().any(|a| a.starts_with(NIX_STORE_LABEL)));
+    }
+
+    #[test]
+    fn preresolved_image_keeps_caller_supplied_uses_nix() {
+        // Upgrade recreates from an already-resolved image name, so create()
+        // takes the custom-image path and cannot re-detect nix. It must not
+        // clobber what the caller carried over from the old jail's label.
+        let config = JailConfig {
+            name: "jail__proj__a1b2c3d4__claude".to_string(),
+            base_image: "localhost/jail-ai-agent-claude:a1b2c3d4".to_string(),
+            nix_store: NixStoreMode::Shared,
+            use_layered_images: false,
+            uses_nix: true,
+            block_host: false,
+            ..Default::default()
+        };
+        let args = PodmanBackend::new().build_run_args(&config).unwrap();
+
+        assert!(contains_pair(&args, "-v", "jail-ai-nix:/nix"));
+    }
+
+    #[test]
+    fn nix_store_label_round_trip() {
+        for mode in [
+            NixStoreMode::Project,
+            NixStoreMode::Shared,
+            NixStoreMode::Host,
+        ] {
+            assert_eq!(NixStoreMode::from_label(mode.as_str()), Some(mode));
+        }
+        assert_eq!(NixStoreMode::from_label(""), None);
+        assert_eq!(NixStoreMode::from_label("bogus"), None);
     }
 }

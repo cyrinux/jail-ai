@@ -47,6 +47,19 @@ impl ProjectType {
             ProjectType::Generic => "base",
         }
     }
+
+    /// Whether the image built for this project type contains the nix layer.
+    ///
+    /// This is the authoritative signal for whether a jail needs `/nix` provided.
+    /// The resolved image name cannot be relied on: `--isolated` tags the final
+    /// image with a workspace hash, which drops the `nix` layer component.
+    pub fn uses_nix(&self) -> bool {
+        match self {
+            ProjectType::Nix => true,
+            ProjectType::Multi(types) => types.iter().any(ProjectType::uses_nix),
+            _ => false,
+        }
+    }
 }
 
 /// Detect project type based on files in the directory with options

@@ -225,3 +225,25 @@ fn test_parse_port() {
     assert!(Commands::parse_port("8080:invalid").is_err());
     assert!(Commands::parse_port("70000:80").is_err());
 }
+
+#[test]
+fn test_nix_store_flag_parsing() {
+    use config::NixStoreMode;
+
+    let cli =
+        Cli::try_parse_from(["jail-ai", "create", "my-agent", "--nix-store", "host"]).unwrap();
+    match cli.command {
+        Some(Commands::Create { nix_store, .. }) => assert_eq!(nix_store, Some(NixStoreMode::Host)),
+        _ => panic!("Expected Create command"),
+    }
+
+    let cli = Cli::try_parse_from(["jail-ai", "create", "my-agent"]).unwrap();
+    match cli.command {
+        Some(Commands::Create { nix_store, .. }) => assert_eq!(nix_store, None),
+        _ => panic!("Expected Create command"),
+    }
+
+    assert!(
+        Cli::try_parse_from(["jail-ai", "create", "my-agent", "--nix-store", "bogus"]).is_err()
+    );
+}

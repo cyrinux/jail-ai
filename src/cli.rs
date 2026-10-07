@@ -93,6 +93,11 @@ pub struct AgentCommandOptions {
     #[arg(long)]
     pub no_nix: bool,
 
+    /// Where /nix lives for Nix jails: 'shared' (one global volume, default),
+    /// 'project' (one volume per project) or 'host' (host store via nix-daemon)
+    #[arg(long, value_enum)]
+    pub nix_store: Option<crate::config::NixStoreMode>,
+
     /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
     #[arg(long)]
     pub no_block_host: bool,
@@ -202,6 +207,11 @@ pub enum Commands {
         /// Skip nix layer (by default, nix takes precedence over other language layers)
         #[arg(long)]
         no_nix: bool,
+
+        /// Where /nix lives for Nix jails: 'shared' (one global volume, default),
+        /// 'project' (one volume per project) or 'host' (host store via nix-daemon)
+        #[arg(long, value_enum)]
+        nix_store: Option<crate::config::NixStoreMode>,
 
         /// Disable eBPF-based host blocking (allows connections to host IPs) [default: enabled]
         #[arg(long)]

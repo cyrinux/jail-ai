@@ -112,3 +112,18 @@ fn test_nix_takes_precedence() {
     let project_type = detect_project_type_with_options(temp_dir.path(), false);
     assert_eq!(project_type, ProjectType::Nix);
 }
+
+#[test]
+fn test_project_type_uses_nix() {
+    use jail_ai::project_detection::ProjectType;
+
+    assert!(ProjectType::Nix.uses_nix());
+    assert!(!ProjectType::Rust.uses_nix());
+    assert!(!ProjectType::Generic.uses_nix());
+
+    // A Multi that contains Nix still needs /nix. Detection currently
+    // short-circuits on flake.nix so this shape only arises via --layers,
+    // but the predicate must not depend on that.
+    assert!(ProjectType::Multi(vec![ProjectType::Rust, ProjectType::Nix]).uses_nix());
+    assert!(!ProjectType::Multi(vec![ProjectType::Rust, ProjectType::NodeJS]).uses_nix());
+}

@@ -193,7 +193,7 @@ _jail-ai() {
             return 0
             ;;
         jail__ai__agents)
-            opts="-b -i -m -p -e -v -q -h --backend --image --mount --port --env --no-network --host-network --memory --cpu --no-workspace --workspace-path --agent-configs --git-gpg --upgrade --layers --cloud --shell --isolated --auth --no-nix --no-block-host --podman --tui --verbose --quiet --help claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help"
+            opts="-b -i -m -p -e -v -q -h --backend --image --mount --port --env --no-network --host-network --memory --cpu --no-workspace --workspace-path --agent-configs --git-gpg --upgrade --layers --cloud --shell --isolated --auth --no-nix --nix-store --no-block-host --podman --tui --verbose --quiet --help claude claude-code-router coderabbit codex copilot cursor gemini jules opencode pi help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -253,6 +253,10 @@ _jail-ai() {
                     ;;
                 --layers)
                     COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --nix-store)
+                    COMPREPLY=($(compgen -W "project shared host" -- "${cur}"))
                     return 0
                     ;;
                 *)
@@ -607,7 +611,7 @@ _jail-ai() {
             return 0
             ;;
         jail__ai__create)
-            opts="-b -i -m -p -e -c -v -q -h --backend --image --mount --port --env --no-network --host-network --memory --cpu --config --no-workspace --workspace-path --agent-configs --git-gpg --upgrade --layers --isolated --no-nix --no-block-host --podman --verbose --quiet --help [NAME]"
+            opts="-b -i -m -p -e -c -v -q -h --backend --image --mount --port --env --no-network --host-network --memory --cpu --config --no-workspace --workspace-path --agent-configs --git-gpg --upgrade --layers --isolated --no-nix --nix-store --no-block-host --podman --verbose --quiet --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -675,6 +679,10 @@ _jail-ai() {
                     ;;
                 --layers)
                     COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --nix-store)
+                    COMPREPLY=($(compgen -W "project shared host" -- "${cur}"))
                     return 0
                     ;;
                 *)

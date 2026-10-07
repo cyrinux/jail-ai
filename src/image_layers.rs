@@ -879,7 +879,7 @@ pub async fn build_project_image(
     isolated: bool,
     verbose: bool,
     no_nix: bool,
-) -> Result<String> {
+) -> Result<ResolvedImage> {
     // Generate project-specific identifier (for isolated mode)
     let project_hash = generate_project_hash(workspace_path);
     if isolated {
@@ -1110,7 +1110,10 @@ pub async fn build_project_image(
         }
 
         info!("Final image: {}", final_image_name);
-        Ok(final_image_name)
+        Ok(ResolvedImage {
+            name: final_image_name,
+            uses_nix: project_type.uses_nix(),
+        })
     } else {
         // No agent: just tag custom/language image
         let layer_type = project_type.language_layer();
@@ -1153,8 +1156,23 @@ pub async fn build_project_image(
         }
 
         info!("Final image: {}", final_image_name);
-        Ok(final_image_name)
+        Ok(ResolvedImage {
+            name: final_image_name,
+            uses_nix: project_type.uses_nix(),
+        })
     }
+}
+
+/// A resolved project image, plus the facts about it that the container
+/// runtime needs but cannot recover from the image name.
+#[derive(Debug, Clone)]
+pub struct ResolvedImage {
+    /// Fully qualified image name to run
+    pub name: String,
+    /// Whether the image contains the nix layer. Derived from the detected
+    /// project type rather than the image name, because `--isolated` replaces
+    /// the layer tag with a workspace hash and loses the `nix` component.
+    pub uses_nix: bool,
 }
 
 /// Ensure the appropriate image is available for the workspace and agent
@@ -1166,7 +1184,7 @@ pub async fn ensure_layered_image_available(
     isolated: bool,
     verbose: bool,
     no_nix: bool,
-) -> Result<String> {
+) -> Result<ResolvedImage> {
     build_project_image(
         workspace_path,
         agent_name,

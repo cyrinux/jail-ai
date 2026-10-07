@@ -184,6 +184,20 @@ impl JailBuilder {
         self
     }
 
+    pub fn nix_store(mut self, nix_store: crate::config::NixStoreMode) -> Self {
+        self.config.nix_store = nix_store;
+        self
+    }
+
+    /// Record that the jail's image contains the nix layer.
+    ///
+    /// Only needed when the image name is already resolved and so cannot be
+    /// re-detected, i.e. when recreating an existing jail on upgrade.
+    pub fn uses_nix(mut self, uses_nix: bool) -> Self {
+        self.config.uses_nix = uses_nix;
+        self
+    }
+
     pub fn build(self) -> JailManager {
         JailManager::new(self.config)
     }

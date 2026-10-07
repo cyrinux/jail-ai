@@ -161,6 +161,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                 layers,
                 isolated,
                 no_nix,
+                nix_store,
                 no_block_host,
                 podman,
             } => {
@@ -264,6 +265,7 @@ async fn run(command: Option<Commands>, verbose: bool) -> Result<()> {
                     builder = builder.isolated(isolated);
                     builder = builder.verbose(verbose);
                     builder = builder.no_nix(no_nix);
+                    builder = builder.nix_store(nix_store.unwrap_or_default());
                     builder = builder.block_host(!no_block_host);
                     builder = builder.podman_socket(podman);
 
@@ -549,6 +551,7 @@ async fn run_agent_command(
             verbose,
             auth: common.auth,
             no_nix: common.no_nix,
+            nix_store: common.nix_store,
             no_block_host: common.no_block_host,
             podman: common.podman,
             tui: common.tui,

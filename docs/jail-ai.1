@@ -180,6 +180,16 @@ Force specific image layers (comma-separated). Available layers: base, rust, pyt
 .br
 Example: \-\-layers base,rust,python
 .TP
+.B \-\-no\-nix
+Ignore flake.nix and skip the nix layer, using the other detected language layers instead.
+.TP
+.B \-\-nix\-store " \fIMODE\fR"
+Where /nix lives for Nix jails: \fBshared\fR (default, one global jail-ai-nix volume), \fBproject\fR (one volume per project) or \fBhost\fR (host /nix/store read-only, builds through the host nix-daemon).
+.br
+In \fBhost\fR mode the jail inherits your host user's nix-daemon trust level; if that user is a trusted-users member, the jail can set substituters and build hooks and import paths into the host store. \fBmax-jobs\fR is also governed by the host daemon there, not the image.
+.br
+Existing jails keep their mode unless this flag is given.
+.TP
 .B \-\-shell
 Start an interactive shell instead of running the agent command. This allows you to use the jail environment without executing the AI agent.
 .br
@@ -538,6 +548,8 @@ Resource limits (\fB\-\-memory\fR, \fB\-\-cpu\fR) help prevent runaway processes
 Read-only mounts (\-m source:target:ro) prevent accidental modifications.
 .SS Nix Flakes Support
 When a flake.nix file is detected in the workspace, jail-ai automatically loads the Nix development environment using 'nix develop' when entering the jail.
+.PP
+Nix builds independent derivations in parallel (max-jobs = auto). All Nix jails share the jail-ai-nix store volume by default; it is never removed with a jail (use nix-collect-garbage or podman volume rm jail-ai-nix).
 .SH AUTHORS
 Cyril Levis <git@levis.name>
 .SH COPYRIGHT
