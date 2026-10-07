@@ -134,7 +134,7 @@ getcap $(which jail-ai)
 # Should show: nothing (no capabilities)
 
 # Verify it works without privileges
-jail-ai create test-jail --block-host
+jail-ai create test-jail
 ```
 
 ## Comparison with Previous Architecture

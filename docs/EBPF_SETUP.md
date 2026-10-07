@@ -132,7 +132,7 @@ getcap $(which jail-ai)
 # Should show: nothing
 
 # 5. Run jail-ai without any special permissions
-jail-ai create my-jail --block-host
+jail-ai create my-jail
 ```
 
 **Security Benefits**:
@@ -147,7 +147,7 @@ See [EBPF_SECURITY.md](./EBPF_SECURITY.md) for detailed security architecture.
 
 ```bash
 # Helper will be invoked with sudo automatically
-sudo jail-ai create my-jail --block-host
+sudo jail-ai create my-jail
 ```
 
 ### Legacy: Grant Capabilities to Main Binary (Not Recommended)
@@ -174,7 +174,7 @@ You should see the compiled eBPF program (typically 2-10 KB).
 
 ```bash
 # Create jail with host blocking
-cargo run --release -- create test-block --block-host --verbose
+cargo run --release -- create test-block --verbose
 
 # Look for these messages:
 # ✓ eBPF host blocking active for cgroup ...
@@ -189,7 +189,7 @@ cargo run --release -- create test-block --block-host --verbose
 podman exec test-block curl http://127.0.0.1:8080
 
 # Should fail with: "Failed to connect"
-# Without --block-host, this would succeed if something is listening
+# With --no-block-host, this would succeed if something is listening
 ```
 
 ### 4. Inspect BPF Programs
@@ -265,7 +265,7 @@ The jail-ai binary will work without compiled eBPF programs - it will simply log
 ```bash
 # Build and use jail-ai without eBPF programs
 cargo build --release
-./target/release/jail-ai create test-jail --block-host
+./target/release/jail-ai create test-jail
 
 # You'll see:
 # ⚠️  eBPF program not found at: jail-ai-ebpf/target/bpfel-unknown-none/release/jail-ai-ebpf
@@ -288,7 +288,7 @@ You need CAP_BPF or root:
 
 ```bash
 # Run with sudo
-sudo cargo run -- create test --block-host
+sudo cargo run -- create test
 
 # Or grant capability
 sudo setcap cap_bpf+ep target/release/jail-ai
@@ -369,7 +369,7 @@ eBPF programs run directly in the kernel with minimal overhead:
 ## Next Steps
 
 1. **Build eBPF programs**: `cargo xtask build-ebpf --release`
-2. **Test functionality**: Create a jail with `--block-host`
+2. **Test functionality**: Create a jail (host blocking is on by default)
 3. **Verify blocking**: Try connecting to host from inside container
 4. **Deploy**: Use in production with appropriate permissions
 
@@ -384,7 +384,7 @@ cd /path/to/jail-ai
 
 # 2. Build and test jail-ai with eBPF blocking
 cargo build --release
-sudo ./target/release/jail-ai create test-jail --block-host
+sudo ./target/release/jail-ai create test-jail
 ```
 
 The `build-ebpf.sh` script uses Docker/Podman to build eBPF programs in a clean container, avoiding LLVM compatibility issues.
@@ -404,7 +404,7 @@ cargo xtask build-ebpf --release
 
 # 4. Build and test jail-ai
 cargo build --release
-sudo ./target/release/jail-ai create test-jail --block-host
+sudo ./target/release/jail-ai create test-jail
 ```
 
 ### Development Without eBPF (Stub Mode)
@@ -412,7 +412,7 @@ sudo ./target/release/jail-ai create test-jail --block-host
 ```bash
 # Just build and run without eBPF compilation
 cargo build --release
-./target/release/jail-ai create test-jail --block-host
+./target/release/jail-ai create test-jail
 
 # Will show: "⚠️  eBPF program not found ... Running in stub mode"
 ```

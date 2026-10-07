@@ -16,11 +16,11 @@ cargo build 2>&1 | tail -5
 echo -e "${GREEN}✓ Build successful${NC}"
 echo
 
-# Test 2: Create jail with --block-host flag
-echo -e "${YELLOW}Test 2: Creating jail with --block-host flag...${NC}"
+# Test 2: Create jail (host blocking is enabled by default)
+echo -e "${YELLOW}Test 2: Creating jail (host blocking is on by default)...${NC}"
 JAIL_NAME="test-block-host-$$"
-cargo run -- create "$JAIL_NAME" --block-host 2>&1 | grep -E "(Applying eBPF|Detected.*host IPs|eBPF host blocker)" || true
-echo -e "${GREEN}✓ Jail created with block-host flag${NC}"
+cargo run -v -- create "$JAIL_NAME" 2>&1 | grep -E "(Applying eBPF|Detected.*host IPs|eBPF host blocker)" || true
+echo -e "${GREEN}✓ Jail created with host blocking active${NC}"
 echo
 
 # Test 3: Verify jail exists
@@ -62,15 +62,15 @@ cargo test ebpf -- --nocapture 2>&1 | tail -10
 echo -e "${GREEN}✓ eBPF tests passed${NC}"
 echo
 
-# Test 8: Test with agent command
-echo -e "${YELLOW}Test 8: Testing with agent command (if claude is available)...${NC}"
+# Test 8: Verify --no-block-host opts out
+echo -e "${YELLOW}Test 8: Testing --no-block-host opt-out...${NC}"
 AGENT_JAIL="test-agent-block-$$"
-if timeout 5s cargo run -- create "$AGENT_JAIL" --block-host 2>&1 | grep -q "eBPF"; then
-    echo -e "${GREEN}✓ Agent command with --block-host works${NC}"
-    cargo run -- remove "$AGENT_JAIL" --force --volume 2>/dev/null || true
+if timeout 60s cargo run -v -- create "$AGENT_JAIL" --no-block-host 2>&1 | grep -q "eBPF"; then
+    echo -e "${RED}✗ eBPF was applied despite --no-block-host${NC}"
 else
-    echo -e "${YELLOW}⚠ Agent test skipped (may require setup)${NC}"
+    echo -e "${GREEN}✓ --no-block-host leaves host blocking off${NC}"
 fi
+cargo run -- remove "$AGENT_JAIL" --force --volume 2>/dev/null || true
 echo
 
 # Cleanup

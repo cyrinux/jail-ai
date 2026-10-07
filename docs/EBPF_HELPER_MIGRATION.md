@@ -12,7 +12,7 @@ jail-ai has been refactored to use a **privileged helper binary** architecture f
 # OLD: Capabilities on main binary (LESS SECURE)
 cargo build --release
 sudo setcap cap_bpf,cap_net_admin+ep target/release/jail-ai
-./target/release/jail-ai create test --block-host
+./target/release/jail-ai create test
 ```
 
 **Risk**: Entire ~5000 LOC jail-ai binary runs with elevated privileges
@@ -26,7 +26,7 @@ cargo build --release                               # Build main binary (no caps
 cargo build --release -p jail-ai-ebpf-loader       # Build helper
 cargo install --path jail-ai-ebpf-loader --force   # Install helper
 sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)
-jail-ai create test --block-host                    # No sudo needed!
+jail-ai create test                                 # No sudo needed!
 ```
 
 **Benefit**: Only ~400 LOC helper binary has elevated privileges; main binary is completely unprivileged
@@ -121,7 +121,7 @@ echo "Main binary capabilities: $(getcap $(which jail-ai) 2>/dev/null || echo 'n
 echo "Helper capabilities: $(getcap $(which jail-ai-ebpf-loader))"
 
 # Test
-jail-ai create test-jail --block-host
+jail-ai create test-jail
 ```
 
 ### For Package Maintainers
@@ -158,7 +158,7 @@ getcap $(which jail-ai)
 # Expected: empty output or "No capabilities"
 
 # 3. Test that it works without sudo
-jail-ai create test-jail --block-host --verbose
+jail-ai create test-jail --verbose
 
 # Should see:
 # ✓ Loading eBPF program via helper binary...
@@ -262,7 +262,7 @@ A: Not recommended. Use capabilities or sudo wrapper instead.
 A: Yes, requires Linux kernel 4.10+ with BPF support (same as before).
 
 **Q: What if I don't want to use eBPF host blocking?**
-A: Simply don't use the `--block-host` flag. The helper is only invoked when needed.
+A: Pass `--no-block-host`. The helper is only invoked when host blocking is active.
 
 **Q: Can I run jail-ai completely unprivileged now?**
-A: Yes! The main jail-ai binary requires no special permissions. Only the helper (which is only called when using `--block-host`) needs capabilities.
+A: Yes! The main jail-ai binary requires no special permissions. Only the helper (which is called whenever host blocking is active, i.e. unless `--no-block-host` is passed) needs capabilities.

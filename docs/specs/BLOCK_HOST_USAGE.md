@@ -2,48 +2,56 @@
 
 ## Overview
 
-The `--block-host` flag enables eBPF-based host IP blocking for containerized AI agents. This feature uses kernel-level BPF programs attached to container cgroups to intercept and block outbound connections to the host machine.
+eBPF-based host IP blocking stops a containerized AI agent from reaching services on the host machine. Kernel-level BPF programs are attached to the container's cgroup and intercept outbound `connect()` calls.
+
+**This is enabled by default.** Pass `--no-block-host` to opt out. (It used to be opt-in via a `--block-host` flag; that flag was inverted and no longer exists.)
 
 ## Current Status
 
-**Implementation**: ✅ Complete (Stub Mode)
-**CLI Integration**: ✅ Complete
-**Testing**: ✅ All tests pass (51/52)
-**eBPF Compilation**: ⚠️ Requires nightly toolchain + bpf-linker
+**Implementation**: ✅ Complete — loaded via the privileged `jail-ai-ebpf-loader` helper
+**CLI Integration**: ✅ Complete, enabled by default
+**eBPF Compilation**: ⚠️ Requires nightly toolchain + bpf-linker to build the program
 
-The integration is fully implemented but runs in **stub mode** - it will log a warning when used instead of actually loading the eBPF program. To activate full eBPF functionality, you need to install the required toolchain (see below).
+Loading is delegated to a small privileged helper binary (`jail-ai-ebpf-loader`) that holds `CAP_BPF`
+and `CAP_NET_ADMIN`, so jail-ai itself does not need those capabilities. See
+[../EBPF_HELPER_MIGRATION.md](../EBPF_HELPER_MIGRATION.md). If the helper is missing, blocking fails
+open with a warning and the jail still starts.
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Create a jail with host blocking enabled
-cargo run -- create my-agent --block-host
+# Host blocking is active by default
+cargo run -- create my-agent
 
-# Agent commands with host blocking
-cargo run -- claude --block-host -- chat "help me code"
-cargo run -- copilot --copilot-dir --block-host -- suggest "write tests"
+# ...including for agent commands
+cargo run -- agents claude -- chat "help me code"
+
+# Opt out when the agent legitimately needs a host service
+cargo run -- create my-agent --no-block-host
 ```
 
 ### Combined with Other Flags
 
 ```bash
-# Block host + network isolation + port mapping
-cargo run -- create my-agent --block-host -p 5432:5432
+# Port mapping still works with blocking on
+cargo run -- create my-agent -p 5432:5432
 
-# Block host + OAuth authentication (temporary)
-cargo run -- codex --codex-dir --block-host --auth
+# OAuth flows need host networking, which turns blocking off for that run
+cargo run -- agents --auth codex
 
-# Block host + isolated image + specific layers
-cargo run -- claude --block-host --isolated --layers base,rust
+# Isolated image + specific layers, blocking still on
+cargo run -- agents --isolated --layers base,rust claude
 ```
+
+Note that options belong **before** the agent name: `jail-ai agents [OPTIONS] <AGENT> [-- ARGS...]`.
 
 ## How It Works
 
 ### Architecture
 
-1. **Container Creation**: When `--block-host` is specified, the container is created with normal networking (slirp4netns or netavark for rootless)
+1. **Container Creation**: Unless `--no-block-host` is given, the container is created with normal networking (slirp4netns or netavark for rootless) and labelled `jail-ai.block-host=true`
 
 2. **PID & Cgroup Detection**: After container starts, jail-ai:
    - Retrieves container PID via `podman inspect`
@@ -54,7 +62,7 @@ cargo run -- claude --block-host --isolated --layers base,rust
    - Host network interfaces (from `/proc/net/fib_trie` and `/proc/net/if_inet6`)
    - Metadata service IPs: `169.254.169.254`, `10.0.2.2`
 
-4. **eBPF Program Loading**: (When toolchain is available)
+4. **eBPF Program Loading**: via the `jail-ai-ebpf-loader` helper, which stays alive to keep the program attached
    - Loads compiled eBPF program from `jail-ai-ebpf/target/bpfel-unknown-none/release/jail-ai-ebpf`
    - Populates `BLOCKED_IPV4` and `BLOCKED_IPV6` BPF maps with detected IPs
    - Attaches program to container's cgroup with `BPF_CGROUP_INET4_CONNECT` and `BPF_CGROUP_INET6_CONNECT`
@@ -67,7 +75,7 @@ cargo run -- claude --block-host --isolated --layers base,rust
 ### Security Model
 
 - **Rootless Container**: Runs with user privileges, no host access by default
-- **eBPF Loading**: Requires CAP_BPF or root to load programs (host-side only)
+- **eBPF Loading**: `CAP_BPF`/`CAP_NET_ADMIN` live in the `jail-ai-ebpf-loader` helper, not in jail-ai
 - **Fail-Open**: On any error, the system fails open (allows connections) rather than breaking networking
 - **Layer-specific**: Blocking is per-container, not system-wide
 
@@ -114,10 +122,9 @@ cargo xtask build --release
 
 Once the toolchain is installed and eBPF programs are compiled:
 
-1. The stub mode warning will no longer appear
-2. eBPF programs will be loaded automatically when `--block-host` is used
-3. Host connections will be actually blocked at kernel level
-4. Container will be unable to access host services (HTTP, SSH, databases, etc.)
+1. eBPF programs are loaded automatically for every jail, unless `--no-block-host` is passed
+2. Host connections are blocked at kernel level
+3. The container cannot reach host services (HTTP, SSH, databases, etc.)
 
 ## Code Structure
 
@@ -128,10 +135,10 @@ jail-ai/
 │   │   ├── mod.rs           # EbpfHostBlocker implementation
 │   │   └── host_ips.rs      # Host IP detection logic
 │   ├── backend/podman.rs    # get_container_pid(), get_container_cgroup_path()
-│   ├── cli.rs               # --block-host flag definition
+│   ├── cli.rs               # --no-block-host flag definition
 │   ├── config.rs            # block_host field in JailConfig
 │   ├── jail.rs              # block_host() builder method
-│   └── main.rs              # block_host flag wiring
+│   └── lib.rs               # block_host flag wiring
 ├── jail-ai-ebpf/
 │   ├── src/main.rs          # Kernel-side eBPF program
 │   └── Cargo.toml           # eBPF crate config
@@ -191,13 +198,8 @@ fn parse_hex_ipv6(hex: &str) -> Result<Ipv6Addr>
 
 ## Limitations
 
-### Current (Stub Mode)
-- No actual blocking occurs
-- Warning message displayed when `--block-host` is used
-- All other functionality works normally
-
 ### With eBPF Active
-- Requires CAP_BPF or root to load programs
+- Requires the `jail-ai-ebpf-loader` helper (or root) to load programs
 - Kernel must support eBPF and cgroup attachment
 - May not work with some older kernels (< 4.10)
 - Blocks ALL connections to detected host IPs (no exceptions)
@@ -206,19 +208,18 @@ fn parse_hex_ipv6(hex: &str) -> Result<Ipv6Addr>
 
 ### "eBPF host blocker not available" Warning
 
-This means the toolchain isn't installed. Follow the instructions in "Enabling eBPF Compilation" above.
+The helper binary or the compiled eBPF program is missing. Check that `jail-ai-ebpf-loader` is on
+`PATH` and follow "Enabling eBPF Compilation" above. Blocking fails open, so the jail still starts.
 
 ### "Failed to attach eBPF program: Permission denied"
 
-You need CAP_BPF capability or root to load eBPF programs:
+Loading eBPF programs needs `CAP_BPF`. Grant it to the helper rather than to jail-ai:
 
 ```bash
-# Option 1: Run with sudo
-sudo jail-ai create my-agent --block-host
-
-# Option 2: Set CAP_BPF capability
-sudo setcap cap_bpf+ep $(which jail-ai)
+sudo setcap cap_bpf,cap_net_admin+ep $(which jail-ai-ebpf-loader)
 ```
+
+See [../EBPF_SETUP.md](../EBPF_SETUP.md) for the packaged setups (NixOS wrapper, systemd, etc.).
 
 ### "Container can still connect to host"
 
@@ -253,7 +254,7 @@ Potential improvements for the eBPF blocking feature:
 2. **Dynamic Updates**: Update blocked IP list without reloading program
 3. **Audit Logging**: Log blocked connection attempts to BPF ring buffer
 4. **IPv6 Support**: Full IPv6 blocking support (currently implemented but untested)
-5. **Integration Test**: Add integration test that verifies actual blocking behavior
+5. **Integration Test**: Add integration test that verifies actual blocking behavior (no test in the suite currently starts a container)
 
 ## Security Considerations
 

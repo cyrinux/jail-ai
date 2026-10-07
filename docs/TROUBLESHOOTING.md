@@ -102,7 +102,7 @@ To run with eBPF blocking:
 sudo setcap cap_bpf+ep target/release/jail-ai
 
 # Or run with sudo
-sudo ./target/release/jail-ai create test --block-host
+sudo ./target/release/jail-ai create test
 ```
 
 ### "Cgroup not found"

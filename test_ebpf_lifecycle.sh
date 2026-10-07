@@ -1,8 +1,8 @@
 #!/bin/bash
 set -x
 
-echo "=== Test 1: Create container with eBPF ==="
-./target/release/jail-ai create test-ebpf-lifecycle --block-host
+echo "=== Test 1: Create container with eBPF (on by default) ==="
+./target/release/jail-ai create test-ebpf-lifecycle
 
 echo ""
 echo "=== Test 2: Check loader is running ==="

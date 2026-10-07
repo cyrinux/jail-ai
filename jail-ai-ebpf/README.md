@@ -74,7 +74,8 @@ The compiled eBPF program is written to:
 target/bpfel-unknown-none/release/jail-ai-ebpf
 ```
 
-This binary is loaded by the main jail-ai program when using `--block-host` flag.
+This binary is loaded by the main jail-ai program whenever host blocking is active, which is the
+default (opt out with `--no-block-host`).
 
 ## Troubleshooting
 

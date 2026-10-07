@@ -141,7 +141,7 @@ pub async fn attach_to_cgroup(&mut self, cgroup_path: &str, blocked_ips: &[IpAdd
 #### 5. Integrate into Jail Creation Workflow
 
 Modify `src/backend/podman.rs` or `src/jail.rs` to:
-- Optionally enable eBPF host blocking (new CLI flag: `--block-host`)
+- eBPF host blocking, enabled by default (opt out with `--no-block-host`)
 - After container creation, attach eBPF program to its cgroup
 - Store eBPF blocker instance in jail state for cleanup
 
